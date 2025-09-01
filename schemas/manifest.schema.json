@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/garaekz/oxinfer/schemas/manifest.schema.json",
+  "title": "Oxinfer Manifest Schema",
+  "description": "Schema for Oxinfer manifest configuration files",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "scan"],
+  "properties": {
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "composer"],
+      "properties": {
+        "root": {
+          "type": "string",
+          "description": "Root directory of the Laravel project to analyze"
+        },
+        "composer": {
+          "type": "string",
+          "description": "Path to composer.json file",
+          "default": "composer.json"
+        }
+      }
+    },
+    "scan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targets"],
+      "properties": {
+        "targets": {
+          "type": "array",
+          "description": "Directories to scan for PHP files",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "default": ["app/"]
+        },
+        "vendor_whitelist": {
+          "type": "array",
+          "description": "Vendor packages to include in analysis",
+          "items": {
+            "type": "string"
+          }
+        },
+        "globs": {
+          "type": "array",
+          "description": "File glob patterns to include",
+          "items": {
+            "type": "string"
+          },
+          "default": ["**/*.php"]
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_files": {
+          "type": "integer",
+          "description": "Maximum number of files to analyze",
+          "minimum": 1,
+          "maximum": 100000,
+          "default": 10000
+        },
+        "max_file_size": {
+          "type": "integer",
+          "description": "Maximum file size in bytes",
+          "minimum": 1024,
+          "maximum": 104857600,
+          "default": 5242880
+        },
+        "timeout": {
+          "type": "integer",
+          "description": "Analysis timeout in seconds",
+          "minimum": 1,
+          "maximum": 3600,
+          "default": 300
+        }
+      }
+    },
+    "cache": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable caching of analysis results",
+          "default": true
+        },
+        "dir": {
+          "type": "string",
+          "description": "Cache directory path",
+          "default": ".oxinfer/cache"
+        },
+        "ttl": {
+          "type": "integer",
+          "description": "Cache time-to-live in seconds",
+          "minimum": 1,
+          "maximum": 2592000,
+          "default": 86400
+        }
+      }
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "routes": {
+          "type": "boolean",
+          "description": "Analyze route definitions",
+          "default": true
+        },
+        "controllers": {
+          "type": "boolean",
+          "description": "Analyze controller classes",
+          "default": true
+        },
+        "models": {
+          "type": "boolean",
+          "description": "Analyze Eloquent models",
+          "default": true
+        },
+        "middleware": {
+          "type": "boolean",
+          "description": "Analyze middleware classes",
+          "default": true
+        },
+        "migrations": {
+          "type": "boolean",
+          "description": "Analyze database migrations",
+          "default": true
+        },
+        "policies": {
+          "type": "boolean",
+          "description": "Analyze authorization policies",
+          "default": true
+        },
+        "events": {
+          "type": "boolean",
+          "description": "Analyze event classes",
+          "default": true
+        },
+        "jobs": {
+          "type": "boolean",
+          "description": "Analyze job classes",
+          "default": true
+        }
+      }
+    }
+  }
+}
