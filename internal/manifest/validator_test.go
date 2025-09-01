@@ -371,83 +371,50 @@ func TestManifestValidator_ValidatePaths_Limits(t *testing.T) {
 		{
 			name: "valid limits",
 			limits: &LimitsConfig{
-				MaxFiles:    intPtr(1000),
-				MaxFileSize: intPtr(1048576),
-				Timeout:     intPtr(300),
+				MaxWorkers: intPtr(4),
+				MaxFiles:   intPtr(1000),
+				MaxDepth:   intPtr(3),
 			},
 			wantErr: false,
 		},
 		{
 			name: "max files too low",
 			limits: &LimitsConfig{
-				MaxFiles:    intPtr(0),
-				MaxFileSize: intPtr(1048576),
+				MaxFiles: intPtr(0),
 			},
 			wantErr:   true,
 			errorType: cli.ExitInputError,
 		},
 		{
-			name: "max files too high",
+			name: "max workers too low",
 			limits: &LimitsConfig{
-				MaxFiles:    intPtr(100001),
-				MaxFileSize: intPtr(1048576),
+				MaxWorkers: intPtr(0),
 			},
 			wantErr:   true,
 			errorType: cli.ExitInputError,
 		},
 		{
-			name: "max file size too low",
+			name: "max depth too low",
 			limits: &LimitsConfig{
-				MaxFiles:    intPtr(1000),
-				MaxFileSize: intPtr(1023),
+				MaxDepth: intPtr(-1),
 			},
 			wantErr:   true,
 			errorType: cli.ExitInputError,
 		},
 		{
-			name: "max file size too high",
+			name: "valid boundary values minimum",
 			limits: &LimitsConfig{
-				MaxFiles:    intPtr(1000),
-				MaxFileSize: intPtr(104857601),
-			},
-			wantErr:   true,
-			errorType: cli.ExitInputError,
-		},
-		{
-			name: "timeout too low",
-			limits: &LimitsConfig{
-				MaxFiles:    intPtr(1000),
-				MaxFileSize: intPtr(1048576),
-				Timeout:     intPtr(0),
-			},
-			wantErr:   true,
-			errorType: cli.ExitInputError,
-		},
-		{
-			name: "timeout too high",
-			limits: &LimitsConfig{
-				MaxFiles:    intPtr(1000),
-				MaxFileSize: intPtr(1048576),
-				Timeout:     intPtr(3601),
-			},
-			wantErr:   true,
-			errorType: cli.ExitInputError,
-		},
-		{
-			name: "boundary values minimum",
-			limits: &LimitsConfig{
-				MaxFiles:    intPtr(1),
-				MaxFileSize: intPtr(1024),
-				Timeout:     intPtr(1),
+				MaxWorkers: intPtr(1),
+				MaxFiles:   intPtr(1),
+				MaxDepth:   intPtr(0),
 			},
 			wantErr: false,
 		},
 		{
-			name: "boundary values maximum",
+			name: "valid mixed values",
 			limits: &LimitsConfig{
-				MaxFiles:    intPtr(100000),
-				MaxFileSize: intPtr(104857600),
-				Timeout:     intPtr(3600),
+				MaxWorkers: intPtr(8),
+				MaxDepth:   intPtr(5),
 			},
 			wantErr: false,
 		},
@@ -521,17 +488,16 @@ func TestManifestValidator_ValidateSchema_Integration(t *testing.T) {
 				},
 				"limits": {
 					"max_files": 1000,
-					"max_file_size": 1048576,
-					"timeout": 300
+					"max_workers": 4,
+					"max_depth": 3
 				},
 				"cache": {
 					"enabled": true,
-					"dir": ".oxinfer/cache",
-					"ttl": 86400
+					"kind": "sha256+mtime"
 				},
 				"features": {
-					"routes": true,
-					"controllers": false
+					"http_status": true,
+					"request_usage": false
 				}
 			}`, projectDir),
 			wantErr: false,
@@ -576,7 +542,7 @@ func TestManifestValidator_ValidateSchema_Integration(t *testing.T) {
 			errorType: cli.ExitSchemaError,
 		},
 		{
-			name: "schema validation - limits out of range",
+			name: "schema validation - valid large limits",
 			jsonData: fmt.Sprintf(`{
 				"project": {
 					"root": "%s",
@@ -586,11 +552,11 @@ func TestManifestValidator_ValidateSchema_Integration(t *testing.T) {
 					"targets": ["app"]
 				},
 				"limits": {
-					"max_files": 200000
+					"max_files": 200000,
+					"max_workers": 16
 				}
 			}`, projectDir),
-			wantErr:   true,
-			errorType: cli.ExitSchemaError,
+			wantErr: false,
 		},
 	}
 

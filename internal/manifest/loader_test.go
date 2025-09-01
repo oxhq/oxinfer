@@ -81,24 +81,23 @@ func TestManifestLoader_LoadFromReader(t *testing.T) {
 					"globs": ["**/*.php"]
 				},
 				"limits": {
+					"max_workers": 4,
 					"max_files": 2000,
-					"max_file_size": 2097152,
-					"timeout": 600
+					"max_depth": 5
 				},
 				"cache": {
 					"enabled": true,
-					"dir": ".oxinfer/cache",
-					"ttl": 3600
+					"kind": "sha256+mtime"
 				},
 				"features": {
-					"routes": true,
-					"controllers": true,
-					"models": false,
-					"middleware": false,
-					"migrations": true,
-					"policies": true,
-					"events": false,
-					"jobs": true
+					"http_status": true,
+					"request_usage": true,
+					"resource_usage": false,
+					"with_pivot": false,
+					"attribute_make": true,
+					"scopes_used": true,
+					"polymorphic": false,
+					"broadcast_channels": true
 				}
 			}`, testProjectDir),
 			wantErr: false,
@@ -110,23 +109,26 @@ func TestManifestLoader_LoadFromReader(t *testing.T) {
 					t.Errorf("expected 1 scan target, got %d", len(m.Scan.Targets))
 				}
 				if m.Limits != nil {
+					if *m.Limits.MaxWorkers != 4 {
+						t.Errorf("expected max_workers 4, got %d", *m.Limits.MaxWorkers)
+					}
 					if *m.Limits.MaxFiles != 2000 {
 						t.Errorf("expected max_files 2000, got %d", *m.Limits.MaxFiles)
 					}
-					if *m.Limits.MaxFileSize != 2097152 {
-						t.Errorf("expected max_file_size 2097152, got %d", *m.Limits.MaxFileSize)
+					if *m.Limits.MaxDepth != 5 {
+						t.Errorf("expected max_depth 5, got %d", *m.Limits.MaxDepth)
 					}
 				}
-				if m.Cache != nil && !m.Cache.Enabled {
+				if m.Cache != nil && (m.Cache.Enabled == nil || !*m.Cache.Enabled) {
 					t.Error("expected cache to be enabled")
 				}
 				// Check feature flags
 				if m.Features != nil {
-					if m.Features.Routes == nil || !*m.Features.Routes {
-						t.Error("expected routes feature to be true")
+					if m.Features.HTTPStatus == nil || !*m.Features.HTTPStatus {
+						t.Error("expected http_status feature to be true")
 					}
-					if m.Features.Models != nil && *m.Features.Models {
-						t.Error("expected models feature to be false")
+					if m.Features.ResourceUsage != nil && *m.Features.ResourceUsage {
+						t.Error("expected resource_usage feature to be false")
 					}
 				}
 			},
@@ -223,8 +225,7 @@ func TestManifestLoader_LoadFromReader(t *testing.T) {
 					"targets": ["app"]
 				},
 				"limits": {
-					"max_files": 150000,
-					"max_file_size": 500000000
+					"max_workers": 0
 				}
 			}`, testProjectDir),
 			wantErr:   true,
@@ -685,8 +686,8 @@ func TestLoadDeterminism(t *testing.T) {
 		},
 		"limits": {
 			"max_files": 2000,
-			"max_file_size": 2097152,
-			"timeout": 600
+			"max_workers": 4,
+			"max_depth": 3
 		}
 	}`, testProjectDir)
 

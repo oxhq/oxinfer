@@ -5,18 +5,15 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/garaekz/oxinfer/internal/cli"
-	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
 // manifestSchemaJSON contains the embedded manifest JSON schema
 const manifestSchemaJSON = `{
-  "$schema": "https://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/garaekz/oxinfer/schemas/manifest.schema.json",
-  "title": "Oxinfer Manifest Schema",
-  "description": "Schema for Oxinfer manifest configuration files",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oxcribe.dev/schema/manifest.schema.json",
+  "title": "Oxinfer Manifest",
   "type": "object",
   "additionalProperties": false,
   "required": ["project", "scan"],
@@ -26,15 +23,8 @@ const manifestSchemaJSON = `{
       "additionalProperties": false,
       "required": ["root", "composer"],
       "properties": {
-        "root": {
-          "type": "string",
-          "description": "Root directory of the Laravel project to analyze"
-        },
-        "composer": {
-          "type": "string",
-          "description": "Path to composer.json file",
-          "default": "composer.json"
-        }
+        "root": { "type": "string", "minLength": 1 },
+        "composer": { "type": "string", "minLength": 1 }
       }
     },
     "scan": {
@@ -44,27 +34,18 @@ const manifestSchemaJSON = `{
       "properties": {
         "targets": {
           "type": "array",
-          "description": "Directories to scan for PHP files",
-          "items": {
-            "type": "string"
-          },
           "minItems": 1,
-          "default": ["app/"]
+          "items": { "type": "string", "minLength": 1 }
         },
         "vendor_whitelist": {
           "type": "array",
-          "description": "Vendor packages to include in analysis",
-          "items": {
-            "type": "string"
-          }
+          "items": { "type": "string", "minLength": 1 },
+          "default": []
         },
         "globs": {
           "type": "array",
-          "description": "File glob patterns to include",
-          "items": {
-            "type": "string"
-          },
-          "default": ["**/*.php"]
+          "items": { "type": "string", "minLength": 1 },
+          "default": ["app/**/*.php", "routes/**/*.php"]
         }
       }
     },
@@ -72,98 +53,39 @@ const manifestSchemaJSON = `{
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "max_files": {
-          "type": "integer",
-          "description": "Maximum number of files to analyze",
-          "minimum": 1,
-          "maximum": 100000,
-          "default": 10000
-        },
-        "max_file_size": {
-          "type": "integer",
-          "description": "Maximum file size in bytes",
-          "minimum": 1024,
-          "maximum": 104857600,
-          "default": 5242880
-        },
-        "timeout": {
-          "type": "integer",
-          "description": "Analysis timeout in seconds",
-          "minimum": 1,
-          "maximum": 3600,
-          "default": 300
-        }
-      }
+        "max_workers": { "type": "integer", "minimum": 1, "default": 8 },
+        "max_files": { "type": "integer", "minimum": 1, "default": 500 },
+        "max_depth": { "type": "integer", "minimum": 0, "default": 2 }
+      },
+      "default": {}
     },
     "cache": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled"],
       "properties": {
-        "enabled": {
-          "type": "boolean",
-          "description": "Enable caching of analysis results",
-          "default": true
-        },
-        "dir": {
+        "enabled": { "type": "boolean", "default": true },
+        "kind": {
           "type": "string",
-          "description": "Cache directory path",
-          "default": ".oxinfer/cache"
-        },
-        "ttl": {
-          "type": "integer",
-          "description": "Cache time-to-live in seconds",
-          "minimum": 1,
-          "maximum": 2592000,
-          "default": 86400
+          "enum": ["sha256+mtime", "mtime"],
+          "default": "sha256+mtime"
         }
-      }
+      },
+      "default": {}
     },
     "features": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "routes": {
-          "type": "boolean",
-          "description": "Analyze route definitions",
-          "default": true
-        },
-        "controllers": {
-          "type": "boolean",
-          "description": "Analyze controller classes",
-          "default": true
-        },
-        "models": {
-          "type": "boolean",
-          "description": "Analyze Eloquent models",
-          "default": true
-        },
-        "middleware": {
-          "type": "boolean",
-          "description": "Analyze middleware classes",
-          "default": true
-        },
-        "migrations": {
-          "type": "boolean",
-          "description": "Analyze database migrations",
-          "default": true
-        },
-        "policies": {
-          "type": "boolean",
-          "description": "Analyze authorization policies",
-          "default": true
-        },
-        "events": {
-          "type": "boolean",
-          "description": "Analyze event classes",
-          "default": true
-        },
-        "jobs": {
-          "type": "boolean",
-          "description": "Analyze job classes",
-          "default": true
-        }
-      }
+        "http_status": { "type": "boolean", "default": true },
+        "request_usage": { "type": "boolean", "default": true },
+        "resource_usage": { "type": "boolean", "default": true },
+        "with_pivot": { "type": "boolean", "default": true },
+        "attribute_make": { "type": "boolean", "default": true },
+        "scopes_used": { "type": "boolean", "default": true },
+        "polymorphic": { "type": "boolean", "default": true },
+        "broadcast_channels": { "type": "boolean", "default": true }
+      },
+      "default": {}
     }
   }
 }`
@@ -236,103 +158,72 @@ func applyDefaults(m *Manifest) {
 	}
 
 	// Scan defaults
-	if len(m.Scan.Targets) == 0 {
-		m.Scan.Targets = []string{"app/"}
-	}
 	if len(m.Scan.Globs) == 0 {
-		m.Scan.Globs = []string{"**/*.php"}
+		m.Scan.Globs = []string{"app/**/*.php", "routes/**/*.php"}
 	}
 
 	// Limits defaults
 	if m.Limits != nil {
+		if m.Limits.MaxWorkers == nil {
+			defaultMaxWorkers := 8
+			m.Limits.MaxWorkers = &defaultMaxWorkers
+		}
 		if m.Limits.MaxFiles == nil {
-			defaultMaxFiles := 10000
+			defaultMaxFiles := 500
 			m.Limits.MaxFiles = &defaultMaxFiles
 		}
-		if m.Limits.MaxFileSize == nil {
-			defaultMaxFileSize := 5242880 // 5MB
-			m.Limits.MaxFileSize = &defaultMaxFileSize
-		}
-		if m.Limits.Timeout == nil {
-			defaultTimeout := 300 // 5 minutes
-			m.Limits.Timeout = &defaultTimeout
+		if m.Limits.MaxDepth == nil {
+			defaultMaxDepth := 2
+			m.Limits.MaxDepth = &defaultMaxDepth
 		}
 	}
 
 	// Cache defaults
 	if m.Cache != nil {
-		if m.Cache.Dir == "" {
-			m.Cache.Dir = ".oxinfer/cache"
+		if m.Cache.Enabled == nil {
+			defaultEnabled := true
+			m.Cache.Enabled = &defaultEnabled
 		}
-		if m.Cache.TTL == nil {
-			defaultTTL := 86400 // 24 hours
-			m.Cache.TTL = &defaultTTL
+		if m.Cache.Kind == nil {
+			defaultKind := "sha256+mtime"
+			m.Cache.Kind = &defaultKind
 		}
 	}
 
 	// Features defaults - all enabled by default
 	if m.Features != nil {
-		if m.Features.Routes == nil {
+		if m.Features.HTTPStatus == nil {
 			defaultTrue := true
-			m.Features.Routes = &defaultTrue
+			m.Features.HTTPStatus = &defaultTrue
 		}
-		if m.Features.Controllers == nil {
+		if m.Features.RequestUsage == nil {
 			defaultTrue := true
-			m.Features.Controllers = &defaultTrue
+			m.Features.RequestUsage = &defaultTrue
 		}
-		if m.Features.Models == nil {
+		if m.Features.ResourceUsage == nil {
 			defaultTrue := true
-			m.Features.Models = &defaultTrue
+			m.Features.ResourceUsage = &defaultTrue
 		}
-		if m.Features.Middleware == nil {
+		if m.Features.WithPivot == nil {
 			defaultTrue := true
-			m.Features.Middleware = &defaultTrue
+			m.Features.WithPivot = &defaultTrue
 		}
-		if m.Features.Migrations == nil {
+		if m.Features.AttributeMake == nil {
 			defaultTrue := true
-			m.Features.Migrations = &defaultTrue
+			m.Features.AttributeMake = &defaultTrue
 		}
-		if m.Features.Policies == nil {
+		if m.Features.ScopesUsed == nil {
 			defaultTrue := true
-			m.Features.Policies = &defaultTrue
+			m.Features.ScopesUsed = &defaultTrue
 		}
-		if m.Features.Events == nil {
+		if m.Features.Polymorphic == nil {
 			defaultTrue := true
-			m.Features.Events = &defaultTrue
+			m.Features.Polymorphic = &defaultTrue
 		}
-		if m.Features.Jobs == nil {
+		if m.Features.BroadcastChannels == nil {
 			defaultTrue := true
-			m.Features.Jobs = &defaultTrue
+			m.Features.BroadcastChannels = &defaultTrue
 		}
 	}
 }
 
-// validateWithSchema validates the raw JSON data against the manifest schema
-func validateWithSchema(data []byte) error {
-	// Load the manifest schema
-	compiler := jsonschema.NewCompiler()
-	compiler.Draft = jsonschema.Draft7
-
-	// Load schema from embedded file
-	if err := compiler.AddResource("manifest.schema.json", strings.NewReader(manifestSchemaJSON)); err != nil {
-		return cli.WrapSchemaError("failed to load manifest schema", err)
-	}
-
-	schema, err := compiler.Compile("manifest.schema.json")
-	if err != nil {
-		return cli.WrapSchemaError("failed to compile manifest schema", err)
-	}
-
-	// Parse the JSON data for validation
-	var jsonData interface{}
-	if err := json.Unmarshal(data, &jsonData); err != nil {
-		return cli.WrapInputError("invalid JSON structure", err)
-	}
-
-	// Validate against schema
-	if err := schema.Validate(jsonData); err != nil {
-		return cli.WrapSchemaError(fmt.Sprintf("manifest validation failed: %v", err), err)
-	}
-
-	return nil
-}

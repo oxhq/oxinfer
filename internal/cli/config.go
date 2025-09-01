@@ -31,6 +31,8 @@ type CLIConfig struct {
 func ParseFlags(args []string) (*CLIConfig, error) {
 	// Create a new flag set to avoid affecting global state
 	fs := flag.NewFlagSet("oxinfer", flag.ContinueOnError)
+	// Set output to stdout for help/usage
+	fs.SetOutput(os.Stdout)
 	
 	config := &CLIConfig{}
 

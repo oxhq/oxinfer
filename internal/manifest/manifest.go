@@ -25,26 +25,25 @@ type ScanConfig struct {
 
 // LimitsConfig contains analysis limits and constraints
 type LimitsConfig struct {
-	MaxFiles    *int `json:"max_files,omitempty"`
-	MaxFileSize *int `json:"max_file_size,omitempty"`
-	Timeout     *int `json:"timeout,omitempty"`
+	MaxWorkers *int `json:"max_workers,omitempty"`
+	MaxFiles   *int `json:"max_files,omitempty"`
+	MaxDepth   *int `json:"max_depth,omitempty"`
 }
 
 // CacheConfig contains caching configuration
 type CacheConfig struct {
-	Enabled bool   `json:"enabled"`
-	Dir     string `json:"dir,omitempty"`
-	TTL     *int   `json:"ttl,omitempty"`
+	Enabled *bool   `json:"enabled,omitempty"`
+	Kind    *string `json:"kind,omitempty"`
 }
 
 // FeatureConfig controls which analysis features are enabled
 type FeatureConfig struct {
-	Routes      *bool `json:"routes,omitempty"`
-	Controllers *bool `json:"controllers,omitempty"`
-	Models      *bool `json:"models,omitempty"`
-	Middleware  *bool `json:"middleware,omitempty"`
-	Migrations  *bool `json:"migrations,omitempty"`
-	Policies    *bool `json:"policies,omitempty"`
-	Events      *bool `json:"events,omitempty"`
-	Jobs        *bool `json:"jobs,omitempty"`
+	HTTPStatus        *bool `json:"http_status,omitempty"`
+	RequestUsage      *bool `json:"request_usage,omitempty"`
+	ResourceUsage     *bool `json:"resource_usage,omitempty"`
+	WithPivot         *bool `json:"with_pivot,omitempty"`
+	AttributeMake     *bool `json:"attribute_make,omitempty"`
+	ScopesUsed        *bool `json:"scopes_used,omitempty"`
+	Polymorphic       *bool `json:"polymorphic,omitempty"`
+	BroadcastChannels *bool `json:"broadcast_channels,omitempty"`
 }

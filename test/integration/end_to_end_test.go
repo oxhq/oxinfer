@@ -53,7 +53,7 @@ func TestEndToEndWithFixtures(t *testing.T) {
 			}
 
 			// Check that required fields are present in the output
-			requiredFields := []string{"metadata", "stats", "routes", "controllers", "models", "middleware", "migrations"}
+			requiredFields := []string{"meta", "controllers", "models", "polymorphic", "broadcast"}
 			for _, field := range requiredFields {
 				if _, exists := result[field]; !exists {
 					t.Errorf("Output missing required field: %s", field)
@@ -61,7 +61,7 @@ func TestEndToEndWithFixtures(t *testing.T) {
 			}
 
 			// For Sprint 1, all collections should be empty arrays
-			collections := []string{"routes", "controllers", "models", "middleware", "migrations"}
+			collections := []string{"controllers", "models", "polymorphic", "broadcast"}
 			for _, collection := range collections {
 				if arr, ok := result[collection].([]interface{}); !ok {
 					t.Errorf("Field %s should be an array", collection)
@@ -70,40 +70,32 @@ func TestEndToEndWithFixtures(t *testing.T) {
 				}
 			}
 
-			// Verify metadata structure
-			if metadata, ok := result["metadata"].(map[string]interface{}); ok {
-				if version, exists := metadata["version"]; !exists {
-					t.Error("Metadata missing version field")
-				} else if version != "0.1.0" {
-					t.Errorf("Expected version 0.1.0, got %v", version)
+			// Verify meta structure
+			if meta, ok := result["meta"].(map[string]interface{}); ok {
+				if partial, exists := meta["partial"]; !exists {
+					t.Error("Meta missing partial field")
+				} else if _, ok := partial.(bool); !ok {
+					t.Error("Meta partial should be boolean")
 				}
 
-				if _, exists := metadata["timestamp"]; !exists {
-					t.Error("Metadata missing timestamp field")
-				}
-
-				if project, exists := metadata["project"]; !exists {
-					t.Error("Metadata missing project field")
-				} else if projectObj, ok := project.(map[string]interface{}); ok {
-					if _, exists := projectObj["root"]; !exists {
-						t.Error("Metadata.project missing root field")
+				if stats, exists := meta["stats"]; !exists {
+					t.Error("Meta missing stats field")
+				} else if statsObj, ok := stats.(map[string]interface{}); ok {
+					if _, exists := statsObj["filesParsed"]; !exists {
+						t.Error("Meta.stats missing filesParsed field")
+					}
+					if _, exists := statsObj["skipped"]; !exists {
+						t.Error("Meta.stats missing skipped field")
+					}
+					if _, exists := statsObj["durationMs"]; !exists {
+						t.Error("Meta.stats missing durationMs field")
 					}
 				}
 			} else {
-				t.Error("Output missing or invalid metadata field")
+				t.Error("Output missing or invalid meta field")
 			}
 
-			// Verify stats structure
-			if stats, ok := result["stats"].(map[string]interface{}); ok {
-				expectedStats := []string{"files_analyzed", "files_skipped", "parse_errors"}
-				for _, field := range expectedStats {
-					if _, exists := stats[field]; !exists {
-						t.Errorf("Stats missing field: %s", field)
-					}
-				}
-			} else {
-				t.Error("Output missing or invalid stats field")
-			}
+			// Stats are now part of meta.stats, already verified above
 		})
 	}
 }
@@ -192,8 +184,8 @@ func TestEndToEndInvalidManifests(t *testing.T) {
 					if _, exists := errorObj["exit_code"]; !exists {
 						t.Error("Error JSON missing exit_code field")
 					}
-					if _, exists := errorObj["exit_string"]; !exists {
-						t.Error("Error JSON missing exit_string field")
+					if _, exists := errorObj["type"]; !exists {
+						t.Error("Error JSON missing type field")
 					}
 				}
 			}
@@ -209,10 +201,11 @@ func TestEndToEndStdinInput(t *testing.T) {
 	// Use the minimal manifest content
 	manifestContent := fmt.Sprintf(`{
 		"project": {
-			"root": "%s"
+			"root": "%s",
+			"composer": "composer.json"
 		},
-		"analysis": {
-			"patterns": ["**/*.php"]
+		"scan": {
+			"targets": ["app"]
 		}
 	}`, filepath.Join("../../test/fixtures/projects/test-laravel"))
 
@@ -236,8 +229,8 @@ func TestEndToEndStdinInput(t *testing.T) {
 	}
 
 	// Should have same structure as file-based input
-	if _, exists := result["metadata"]; !exists {
-		t.Error("Stdin input should produce metadata field")
+	if _, exists := result["meta"]; !exists {
+		t.Error("Stdin input should produce meta field")
 	}
 }
 
@@ -394,11 +387,12 @@ func TestDeterministicOutput(t *testing.T) {
 		}
 
 		// Remove timestamp fields before comparing (they will differ)
-		if metadata1, ok := result1["metadata"].(map[string]interface{}); ok {
-			delete(metadata1, "timestamp")
+		// Note: In new schema, there's no timestamp in meta, so this is mostly for compatibility
+		if meta1, ok := result1["meta"].(map[string]interface{}); ok {
+			delete(meta1, "timestamp")
 		}
-		if metadata2, ok := result2["metadata"].(map[string]interface{}); ok {
-			delete(metadata2, "timestamp")
+		if meta2, ok := result2["meta"].(map[string]interface{}); ok {
+			delete(meta2, "timestamp")
 		}
 
 		// Convert back to JSON for comparison

@@ -17,24 +17,23 @@ func TestManifest_StructFields(t *testing.T) {
 			Globs:           []string{"**/*.php"},
 		},
 		Limits: &LimitsConfig{
-			MaxFiles:    intPtr(5000),
-			MaxFileSize: intPtr(1048576),
-			Timeout:     intPtr(300),
+			MaxWorkers: intPtr(4),
+			MaxFiles:   intPtr(5000),
+			MaxDepth:   intPtr(3),
 		},
 		Cache: &CacheConfig{
-			Enabled: true,
-			Dir:     ".oxinfer/cache",
-			TTL:     intPtr(86400),
+			Enabled: boolPtr(true),
+			Kind:    stringPtr("sha256+mtime"),
 		},
 		Features: &FeatureConfig{
-			Routes:      boolPtr(true),
-			Controllers: boolPtr(true),
-			Models:      boolPtr(false),
-			Middleware:  boolPtr(true),
-			Migrations:  boolPtr(true),
-			Policies:    boolPtr(false),
-			Events:      boolPtr(true),
-			Jobs:        boolPtr(false),
+			HTTPStatus:        boolPtr(true),
+			RequestUsage:      boolPtr(true),
+			ResourceUsage:     boolPtr(false),
+			WithPivot:         boolPtr(true),
+			AttributeMake:     boolPtr(true),
+			ScopesUsed:        boolPtr(false),
+			Polymorphic:       boolPtr(true),
+			BroadcastChannels: boolPtr(false),
 		},
 	}
 
@@ -67,39 +66,36 @@ func TestManifest_StructFields(t *testing.T) {
 	if manifest.Limits.MaxFiles == nil || *manifest.Limits.MaxFiles != 5000 {
 		t.Errorf("expected MaxFiles 5000, got %v", manifest.Limits.MaxFiles)
 	}
-	if manifest.Limits.MaxFileSize == nil || *manifest.Limits.MaxFileSize != 1048576 {
-		t.Errorf("expected MaxFileSize 1048576, got %v", manifest.Limits.MaxFileSize)
+	if manifest.Limits.MaxWorkers == nil || *manifest.Limits.MaxWorkers != 4 {
+		t.Errorf("expected MaxWorkers 4, got %v", manifest.Limits.MaxWorkers)
 	}
-	if manifest.Limits.Timeout == nil || *manifest.Limits.Timeout != 300 {
-		t.Errorf("expected Timeout 300, got %v", manifest.Limits.Timeout)
+	if manifest.Limits.MaxDepth == nil || *manifest.Limits.MaxDepth != 3 {
+		t.Errorf("expected MaxDepth 3, got %v", manifest.Limits.MaxDepth)
 	}
 
 	// Test Cache fields
 	if manifest.Cache == nil {
 		t.Fatal("expected Cache to be set")
 	}
-	if !manifest.Cache.Enabled {
+	if manifest.Cache.Enabled == nil || !*manifest.Cache.Enabled {
 		t.Error("expected Cache.Enabled to be true")
 	}
-	if manifest.Cache.Dir != ".oxinfer/cache" {
-		t.Errorf("expected Cache.Dir '.oxinfer/cache', got %q", manifest.Cache.Dir)
-	}
-	if manifest.Cache.TTL == nil || *manifest.Cache.TTL != 86400 {
-		t.Errorf("expected Cache.TTL 86400, got %v", manifest.Cache.TTL)
+	if manifest.Cache.Kind == nil || *manifest.Cache.Kind != "sha256+mtime" {
+		t.Errorf("expected Cache.Kind 'sha256+mtime', got %v", manifest.Cache.Kind)
 	}
 
 	// Test Features fields
 	if manifest.Features == nil {
 		t.Fatal("expected Features to be set")
 	}
-	if manifest.Features.Routes == nil || !*manifest.Features.Routes {
-		t.Error("expected Features.Routes to be true")
+	if manifest.Features.HTTPStatus == nil || !*manifest.Features.HTTPStatus {
+		t.Error("expected Features.HTTPStatus to be true")
 	}
-	if manifest.Features.Models == nil || *manifest.Features.Models {
-		t.Error("expected Features.Models to be false")
+	if manifest.Features.ResourceUsage == nil || *manifest.Features.ResourceUsage {
+		t.Error("expected Features.ResourceUsage to be false")
 	}
-	if manifest.Features.Controllers == nil || !*manifest.Features.Controllers {
-		t.Error("expected Features.Controllers to be true")
+	if manifest.Features.RequestUsage == nil || !*manifest.Features.RequestUsage {
+		t.Error("expected Features.RequestUsage to be true")
 	}
 }
 
@@ -148,134 +144,127 @@ func TestScanConfig(t *testing.T) {
 
 func TestLimitsConfig(t *testing.T) {
 	limits := &LimitsConfig{
-		MaxFiles:    intPtr(1000),
-		MaxFileSize: intPtr(2097152),
-		Timeout:     intPtr(600),
+		MaxWorkers: intPtr(4),
+		MaxFiles:   intPtr(1000),
+		MaxDepth:   intPtr(5),
 	}
 
+	if limits.MaxWorkers == nil || *limits.MaxWorkers != 4 {
+		t.Errorf("expected MaxWorkers 4, got %v", limits.MaxWorkers)
+	}
 	if limits.MaxFiles == nil || *limits.MaxFiles != 1000 {
 		t.Errorf("expected MaxFiles 1000, got %v", limits.MaxFiles)
 	}
-	if limits.MaxFileSize == nil || *limits.MaxFileSize != 2097152 {
-		t.Errorf("expected MaxFileSize 2097152, got %v", limits.MaxFileSize)
-	}
-	if limits.Timeout == nil || *limits.Timeout != 600 {
-		t.Errorf("expected Timeout 600, got %v", limits.Timeout)
+	if limits.MaxDepth == nil || *limits.MaxDepth != 5 {
+		t.Errorf("expected MaxDepth 5, got %v", limits.MaxDepth)
 	}
 }
 
 func TestLimitsConfig_NilValues(t *testing.T) {
 	limits := &LimitsConfig{}
 
+	if limits.MaxWorkers != nil {
+		t.Error("expected MaxWorkers to be nil by default")
+	}
 	if limits.MaxFiles != nil {
 		t.Error("expected MaxFiles to be nil by default")
 	}
-	if limits.MaxFileSize != nil {
-		t.Error("expected MaxFileSize to be nil by default")
-	}
-	if limits.Timeout != nil {
-		t.Error("expected Timeout to be nil by default")
+	if limits.MaxDepth != nil {
+		t.Error("expected MaxDepth to be nil by default")
 	}
 }
 
 func TestCacheConfig(t *testing.T) {
 	cache := &CacheConfig{
-		Enabled: false,
-		Dir:     "/custom/cache",
-		TTL:     intPtr(3600),
+		Enabled: boolPtr(false),
+		Kind:    stringPtr("mtime"),
 	}
 
-	if cache.Enabled {
+	if cache.Enabled == nil || *cache.Enabled {
 		t.Error("expected Enabled to be false")
 	}
-	if cache.Dir != "/custom/cache" {
-		t.Errorf("expected Dir '/custom/cache', got %q", cache.Dir)
-	}
-	if cache.TTL == nil || *cache.TTL != 3600 {
-		t.Errorf("expected TTL 3600, got %v", cache.TTL)
+	if cache.Kind == nil || *cache.Kind != "mtime" {
+		t.Errorf("expected Kind 'mtime', got %v", cache.Kind)
 	}
 }
 
 func TestCacheConfig_DefaultValues(t *testing.T) {
 	cache := &CacheConfig{
-		Enabled: true,
+		Enabled: boolPtr(true),
 	}
 
-	if !cache.Enabled {
+	if cache.Enabled == nil || !*cache.Enabled {
 		t.Error("expected Enabled to be true")
 	}
-	if cache.Dir != "" {
-		t.Errorf("expected empty Dir by default, got %q", cache.Dir)
-	}
-	if cache.TTL != nil {
-		t.Errorf("expected TTL to be nil by default, got %v", cache.TTL)
+	if cache.Kind != nil {
+		t.Errorf("expected Kind to be nil by default, got %v", cache.Kind)
 	}
 }
 
 func TestFeatureConfig(t *testing.T) {
 	features := &FeatureConfig{
-		Routes:      boolPtr(true),
-		Controllers: boolPtr(false),
-		Models:      boolPtr(true),
-		Middleware:  boolPtr(false),
-		Migrations:  boolPtr(true),
-		Policies:    boolPtr(false),
-		Events:      boolPtr(true),
-		Jobs:        boolPtr(false),
+		HTTPStatus:        boolPtr(true),
+		RequestUsage:      boolPtr(false),
+		ResourceUsage:     boolPtr(true),
+		WithPivot:         boolPtr(false),
+		AttributeMake:     boolPtr(true),
+		ScopesUsed:        boolPtr(false),
+		Polymorphic:       boolPtr(true),
+		BroadcastChannels: boolPtr(false),
 	}
 
-	if features.Routes == nil || !*features.Routes {
-		t.Error("expected Routes to be true")
+	if features.HTTPStatus == nil || !*features.HTTPStatus {
+		t.Error("expected HTTPStatus to be true")
 	}
-	if features.Controllers == nil || *features.Controllers {
-		t.Error("expected Controllers to be false")
+	if features.RequestUsage == nil || *features.RequestUsage {
+		t.Error("expected RequestUsage to be false")
 	}
-	if features.Models == nil || !*features.Models {
-		t.Error("expected Models to be true")
+	if features.ResourceUsage == nil || !*features.ResourceUsage {
+		t.Error("expected ResourceUsage to be true")
 	}
-	if features.Middleware == nil || *features.Middleware {
-		t.Error("expected Middleware to be false")
+	if features.WithPivot == nil || *features.WithPivot {
+		t.Error("expected WithPivot to be false")
 	}
-	if features.Migrations == nil || !*features.Migrations {
-		t.Error("expected Migrations to be true")
+	if features.AttributeMake == nil || !*features.AttributeMake {
+		t.Error("expected AttributeMake to be true")
 	}
-	if features.Policies == nil || *features.Policies {
-		t.Error("expected Policies to be false")
+	if features.ScopesUsed == nil || *features.ScopesUsed {
+		t.Error("expected ScopesUsed to be false")
 	}
-	if features.Events == nil || !*features.Events {
-		t.Error("expected Events to be true")
+	if features.Polymorphic == nil || !*features.Polymorphic {
+		t.Error("expected Polymorphic to be true")
 	}
-	if features.Jobs == nil || *features.Jobs {
-		t.Error("expected Jobs to be false")
+	if features.BroadcastChannels == nil || *features.BroadcastChannels {
+		t.Error("expected BroadcastChannels to be false")
 	}
 }
 
 func TestFeatureConfig_NilValues(t *testing.T) {
 	features := &FeatureConfig{}
 
-	if features.Routes != nil {
-		t.Error("expected Routes to be nil by default")
+	if features.HTTPStatus != nil {
+		t.Error("expected HTTPStatus to be nil by default")
 	}
-	if features.Controllers != nil {
-		t.Error("expected Controllers to be nil by default")
+	if features.RequestUsage != nil {
+		t.Error("expected RequestUsage to be nil by default")
 	}
-	if features.Models != nil {
-		t.Error("expected Models to be nil by default")
+	if features.ResourceUsage != nil {
+		t.Error("expected ResourceUsage to be nil by default")
 	}
-	if features.Middleware != nil {
-		t.Error("expected Middleware to be nil by default")
+	if features.WithPivot != nil {
+		t.Error("expected WithPivot to be nil by default")
 	}
-	if features.Migrations != nil {
-		t.Error("expected Migrations to be nil by default")
+	if features.AttributeMake != nil {
+		t.Error("expected AttributeMake to be nil by default")
 	}
-	if features.Policies != nil {
-		t.Error("expected Policies to be nil by default")
+	if features.ScopesUsed != nil {
+		t.Error("expected ScopesUsed to be nil by default")
 	}
-	if features.Events != nil {
-		t.Error("expected Events to be nil by default")
+	if features.Polymorphic != nil {
+		t.Error("expected Polymorphic to be nil by default")
 	}
-	if features.Jobs != nil {
-		t.Error("expected Jobs to be nil by default")
+	if features.BroadcastChannels != nil {
+		t.Error("expected BroadcastChannels to be nil by default")
 	}
 }
 
@@ -366,8 +355,8 @@ func TestApplyDefaults_Function(t *testing.T) {
 	if len(manifest.Scan.Globs) == 0 {
 		t.Error("expected default globs to be applied")
 	}
-	if len(manifest.Scan.Globs) > 0 && manifest.Scan.Globs[0] != "**/*.php" {
-		t.Errorf("expected default glob '**/*.php', got %q", manifest.Scan.Globs[0])
+	if len(manifest.Scan.Globs) > 0 && manifest.Scan.Globs[0] != "app/**/*.php" {
+		t.Errorf("expected default glob 'app/**/*.php', got %q", manifest.Scan.Globs[0])
 	}
 }
 
@@ -386,22 +375,22 @@ func TestApplyDefaults_WithLimits(t *testing.T) {
 	applyDefaults(manifest)
 
 	// Check that limits defaults were applied
+	if manifest.Limits.MaxWorkers == nil {
+		t.Error("expected MaxWorkers default to be applied")
+	} else if *manifest.Limits.MaxWorkers != 8 {
+		t.Errorf("expected default MaxWorkers 8, got %d", *manifest.Limits.MaxWorkers)
+	}
+
 	if manifest.Limits.MaxFiles == nil {
 		t.Error("expected MaxFiles default to be applied")
-	} else if *manifest.Limits.MaxFiles != 10000 {
-		t.Errorf("expected default MaxFiles 10000, got %d", *manifest.Limits.MaxFiles)
+	} else if *manifest.Limits.MaxFiles != 500 {
+		t.Errorf("expected default MaxFiles 500, got %d", *manifest.Limits.MaxFiles)
 	}
 
-	if manifest.Limits.MaxFileSize == nil {
-		t.Error("expected MaxFileSize default to be applied")
-	} else if *manifest.Limits.MaxFileSize != 5242880 {
-		t.Errorf("expected default MaxFileSize 5242880, got %d", *manifest.Limits.MaxFileSize)
-	}
-
-	if manifest.Limits.Timeout == nil {
-		t.Error("expected Timeout default to be applied")
-	} else if *manifest.Limits.Timeout != 300 {
-		t.Errorf("expected default Timeout 300, got %d", *manifest.Limits.Timeout)
+	if manifest.Limits.MaxDepth == nil {
+		t.Error("expected MaxDepth default to be applied")
+	} else if *manifest.Limits.MaxDepth != 2 {
+		t.Errorf("expected default MaxDepth 2, got %d", *manifest.Limits.MaxDepth)
 	}
 }
 
@@ -415,21 +404,17 @@ func TestApplyDefaults_WithCache(t *testing.T) {
 			Targets: []string{"app/"},
 		},
 		Cache: &CacheConfig{
-			Enabled: true,
+			Enabled: boolPtr(true),
 		},
 	}
 
 	applyDefaults(manifest)
 
 	// Check that cache defaults were applied
-	if manifest.Cache.Dir != ".oxinfer/cache" {
-		t.Errorf("expected default cache dir '.oxinfer/cache', got %q", manifest.Cache.Dir)
-	}
-
-	if manifest.Cache.TTL == nil {
-		t.Error("expected TTL default to be applied")
-	} else if *manifest.Cache.TTL != 86400 {
-		t.Errorf("expected default TTL 86400, got %d", *manifest.Cache.TTL)
+	if manifest.Cache.Kind == nil {
+		t.Error("expected Kind default to be applied")
+	} else if *manifest.Cache.Kind != "sha256+mtime" {
+		t.Errorf("expected default Kind 'sha256+mtime', got %s", *manifest.Cache.Kind)
 	}
 }
 
@@ -448,29 +433,29 @@ func TestApplyDefaults_WithFeatures(t *testing.T) {
 	applyDefaults(manifest)
 
 	// Check that all features defaults were applied (all should be true)
-	if manifest.Features.Routes == nil || !*manifest.Features.Routes {
-		t.Error("expected Routes default to be true")
+	if manifest.Features.HTTPStatus == nil || !*manifest.Features.HTTPStatus {
+		t.Error("expected HTTPStatus default to be true")
 	}
-	if manifest.Features.Controllers == nil || !*manifest.Features.Controllers {
-		t.Error("expected Controllers default to be true")
+	if manifest.Features.RequestUsage == nil || !*manifest.Features.RequestUsage {
+		t.Error("expected RequestUsage default to be true")
 	}
-	if manifest.Features.Models == nil || !*manifest.Features.Models {
-		t.Error("expected Models default to be true")
+	if manifest.Features.ResourceUsage == nil || !*manifest.Features.ResourceUsage {
+		t.Error("expected ResourceUsage default to be true")
 	}
-	if manifest.Features.Middleware == nil || !*manifest.Features.Middleware {
-		t.Error("expected Middleware default to be true")
+	if manifest.Features.WithPivot == nil || !*manifest.Features.WithPivot {
+		t.Error("expected WithPivot default to be true")
 	}
-	if manifest.Features.Migrations == nil || !*manifest.Features.Migrations {
-		t.Error("expected Migrations default to be true")
+	if manifest.Features.AttributeMake == nil || !*manifest.Features.AttributeMake {
+		t.Error("expected AttributeMake default to be true")
 	}
-	if manifest.Features.Policies == nil || !*manifest.Features.Policies {
-		t.Error("expected Policies default to be true")
+	if manifest.Features.ScopesUsed == nil || !*manifest.Features.ScopesUsed {
+		t.Error("expected ScopesUsed default to be true")
 	}
-	if manifest.Features.Events == nil || !*manifest.Features.Events {
-		t.Error("expected Events default to be true")
+	if manifest.Features.Polymorphic == nil || !*manifest.Features.Polymorphic {
+		t.Error("expected Polymorphic default to be true")
 	}
-	if manifest.Features.Jobs == nil || !*manifest.Features.Jobs {
-		t.Error("expected Jobs default to be true")
+	if manifest.Features.BroadcastChannels == nil || !*manifest.Features.BroadcastChannels {
+		t.Error("expected BroadcastChannels default to be true")
 	}
 }
 
@@ -481,4 +466,8 @@ func intPtr(i int) *int {
 
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+func stringPtr(s string) *string {
+	return &s
 }

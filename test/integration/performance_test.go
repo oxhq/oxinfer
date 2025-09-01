@@ -2,6 +2,7 @@ package integration
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -46,25 +47,15 @@ func TestManifestProcessingPerformance(t *testing.T) {
 			Globs:           []string{"**/*.php", "app/**/*.php", "src/**/*.php"},
 		},
 		Limits: &manifest.LimitsConfig{
-			MaxFiles:    intPtr(5000),
-			MaxFileSize: intPtr(2097152),
-			Timeout:     intPtr(300),
+			MaxWorkers: intPtr(8),
+			MaxFiles:   intPtr(5000),
+			MaxDepth:   intPtr(2),
 		},
 		Cache: &manifest.CacheConfig{
-			Enabled: true,
-			Dir:     ".oxinfer/cache",
-			TTL:     intPtr(86400),
+			Enabled: boolPtr(true),
+			Kind:    stringPtr("sha256+mtime"),
 		},
-		Features: &manifest.FeatureConfig{
-			Routes:      boolPtr(true),
-			Controllers: boolPtr(true),
-			Models:      boolPtr(true),
-			Middleware:  boolPtr(true),
-			Migrations:  boolPtr(true),
-			Policies:    boolPtr(false),
-			Events:      boolPtr(true),
-			Jobs:        boolPtr(false),
-		},
+		// Features removed for Sprint 1 - only manifest validation required
 	}
 
 	// Create validator
@@ -72,7 +63,7 @@ func TestManifestProcessingPerformance(t *testing.T) {
 
 	// Measure manifest validation performance
 	start := time.Now()
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		// Create a copy to avoid modifying the original
 		testCopy := *testManifest
 		
@@ -121,9 +112,9 @@ func BenchmarkManifestValidation(b *testing.B) {
 			Globs:   []string{"**/*.php"},
 		},
 		Limits: &manifest.LimitsConfig{
-			MaxFiles:    intPtr(1000),
-			MaxFileSize: intPtr(1048576),
-			Timeout:     intPtr(300),
+			MaxWorkers: intPtr(4),
+			MaxFiles:   intPtr(1000),
+			MaxDepth:   intPtr(2),
 		},
 	}
 
@@ -131,7 +122,7 @@ func BenchmarkManifestValidation(b *testing.B) {
 
 	b.ResetTimer()
 	
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		// Create a copy to avoid side effects
 		testCopy := *testManifest
 		
@@ -176,7 +167,7 @@ func BenchmarkManifestLoadFromReader(b *testing.B) {
 
 	b.ResetTimer()
 	
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		reader := strings.NewReader(manifestJSON)
 		_, err := loader.LoadFromReader(reader)
 		if err != nil {
@@ -191,7 +182,7 @@ func BenchmarkCLIConfigParsing(b *testing.B) {
 	
 	b.ResetTimer()
 	
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, err := cli.ParseFlags(args)
 		if err != nil {
 			b.Fatalf("Config parsing failed: %v", err)
@@ -229,21 +220,23 @@ func TestDeterministicManifestLoading(t *testing.T) {
 			"globs": ["**/*.php", "app/**/*.php"]
 		},
 		"limits": {
+			"max_workers": 4,
 			"max_files": 1000,
-			"max_file_size": 1048576,
-			"timeout": 300
+			"max_depth": 2
 		},
 		"cache": {
 			"enabled": true,
-			"dir": ".oxinfer/cache",
-			"ttl": 86400
+			"kind": "sha256+mtime"
 		},
 		"features": {
-			"routes": true,
-			"controllers": true,
-			"models": true,
-			"middleware": true,
-			"migrations": true
+			"http_status": true,
+			"request_usage": true,
+			"resource_usage": true,
+			"with_pivot": true,
+			"attribute_make": true,
+			"scopes_used": true,
+			"polymorphic": true,
+			"broadcast_channels": true
 		}
 	}`, projectDir)
 
@@ -252,16 +245,19 @@ func TestDeterministicManifestLoading(t *testing.T) {
 
 	// Load and validate multiple times
 	var hashes []string
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		reader := strings.NewReader(manifestJSON)
 		loadedManifest, err := loader.LoadFromReader(reader)
 		if err != nil {
 			t.Fatalf("Loading failed on iteration %d: %v", i, err)
 		}
 
-		// Convert to a deterministic string representation
-		repr := fmt.Sprintf("%+v", *loadedManifest)
-		hash := fmt.Sprintf("%x", sha256.Sum256([]byte(repr)))
+		// Convert to a deterministic string representation using JSON
+		jsonBytes, err := json.Marshal(loadedManifest)
+		if err != nil {
+			t.Fatalf("Failed to marshal manifest on iteration %d: %v", i, err)
+		}
+		hash := fmt.Sprintf("%x", sha256.Sum256(jsonBytes))
 		hashes = append(hashes, hash)
 	}
 
@@ -309,7 +305,7 @@ func TestCLIErrorDeterminism(t *testing.T) {
 			// Generate same error multiple times
 			var errorStrings []string
 			
-			for i := 0; i < 3; i++ {
+			for range 3 {
 				err := tt.errorFunc()
 				errorStrings = append(errorStrings, err.Error())
 			}
@@ -362,9 +358,9 @@ func TestManifestValidationConsistency(t *testing.T) {
 					Globs:   []string{"**/*.php"},
 				},
 				Limits: &manifest.LimitsConfig{
-					MaxFiles:    intPtr(1000),
-					MaxFileSize: intPtr(1048576),
-					Timeout:     intPtr(300),
+					MaxWorkers: intPtr(4),
+					MaxFiles:   intPtr(1000),
+					MaxDepth:   intPtr(2),
 				},
 			},
 			wantErr: false,
@@ -381,9 +377,9 @@ func TestManifestValidationConsistency(t *testing.T) {
 					Globs:   []string{"**/*.php"},
 				},
 				Limits: &manifest.LimitsConfig{
-					MaxFiles:    intPtr(200000), // Too high
-					MaxFileSize: intPtr(1048576),
-					Timeout:     intPtr(300),
+					MaxWorkers: intPtr(0), // Too low - should cause validation error
+					MaxFiles:   intPtr(1000),
+					MaxDepth:   intPtr(2),
 				},
 			},
 			wantErr: true,
@@ -398,7 +394,7 @@ func TestManifestValidationConsistency(t *testing.T) {
 			var results []bool
 			var errorMessages []string
 			
-			for i := 0; i < 5; i++ {
+			for range 5 {
 				// Create a copy to avoid side effects
 				testCopy := *tt.manifest
 				
@@ -474,7 +470,7 @@ func TestSliceOrderingDeterminism(t *testing.T) {
 	var whitelistResults [][]string
 	var globsResults [][]string
 	
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		reader := strings.NewReader(manifestJSON)
 		loadedManifest, err := loader.LoadFromReader(reader)
 		if err != nil {
@@ -544,9 +540,9 @@ func TestMemoryUsageBaseline(t *testing.T) {
 			"globs": ["**/*.php", "app/**/*.php", "src/**/*.php", "routes/**/*.php"]
 		},
 		"limits": {
+			"max_workers": 8,
 			"max_files": 5000,
-			"max_file_size": 2097152,
-			"timeout": 300
+			"max_depth": 3
 		}
 	}`, projectDir)
 
@@ -557,7 +553,7 @@ func TestMemoryUsageBaseline(t *testing.T) {
 	start := time.Now()
 	iterations := 1000
 	
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		reader := strings.NewReader(manifestJSON)
 		_, err := loader.LoadFromReader(reader)
 		if err != nil {
@@ -593,7 +589,7 @@ func TestStringDeterminism(t *testing.T) {
 		var results []string
 		
 		// Generate same error multiple times
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			var cliErr *cli.CLIError
 			if testErr.cause != nil {
 				cliErr = cli.WrapInputError(testErr.message, testErr.cause)
@@ -622,4 +618,8 @@ func intPtr(i int) *int {
 
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+func stringPtr(s string) *string {
+	return &s
 }

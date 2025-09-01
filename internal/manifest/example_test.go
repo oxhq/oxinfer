@@ -40,18 +40,18 @@ func ExampleManifestLoader_LoadFromReader() {
 			"globs": ["**/*.php"]
 		},
 		"limits": {
+			"max_workers": 4,
 			"max_files": 5000,
-			"max_file_size": 1048576
+			"max_depth": 3
 		},
 		"cache": {
 			"enabled": true,
-			"dir": ".oxinfer/cache",
-			"ttl": 86400
+			"kind": "sha256+mtime"
 		},
 		"features": {
-			"routes": true,
-			"controllers": true,
-			"models": false
+			"http_status": true,
+			"request_usage": true,
+			"resource_usage": false
 		}
 	}`
 
@@ -70,17 +70,17 @@ func ExampleManifestLoader_LoadFromReader() {
 	fmt.Printf("Project root exists: %t\n", m.Project.Root != "")
 	fmt.Printf("Scan targets: %v\n", m.Scan.Targets)
 	fmt.Printf("Max files: %d\n", *m.Limits.MaxFiles)
-	fmt.Printf("Cache enabled: %t\n", m.Cache.Enabled)
-	fmt.Printf("Routes feature: %t\n", *m.Features.Routes)
-	fmt.Printf("Models feature: %t\n", *m.Features.Models)
+	fmt.Printf("Cache enabled: %t\n", *m.Cache.Enabled)
+	fmt.Printf("HTTP status feature: %t\n", *m.Features.HTTPStatus)
+	fmt.Printf("Resource usage feature: %t\n", *m.Features.ResourceUsage)
 
 	// Output:
 	// Project root exists: true
 	// Scan targets: [app/]
 	// Max files: 5000
 	// Cache enabled: true
-	// Routes feature: true
-	// Models feature: false
+	// HTTP status feature: true
+	// Resource usage feature: false
 }
 
 // ExampleManifestLoader_LoadFromFile demonstrates loading from a file

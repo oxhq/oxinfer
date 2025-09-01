@@ -13,10 +13,9 @@ import (
 
 // validatorSchemaJSON contains the embedded manifest JSON schema
 const validatorSchemaJSON = `{
-  "$schema": "https://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/garaekz/oxinfer/schemas/manifest.schema.json",
-  "title": "Oxinfer Manifest Schema",
-  "description": "Schema for Oxinfer manifest configuration files",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oxcribe.dev/schema/manifest.schema.json",
+  "title": "Oxinfer Manifest",
   "type": "object",
   "additionalProperties": false,
   "required": ["project", "scan"],
@@ -26,15 +25,8 @@ const validatorSchemaJSON = `{
       "additionalProperties": false,
       "required": ["root", "composer"],
       "properties": {
-        "root": {
-          "type": "string",
-          "description": "Root directory of the Laravel project to analyze"
-        },
-        "composer": {
-          "type": "string",
-          "description": "Path to composer.json file",
-          "default": "composer.json"
-        }
+        "root": { "type": "string", "minLength": 1 },
+        "composer": { "type": "string", "minLength": 1 }
       }
     },
     "scan": {
@@ -44,27 +36,18 @@ const validatorSchemaJSON = `{
       "properties": {
         "targets": {
           "type": "array",
-          "description": "Directories to scan for PHP files",
-          "items": {
-            "type": "string"
-          },
           "minItems": 1,
-          "default": ["app/"]
+          "items": { "type": "string", "minLength": 1 }
         },
         "vendor_whitelist": {
           "type": "array",
-          "description": "Vendor packages to include in analysis",
-          "items": {
-            "type": "string"
-          }
+          "items": { "type": "string", "minLength": 1 },
+          "default": []
         },
         "globs": {
           "type": "array",
-          "description": "File glob patterns to include",
-          "items": {
-            "type": "string"
-          },
-          "default": ["**/*.php"]
+          "items": { "type": "string", "minLength": 1 },
+          "default": ["app/**/*.php", "routes/**/*.php"]
         }
       }
     },
@@ -72,98 +55,39 @@ const validatorSchemaJSON = `{
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "max_files": {
-          "type": "integer",
-          "description": "Maximum number of files to analyze",
-          "minimum": 1,
-          "maximum": 100000,
-          "default": 10000
-        },
-        "max_file_size": {
-          "type": "integer",
-          "description": "Maximum file size in bytes",
-          "minimum": 1024,
-          "maximum": 104857600,
-          "default": 5242880
-        },
-        "timeout": {
-          "type": "integer",
-          "description": "Analysis timeout in seconds",
-          "minimum": 1,
-          "maximum": 3600,
-          "default": 300
-        }
-      }
+        "max_workers": { "type": "integer", "minimum": 1, "default": 8 },
+        "max_files": { "type": "integer", "minimum": 1, "default": 500 },
+        "max_depth": { "type": "integer", "minimum": 0, "default": 2 }
+      },
+      "default": {}
     },
     "cache": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled"],
       "properties": {
-        "enabled": {
-          "type": "boolean",
-          "description": "Enable caching of analysis results",
-          "default": true
-        },
-        "dir": {
+        "enabled": { "type": "boolean", "default": true },
+        "kind": {
           "type": "string",
-          "description": "Cache directory path",
-          "default": ".oxinfer/cache"
-        },
-        "ttl": {
-          "type": "integer",
-          "description": "Cache time-to-live in seconds",
-          "minimum": 1,
-          "maximum": 2592000,
-          "default": 86400
+          "enum": ["sha256+mtime", "mtime"],
+          "default": "sha256+mtime"
         }
-      }
+      },
+      "default": {}
     },
     "features": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "routes": {
-          "type": "boolean",
-          "description": "Analyze route definitions",
-          "default": true
-        },
-        "controllers": {
-          "type": "boolean",
-          "description": "Analyze controller classes",
-          "default": true
-        },
-        "models": {
-          "type": "boolean",
-          "description": "Analyze Eloquent models",
-          "default": true
-        },
-        "middleware": {
-          "type": "boolean",
-          "description": "Analyze middleware classes",
-          "default": true
-        },
-        "migrations": {
-          "type": "boolean",
-          "description": "Analyze database migrations",
-          "default": true
-        },
-        "policies": {
-          "type": "boolean",
-          "description": "Analyze authorization policies",
-          "default": true
-        },
-        "events": {
-          "type": "boolean",
-          "description": "Analyze event classes",
-          "default": true
-        },
-        "jobs": {
-          "type": "boolean",
-          "description": "Analyze job classes",
-          "default": true
-        }
-      }
+        "http_status": { "type": "boolean", "default": true },
+        "request_usage": { "type": "boolean", "default": true },
+        "resource_usage": { "type": "boolean", "default": true },
+        "with_pivot": { "type": "boolean", "default": true },
+        "attribute_make": { "type": "boolean", "default": true },
+        "scopes_used": { "type": "boolean", "default": true },
+        "polymorphic": { "type": "boolean", "default": true },
+        "broadcast_channels": { "type": "boolean", "default": true }
+      },
+      "default": {}
     }
   }
 }`
@@ -186,7 +110,7 @@ func NewValidator() ManifestValidator {
 func (v *manifestValidator) ValidateSchema(data []byte) error {
 	// Load the manifest schema
 	compiler := jsonschema.NewCompiler()
-	compiler.Draft = jsonschema.Draft7
+	compiler.Draft = jsonschema.Draft2020
 
 	// Load schema from embedded file
 	if err := compiler.AddResource("manifest.schema.json", strings.NewReader(validatorSchemaJSON)); err != nil {
@@ -352,24 +276,24 @@ func (v *manifestValidator) validateLimits(m *Manifest) error {
 		return nil // Limits are optional
 	}
 
-	// Validate file limits (already constrained by schema, but double-check)
+	// Validate max_workers limits
+	if m.Limits.MaxWorkers != nil {
+		if *m.Limits.MaxWorkers < 1 {
+			return cli.NewInputError("limits.max_workers must be at least 1")
+		}
+	}
+
+	// Validate max_files limits
 	if m.Limits.MaxFiles != nil {
-		if *m.Limits.MaxFiles < 1 || *m.Limits.MaxFiles > 100000 {
-			return cli.NewInputError("limits.max_files must be between 1 and 100000")
+		if *m.Limits.MaxFiles < 1 {
+			return cli.NewInputError("limits.max_files must be at least 1")
 		}
 	}
 
-	// Validate file size limits (1KB to 100MB)
-	if m.Limits.MaxFileSize != nil {
-		if *m.Limits.MaxFileSize < 1024 || *m.Limits.MaxFileSize > 104857600 {
-			return cli.NewInputError("limits.max_file_size must be between 1024 and 104857600 bytes")
-		}
-	}
-
-	// Validate timeout limits (1 second to 1 hour)
-	if m.Limits.Timeout != nil {
-		if *m.Limits.Timeout < 1 || *m.Limits.Timeout > 3600 {
-			return cli.NewInputError("limits.timeout must be between 1 and 3600 seconds")
+	// Validate max_depth limits
+	if m.Limits.MaxDepth != nil {
+		if *m.Limits.MaxDepth < 0 {
+			return cli.NewInputError("limits.max_depth must be at least 0")
 		}
 	}
 
