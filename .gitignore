@@ -1,0 +1,63 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+
+# Build output
+/bin/
+/dist/
+/oxinfer
+
+# Go mod cache
+/vendor/
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Test artifacts and fixtures (if large)
+/test/fixtures/projects/*
+!/test/fixtures/projects/.keep
+
+# Output files from CLI
+delta.json
+output.json
+*.delta.json
+
+# Demo files (created for testing)
+demo-manifest.json
+invalid-manifest.json
+composer.json
+/app/
+/routes/
+
+# Keep these dot files/folders
+.*/
+!.gitignore
+!.go-version
