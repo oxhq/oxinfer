@@ -1,0 +1,9 @@
+{
+  "project": {
+    "root": "/Users/garaekz/Documents/projects/go/oxinfer/test/fixtures/projects/test-laravel",
+    "composer": "/Users/garaekz/Documents/projects/go/oxinfer/test/fixtures/projects/test-laravel/composer.json"
+  },
+  "scan": {
+    "targets": ["app", "routes"]
+  }
+}

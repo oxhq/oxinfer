@@ -1,0 +1,492 @@
+package integration
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// TestEndToEndWithFixtures tests the CLI end-to-end using the fixture manifests
+func TestEndToEndWithFixtures(t *testing.T) {
+	// Build the CLI binary first
+	cliPath := buildCLIBinary(t)
+	defer os.Remove(cliPath)
+
+	// Test with valid manifests
+	validManifests := []string{
+		"minimal.json",
+		"full.json",
+		"defaults.json",
+	}
+
+	for _, manifestFile := range validManifests {
+		t.Run(fmt.Sprintf("valid_%s", strings.TrimSuffix(manifestFile, ".json")), func(t *testing.T) {
+			manifestPath := filepath.Join("../../test/fixtures/manifests/valid", manifestFile)
+
+			// Run the CLI
+			cmd := exec.Command(cliPath, "--manifest", manifestPath)
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+
+			err := cmd.Run()
+			if err != nil {
+				t.Fatalf("CLI execution failed: %v\nStderr: %s", err, stderr.String())
+			}
+
+			// Check that we got JSON output
+			output := stdout.String()
+			if output == "" {
+				t.Fatal("CLI produced no output")
+			}
+
+			// Validate that output is valid JSON
+			var result map[string]interface{}
+			if err := json.Unmarshal([]byte(output), &result); err != nil {
+				t.Fatalf("CLI output is not valid JSON: %v\nOutput: %s", err, output)
+			}
+
+			// Check that required fields are present in the output
+			requiredFields := []string{"metadata", "stats", "routes", "controllers", "models", "middleware", "migrations"}
+			for _, field := range requiredFields {
+				if _, exists := result[field]; !exists {
+					t.Errorf("Output missing required field: %s", field)
+				}
+			}
+
+			// For Sprint 1, all collections should be empty arrays
+			collections := []string{"routes", "controllers", "models", "middleware", "migrations"}
+			for _, collection := range collections {
+				if arr, ok := result[collection].([]interface{}); !ok {
+					t.Errorf("Field %s should be an array", collection)
+				} else if len(arr) != 0 {
+					t.Errorf("Field %s should be empty array for Sprint 1, got length %d", collection, len(arr))
+				}
+			}
+
+			// Verify metadata structure
+			if metadata, ok := result["metadata"].(map[string]interface{}); ok {
+				if version, exists := metadata["version"]; !exists {
+					t.Error("Metadata missing version field")
+				} else if version != "0.1.0" {
+					t.Errorf("Expected version 0.1.0, got %v", version)
+				}
+
+				if _, exists := metadata["timestamp"]; !exists {
+					t.Error("Metadata missing timestamp field")
+				}
+
+				if project, exists := metadata["project"]; !exists {
+					t.Error("Metadata missing project field")
+				} else if projectObj, ok := project.(map[string]interface{}); ok {
+					if _, exists := projectObj["root"]; !exists {
+						t.Error("Metadata.project missing root field")
+					}
+				}
+			} else {
+				t.Error("Output missing or invalid metadata field")
+			}
+
+			// Verify stats structure
+			if stats, ok := result["stats"].(map[string]interface{}); ok {
+				expectedStats := []string{"files_analyzed", "files_skipped", "parse_errors"}
+				for _, field := range expectedStats {
+					if _, exists := stats[field]; !exists {
+						t.Errorf("Stats missing field: %s", field)
+					}
+				}
+			} else {
+				t.Error("Output missing or invalid stats field")
+			}
+		})
+	}
+}
+
+// TestEndToEndInvalidManifests tests that invalid manifests produce appropriate errors
+func TestEndToEndInvalidManifests(t *testing.T) {
+	cliPath := buildCLIBinary(t)
+	defer os.Remove(cliPath)
+
+	invalidManifests := []struct {
+		file        string
+		expectedErr string
+		exitCode    int
+	}{
+		{
+			file:        "missing-project.json",
+			expectedErr: "schema",
+			exitCode:    3, // ExitSchemaError
+		},
+		{
+			file:        "invalid-limits.json",
+			expectedErr: "schema",
+			exitCode:    3, // ExitSchemaError
+		},
+		{
+			file:        "unknown-keys.json",
+			expectedErr: "schema",
+			exitCode:    3, // ExitSchemaError
+		},
+		{
+			file:        "malformed.json",
+			expectedErr: "JSON",
+			exitCode:    1, // ExitInputError
+		},
+		{
+			file:        "missing-root.json",
+			expectedErr: "schema",
+			exitCode:    3, // ExitSchemaError
+		},
+	}
+
+	for _, tc := range invalidManifests {
+		t.Run(fmt.Sprintf("invalid_%s", strings.TrimSuffix(tc.file, ".json")), func(t *testing.T) {
+			manifestPath := filepath.Join("../../test/fixtures/manifests/invalid", tc.file)
+
+			cmd := exec.Command(cliPath, "--manifest", manifestPath)
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+
+			err := cmd.Run()
+			if err == nil {
+				t.Fatalf("Expected CLI to fail for invalid manifest %s, but it succeeded", tc.file)
+			}
+
+			// Check exit code
+			if exitError, ok := err.(*exec.ExitError); ok {
+				if exitError.ExitCode() != tc.exitCode {
+					t.Errorf("Expected exit code %d, got %d", tc.exitCode, exitError.ExitCode())
+				}
+			} else {
+				t.Errorf("Expected exit error, got %T", err)
+			}
+
+			// Check that stderr contains error information
+			stderrStr := stderr.String()
+			if stderrStr == "" {
+				t.Error("Expected error output on stderr")
+			}
+
+			// Check that error message contains expected content
+			if !strings.Contains(strings.ToLower(stderrStr), strings.ToLower(tc.expectedErr)) {
+				t.Errorf("Error message should contain %q, got: %s", tc.expectedErr, stderrStr)
+			}
+
+			// Stderr should contain JSON error for CLI errors
+			if tc.exitCode != 2 { // Not internal error
+				var errorObj map[string]interface{}
+				if err := json.Unmarshal([]byte(stderrStr), &errorObj); err != nil {
+					t.Errorf("Error output should be valid JSON: %v\nOutput: %s", err, stderrStr)
+				} else {
+					// Check error structure
+					if _, exists := errorObj["message"]; !exists {
+						t.Error("Error JSON missing message field")
+					}
+					if _, exists := errorObj["exit_code"]; !exists {
+						t.Error("Error JSON missing exit_code field")
+					}
+					if _, exists := errorObj["exit_string"]; !exists {
+						t.Error("Error JSON missing exit_string field")
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestEndToEndStdinInput tests reading manifest from stdin
+func TestEndToEndStdinInput(t *testing.T) {
+	cliPath := buildCLIBinary(t)
+	defer os.Remove(cliPath)
+
+	// Use the minimal manifest content
+	manifestContent := fmt.Sprintf(`{
+		"project": {
+			"root": "%s"
+		},
+		"analysis": {
+			"patterns": ["**/*.php"]
+		}
+	}`, filepath.Join("../../test/fixtures/projects/test-laravel"))
+
+	cmd := exec.Command(cliPath)
+	cmd.Stdin = strings.NewReader(manifestContent)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err != nil {
+		t.Fatalf("CLI execution failed: %v\nStderr: %s", err, stderr.String())
+	}
+
+	// Validate JSON output
+	output := stdout.String()
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatalf("CLI output is not valid JSON: %v", err)
+	}
+
+	// Should have same structure as file-based input
+	if _, exists := result["metadata"]; !exists {
+		t.Error("Stdin input should produce metadata field")
+	}
+}
+
+// TestEndToEndOutputFile tests writing output to a file
+func TestEndToEndOutputFile(t *testing.T) {
+	cliPath := buildCLIBinary(t)
+	defer os.Remove(cliPath)
+
+	manifestPath := filepath.Join("../../test/fixtures/manifests/valid/minimal.json")
+	outputPath := filepath.Join(t.TempDir(), "output.json")
+
+	cmd := exec.Command(cliPath, "--manifest", manifestPath, "--out", outputPath)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err != nil {
+		t.Fatalf("CLI execution failed: %v\nStderr: %s", err, stderr.String())
+	}
+
+	// Check that output file was created
+	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
+		t.Fatalf("Output file was not created: %s", outputPath)
+	}
+
+	// Read and validate the output file
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("Failed to read output file: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(content, &result); err != nil {
+		t.Fatalf("Output file contains invalid JSON: %v", err)
+	}
+}
+
+// TestEndToEndFlagCombinations tests various flag combinations
+func TestEndToEndFlagCombinations(t *testing.T) {
+	cliPath := buildCLIBinary(t)
+	defer os.Remove(cliPath)
+
+	tests := []struct {
+		name         string
+		args         []string
+		wantExitCode int
+		checkStdout  func(t *testing.T, output string)
+	}{
+		{
+			name:         "version flag",
+			args:         []string{"--version"},
+			wantExitCode: 0,
+			checkStdout: func(t *testing.T, output string) {
+				if !strings.Contains(output, "oxinfer version 0.1.0") {
+					t.Errorf("Version output should contain version info, got: %s", output)
+				}
+			},
+		},
+		{
+			name:         "help flag",
+			args:         []string{"--help"},
+			wantExitCode: 0,
+			checkStdout: func(t *testing.T, output string) {
+				if !strings.Contains(output, "Usage:") {
+					t.Errorf("Help output should contain usage info, got: %s", output)
+				}
+			},
+		},
+		{
+			name:         "no-color flag",
+			args:         []string{"--manifest", filepath.Join("../../test/fixtures/manifests/valid/minimal.json"), "--no-color"},
+			wantExitCode: 0,
+			checkStdout: func(t *testing.T, output string) {
+				// Should still produce valid JSON output
+				var result map[string]interface{}
+				if err := json.Unmarshal([]byte(output), &result); err != nil {
+					t.Errorf("Output should be valid JSON: %v", err)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := exec.Command(cliPath, tt.args...)
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+
+			err := cmd.Run()
+
+			// Check exit code
+			actualExitCode := 0
+			if err != nil {
+				if exitError, ok := err.(*exec.ExitError); ok {
+					actualExitCode = exitError.ExitCode()
+				} else {
+					t.Fatalf("Unexpected error type: %T", err)
+				}
+			}
+
+			if actualExitCode != tt.wantExitCode {
+				t.Errorf("Expected exit code %d, got %d", tt.wantExitCode, actualExitCode)
+				t.Errorf("Stderr: %s", stderr.String())
+			}
+
+			// Run custom stdout checks
+			if tt.checkStdout != nil {
+				tt.checkStdout(t, stdout.String())
+			}
+		})
+	}
+}
+
+// TestDeterministicOutput tests that multiple runs produce identical output
+func TestDeterministicOutput(t *testing.T) {
+	cliPath := buildCLIBinary(t)
+	defer os.Remove(cliPath)
+
+	manifestPath := filepath.Join("../../test/fixtures/manifests/valid/full.json")
+
+	// Run the CLI multiple times
+	var outputs []string
+	var hashes []string
+
+	for i := 0; i < 3; i++ {
+		cmd := exec.Command(cliPath, "--manifest", manifestPath)
+		var stdout bytes.Buffer
+		cmd.Stdout = &stdout
+
+		err := cmd.Run()
+		if err != nil {
+			t.Fatalf("CLI execution %d failed: %v", i, err)
+		}
+
+		output := stdout.String()
+		outputs = append(outputs, output)
+
+		// Calculate hash
+		hash := fmt.Sprintf("%x", sha256.Sum256([]byte(output)))
+		hashes = append(hashes, hash)
+	}
+
+	// All hashes should be identical (except for timestamp)
+	// Since we can't control timestamp, we'll parse JSON and compare structure
+	for i := 1; i < len(outputs); i++ {
+		var result1, result2 map[string]interface{}
+
+		if err := json.Unmarshal([]byte(outputs[0]), &result1); err != nil {
+			t.Fatalf("Failed to parse output %d: %v", 0, err)
+		}
+		if err := json.Unmarshal([]byte(outputs[i]), &result2); err != nil {
+			t.Fatalf("Failed to parse output %d: %v", i, err)
+		}
+
+		// Remove timestamp fields before comparing (they will differ)
+		if metadata1, ok := result1["metadata"].(map[string]interface{}); ok {
+			delete(metadata1, "timestamp")
+		}
+		if metadata2, ok := result2["metadata"].(map[string]interface{}); ok {
+			delete(metadata2, "timestamp")
+		}
+
+		// Convert back to JSON for comparison
+		json1, _ := json.Marshal(result1)
+		json2, _ := json.Marshal(result2)
+
+		if string(json1) != string(json2) {
+			t.Errorf("Output %d differs from output 0 (excluding timestamps)", i)
+			t.Logf("Output 0: %s", string(json1))
+			t.Logf("Output %d: %s", i, string(json2))
+		}
+	}
+}
+
+// buildCLIBinary builds the oxinfer CLI binary and returns the path
+func buildCLIBinary(t *testing.T) string {
+	t.Helper()
+
+	// Create temporary directory for the binary
+	tempDir := t.TempDir()
+	binaryPath := filepath.Join(tempDir, "oxinfer")
+
+	// Build the binary
+	cmd := exec.Command("go", "build", "-o", binaryPath, "../../cmd/oxinfer")
+	cmd.Dir = filepath.Dir(t.Name()) // Set working directory
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to build CLI binary: %v\nStderr: %s", err, stderr.String())
+	}
+
+	return binaryPath
+}
+
+// TestBuildAndBasicExecution tests that the binary can be built and executed
+func TestBuildAndBasicExecution(t *testing.T) {
+	cliPath := buildCLIBinary(t)
+	defer os.Remove(cliPath)
+
+	// Test that binary exists and is executable
+	info, err := os.Stat(cliPath)
+	if err != nil {
+		t.Fatalf("Binary does not exist: %v", err)
+	}
+
+	if info.Mode()&0111 == 0 {
+		t.Fatal("Binary is not executable")
+	}
+
+	// Test basic execution (version flag)
+	cmd := exec.Command(cliPath, "--version")
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("Binary execution failed: %v", err)
+	}
+
+	if !strings.Contains(string(output), "0.1.0") {
+		t.Errorf("Version output unexpected: %s", string(output))
+	}
+}
+
+// TestNonExistentManifestFile tests behavior with non-existent manifest files
+func TestNonExistentManifestFile(t *testing.T) {
+	cliPath := buildCLIBinary(t)
+	defer os.Remove(cliPath)
+
+	cmd := exec.Command(cliPath, "--manifest", "/nonexistent/file.json")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err == nil {
+		t.Fatal("Expected CLI to fail with non-existent manifest file")
+	}
+
+	// Should exit with input error code
+	if exitError, ok := err.(*exec.ExitError); ok {
+		if exitError.ExitCode() != 1 { // ExitInputError
+			t.Errorf("Expected exit code 1, got %d", exitError.ExitCode())
+		}
+	}
+
+	// Should produce JSON error on stderr
+	stderrStr := stderr.String()
+	var errorObj map[string]interface{}
+	if err := json.Unmarshal([]byte(stderrStr), &errorObj); err != nil {
+		t.Errorf("Error output should be valid JSON: %v\nOutput: %s", err, stderrStr)
+	}
+}

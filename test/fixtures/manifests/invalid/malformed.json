@@ -1,0 +1,8 @@
+{
+  "project": {
+    "root": "/Users/garaekz/Documents/projects/go/oxinfer/test/fixtures/projects/test-laravel"
+  },
+  "analysis": {
+    "patterns": ["**/*.php",
+  }
+}

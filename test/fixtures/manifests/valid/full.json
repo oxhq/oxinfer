@@ -1,0 +1,27 @@
+{
+  "project": {
+    "root": "/Users/garaekz/Documents/projects/go/oxinfer/test/fixtures/projects/test-laravel",
+    "name": "Test Laravel App",
+    "version": "1.0.0"
+  },
+  "analysis": {
+    "patterns": ["**/*.php", "app/**/*.php"],
+    "exclude": ["vendor/**", "node_modules/**", "storage/**", "bootstrap/cache/**"],
+    "depth": 15,
+    "limits": {
+      "max_files": 5000,
+      "max_file_size": 2097152
+    },
+    "features": {
+      "routes": true,
+      "controllers": true,
+      "models": true,
+      "middleware": true,
+      "migrations": true
+    }
+  },
+  "output": {
+    "format": "json",
+    "pretty": true
+  }
+}
