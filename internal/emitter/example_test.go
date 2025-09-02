@@ -5,11 +5,11 @@ import (
 	"fmt"
 )
 
-// ExampleJSONEmitter_EmitStub demonstrates the basic usage for Sprint 1
+// ExampleJSONEmitter_EmitStub demonstrates the basic usage
 func ExampleJSONEmitter_EmitStub() {
 	emitter := NewJSONEmitter()
 	
-	// Generate a stub delta (empty but schema-valid for Sprint 1)
+	// Generate a stub delta (empty but schema-valid)
 	delta, err := emitter.EmitStub()
 	if err != nil {
 		panic(err)
@@ -85,10 +85,10 @@ func ExampleDelta_structure() {
 					Status:   &[]int{200}[0],
 					Explicit: &[]bool{true}[0],
 				},
-				Request: &RequestInfo{
-					ContentTypes: []string{"application/json"},
-					Body:         map[string]interface{}{"id": map[string]interface{}{}},
-				},
+            Request: &RequestInfo{
+                ContentTypes: []string{"application/json"},
+                Body:         NewOrderedObjectFromMap(map[string]interface{}{"id": map[string]interface{}{}}),
+            },
 				Resources: []Resource{
 					{Class: "UserResource", Collection: false},
 				},

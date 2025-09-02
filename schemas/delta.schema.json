@@ -2,6 +2,21 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://oxcribe.dev/schema/delta.schema.json",
   "title": "Oxinfer Delta",
+  "$defs": {
+    "shapeNode": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/shapeNode" }
+    },
+    "argLiteral": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "integer" },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "null" }
+      ]
+    }
+  },
   "type": "object",
   "additionalProperties": false,
   "required": ["meta"],
@@ -21,6 +36,9 @@
             "skipped": { "type": "integer", "minimum": 0 },
             "durationMs": { "type": "integer", "minimum": 0 }
           }
+        ,
+        "version": { "type": "string" },
+        "generatedAt": { "type": "string", "format": "date-time" }
         }
       }
     },
@@ -53,27 +71,9 @@
                 },
                 "uniqueItems": true
               },
-              "body": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "object",
-                  "additionalProperties": false
-                }
-              },
-              "query": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "object",
-                  "additionalProperties": false
-                }
-              },
-              "files": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "object",
-                  "additionalProperties": false
-                }
-              }
+              "body": { "$ref": "#/$defs/shapeNode" },
+              "query": { "$ref": "#/$defs/shapeNode" },
+              "files": { "$ref": "#/$defs/shapeNode" }
             }
           },
           "resources": {
@@ -99,7 +99,7 @@
                 "name": { "type": "string", "minLength": 1 },
                 "args": {
                   "type": "array",
-                  "items": { "type": "string", "minLength": 1 },
+                  "items": { "$ref": "#/$defs/argLiteral" },
                   "default": []
                 }
               }

@@ -50,11 +50,11 @@ func TestDelta_StructureCompliance(t *testing.T) {
 							Status:   &[]int{200}[0],
 							Explicit: &[]bool{true}[0],
 						},
-						Request: &RequestInfo{
-							ContentTypes: []string{"application/json"},
-							Body:         map[string]interface{}{"name": map[string]interface{}{}},
-							Query:        map[string]interface{}{"page": map[string]interface{}{}},
-						},
+                    Request: &RequestInfo{
+                        ContentTypes: []string{"application/json"},
+                        Body:         NewOrderedObjectFromMap(map[string]interface{}{"name": map[string]interface{}{}}),
+                        Query:        NewOrderedObjectFromMap(map[string]interface{}{"page": map[string]interface{}{}}),
+                    },
 						Resources: []Resource{
 							{Class: "UserResource", Collection: true},
 						},
@@ -245,12 +245,12 @@ func TestController_StructureValidation(t *testing.T) {
 					Status:   &[]int{200}[0],
 					Explicit: &[]bool{true}[0],
 				},
-				Request: &RequestInfo{
-					ContentTypes: []string{"application/json", "multipart/form-data"},
-					Body:         map[string]interface{}{"field": map[string]interface{}{}},
-					Query:        map[string]interface{}{"filter": map[string]interface{}{}},
-					Files:        map[string]interface{}{"upload": map[string]interface{}{}},
-				},
+                Request: &RequestInfo{
+                    ContentTypes: []string{"application/json", "multipart/form-data"},
+                    Body:         NewOrderedObjectFromMap(map[string]interface{}{"field": map[string]interface{}{}}),
+                    Query:        NewOrderedObjectFromMap(map[string]interface{}{"filter": map[string]interface{}{}}),
+                    Files:        NewOrderedObjectFromMap(map[string]interface{}{"upload": map[string]interface{}{}}),
+                },
 				Resources: []Resource{
 					{Class: "TestResource", Collection: false},
 					{Class: "CollectionResource", Collection: true},

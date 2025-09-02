@@ -2,6 +2,12 @@
 // It defines the structured output format that matches delta.schema.json.
 package emitter
 
+import (
+    "bytes"
+    "encoding/json"
+    "sort"
+)
+
 // Delta represents the complete analysis output structure matching delta.schema.json.
 // It contains metadata about the analysis and categorized findings from Laravel/PHP code.
 type Delta struct {
@@ -14,8 +20,10 @@ type Delta struct {
 
 // MetaInfo contains analysis metadata including completion status and statistics.
 type MetaInfo struct {
-	Partial bool      `json:"partial"`
-	Stats   MetaStats `json:"stats"`
+    Partial bool      `json:"partial"`
+    Stats   MetaStats `json:"stats"`
+    Version     *string `json:"version,omitempty"`
+    GeneratedAt *string `json:"generatedAt,omitempty"`
 }
 
 // MetaStats provides quantitative analysis results and performance metrics.
@@ -43,10 +51,77 @@ type HTTPInfo struct {
 
 // RequestInfo describes request handling patterns detected in controller methods.
 type RequestInfo struct {
-	ContentTypes []string               `json:"contentTypes,omitempty"`
-	Body         map[string]interface{} `json:"body,omitempty"`
-	Query        map[string]interface{} `json:"query,omitempty"`
-	Files        map[string]interface{} `json:"files,omitempty"`
+    ContentTypes []string     `json:"contentTypes,omitempty"`
+    Body         OrderedObject `json:"body,omitempty"`
+    Query        OrderedObject `json:"query,omitempty"`
+    Files        OrderedObject `json:"files,omitempty"`
+}
+
+// OrderedObject is a recursive map that marshals to JSON with stable key ordering.
+type OrderedObject map[string]OrderedObject
+
+// MarshalJSON implements deterministic JSON encoding for OrderedObject.
+func (o OrderedObject) MarshalJSON() ([]byte, error) {
+    // Collect and sort keys
+    keys := make([]string, 0, len(o))
+    for k := range o {
+        keys = append(keys, k)
+    }
+    sort.Strings(keys)
+
+    // Manually build JSON object
+    var buf bytes.Buffer
+    buf.WriteByte('{')
+    for i, k := range keys {
+        // Encode key
+        keyBytes, err := json.Marshal(k)
+        if err != nil {
+            return nil, err
+        }
+        buf.Write(keyBytes)
+        buf.WriteByte(':')
+        // Encode value (recursive). For zero children, emit empty object {}
+        child := o[k]
+        if child == nil {
+            buf.WriteString("{}")
+        } else {
+            valBytes, err := child.MarshalJSON()
+            if err != nil {
+                return nil, err
+            }
+            buf.Write(valBytes)
+        }
+        if i != len(keys)-1 {
+            buf.WriteByte(',')
+        }
+    }
+    buf.WriteByte('}')
+    return buf.Bytes(), nil
+}
+
+// NewOrderedObjectFromMap converts a nested map[string]interface{} into OrderedObject.
+func NewOrderedObjectFromMap(m map[string]interface{}) OrderedObject {
+    if m == nil {
+        return nil
+    }
+    out := make(OrderedObject, len(m))
+    // build keys sorted for consistency of construction
+    keys := make([]string, 0, len(m))
+    for k := range m {
+        keys = append(keys, k)
+    }
+    sort.Strings(keys)
+    for _, k := range keys {
+        v := m[k]
+        // Expect nested map or empty object
+        if childMap, ok := v.(map[string]interface{}); ok {
+            out[k] = NewOrderedObjectFromMap(childMap)
+        } else {
+            // Leaf
+            out[k] = OrderedObject{}
+        }
+    }
+    return out
 }
 
 // Resource represents a Laravel API resource usage pattern.

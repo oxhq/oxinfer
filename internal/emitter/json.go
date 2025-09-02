@@ -12,9 +12,10 @@ import (
 
 // DeltaEmitter defines the interface for emitting deterministic delta JSON.
 type DeltaEmitter interface {
-	EmitStub() (*Delta, error)
-	WriteJSON(w io.Writer, delta *Delta) error
-	MarshalDeterministic(delta *Delta) ([]byte, error)
+    EmitStub() (*Delta, error)
+    WriteJSON(w io.Writer, delta *Delta) error
+    MarshalDeterministic(delta *Delta) ([]byte, error)
+    CanonicalBytes(delta *Delta) ([]byte, error)
 }
 
 // JSONEmitter implements deterministic JSON marshaling for Delta structures.
@@ -25,7 +26,7 @@ func NewJSONEmitter() *JSONEmitter {
 	return &JSONEmitter{}
 }
 
-// EmitStub generates an empty but schema-valid Delta for Sprint 1.
+// EmitStub generates an empty but schema-valid Delta.
 // This provides a baseline structure that validates against delta.schema.json.
 func (e *JSONEmitter) EmitStub() (*Delta, error) {
 	return &Delta{
@@ -85,6 +86,21 @@ func (e *JSONEmitter) MarshalDeterministic(delta *Delta) ([]byte, error) {
 	// Remove the trailing newline that encoder.Encode adds
 	result := bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
 	return result, nil
+}
+
+// CanonicalBytes returns a canonical JSON form excluding volatile fields
+// like meta.stats.durationMs and meta.generatedAt, while preserving deterministic ordering.
+func (e *JSONEmitter) CanonicalBytes(delta *Delta) ([]byte, error) {
+    if delta == nil {
+        return nil, fmt.Errorf("delta cannot be nil")
+    }
+    // Clone lightweight
+    d := *delta
+    d.Meta = delta.Meta
+    // Zero out duration and generatedAt
+    d.Meta.Stats.DurationMs = 0
+    d.Meta.GeneratedAt = nil
+    return e.MarshalDeterministic(&d)
 }
 
 // normalizeDelta ensures all collections are sorted for deterministic output.

@@ -9,7 +9,7 @@ import (
 func TestStubOutput(t *testing.T) {
 	emitter := NewJSONEmitter()
 	
-	stub, err := emitter.EmitStub()
+    stub, err := emitter.EmitStub()
 	if err != nil {
 		t.Fatalf("EmitStub() error = %v", err)
 	}
@@ -19,26 +19,26 @@ func TestStubOutput(t *testing.T) {
 		t.Fatalf("MarshalDeterministic() error = %v", err)
 	}
 
-	// Expected stub JSON structure for Sprint 1
-	expected := map[string]interface{}{
-		"meta": map[string]interface{}{
-			"partial": false,
-			"stats": map[string]interface{}{
-				"filesParsed": float64(0),
-				"skipped":     float64(0),
-				"durationMs":  float64(0),
-			},
-		},
-		"controllers": []interface{}{},
-		"models":      []interface{}{},
-		"polymorphic": []interface{}{},
-		"broadcast":   []interface{}{},
-	}
+	// Expected stub JSON structure
+    expected := map[string]interface{}{
+        "meta": map[string]interface{}{
+            "partial": false,
+            "stats": map[string]interface{}{
+                "filesParsed": float64(0),
+                "skipped":     float64(0),
+                "durationMs":  float64(0),
+            },
+        },
+        "controllers": []interface{}{},
+        "models":      []interface{}{},
+        "polymorphic": []interface{}{},
+        "broadcast":   []interface{}{},
+    }
 
 	var actual map[string]interface{}
-	if err := json.Unmarshal(data, &actual); err != nil {
-		t.Fatalf("failed to unmarshal actual JSON: %v", err)
-	}
+    if err := json.Unmarshal(data, &actual); err != nil {
+        t.Fatalf("failed to unmarshal actual JSON: %v", err)
+    }
 
 	// Compare structure
 	if !deepEqual(t, expected, actual) {
@@ -48,7 +48,7 @@ func TestStubOutput(t *testing.T) {
 		t.Logf("JSON: %s", string(data))
 	}
 
-	// Verify the JSON is compact (no pretty printing for Sprint 1)
+	// Verify the JSON is compact (no pretty printing)
 	if len(data) == 0 {
 		t.Error("JSON output is empty")
 	}
@@ -78,12 +78,12 @@ func TestComplexDeltaDeterministicValidation(t *testing.T) {
 					Status:   &[]int{201}[0],
 					Explicit: &[]bool{true}[0],
 				},
-				Request: &RequestInfo{
-					ContentTypes: []string{"application/json", "multipart/form-data"},
-					Body:         map[string]interface{}{"name": map[string]interface{}{}, "email": map[string]interface{}{}},
-					Query:        map[string]interface{}{"include": map[string]interface{}{}},
-					Files:        map[string]interface{}{"avatar": map[string]interface{}{}},
-				},
+                Request: &RequestInfo{
+                    ContentTypes: []string{"application/json", "multipart/form-data"},
+                    Body:         NewOrderedObjectFromMap(map[string]interface{}{"name": map[string]interface{}{}, "email": map[string]interface{}{}}),
+                    Query:        NewOrderedObjectFromMap(map[string]interface{}{"include": map[string]interface{}{}}),
+                    Files:        NewOrderedObjectFromMap(map[string]interface{}{"avatar": map[string]interface{}{}}),
+                },
 				Resources: []Resource{
 					{Class: "UserResource", Collection: false},
 				},
