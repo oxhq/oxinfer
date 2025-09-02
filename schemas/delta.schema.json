@@ -15,6 +15,40 @@
         { "type": "boolean" },
         { "type": "null" }
       ]
+    },
+    "polymorphicRelation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relation", "type"],
+      "properties": {
+        "relation": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "enum": ["morphTo", "morphOne", "morphMany", "morphByMany", "morphToMany"] },
+        "morphType": { "type": "string", "minLength": 1 },
+        "morphId": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "discriminator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["propertyName", "mapping"],
+          "properties": {
+            "propertyName": { "type": "string", "minLength": 1 },
+            "mapping": {
+              "type": "object",
+              "additionalProperties": { "type": "string", "minLength": 1 }
+            },
+            "source": { "type": "string", "enum": ["morphMap", "explicit", "inferred"] },
+            "isExplicit": { "type": "boolean", "default": false },
+            "defaultType": { "type": "string", "minLength": 1 }
+          }
+        },
+        "relatedModels": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": []
+        },
+        "depthTruncated": { "type": "boolean", "default": false },
+        "maxDepth": { "type": "integer", "minimum": 1 }
+      }
     }
   },
   "type": "object",
@@ -104,6 +138,11 @@
                 }
               }
             }
+          },
+          "polymorphic": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/polymorphicRelation" },
+            "default": []
           }
         }
       },
@@ -147,6 +186,11 @@
                 "via": { "type": "string", "enum": ["Attribute::make"] }
               }
             },
+            "default": []
+          },
+          "polymorphic": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/polymorphicRelation" },
             "default": []
           }
         }

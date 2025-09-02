@@ -75,6 +75,7 @@ func (c *DefaultCompositePatternMatcher) MatchAll(ctx context.Context, tree *par
 		Attributes:   make([]*AttributeMatch, 0),
 		Scopes:       make([]*ScopeMatch, 0),
 		Polymorphics: make([]*PolymorphicMatch, 0),
+		Broadcasts:   make([]*BroadcastMatch, 0),
 		ProcessedAt:  startTime.Unix(),
 	}
 
@@ -111,7 +112,7 @@ func (c *DefaultCompositePatternMatcher) MatchAll(ctx context.Context, tree *par
 
 	// Update pattern detection count
 	patternCount := int64(len(patterns.HTTPStatus) + len(patterns.RequestUsage) + len(patterns.Resources) + 
-		len(patterns.Pivots) + len(patterns.Attributes) + len(patterns.Scopes) + len(patterns.Polymorphics))
+		len(patterns.Pivots) + len(patterns.Attributes) + len(patterns.Scopes) + len(patterns.Polymorphics) + len(patterns.Broadcasts))
 	c.stats.PatternsDetected += patternCount
 
 	return patterns, nil
@@ -168,6 +169,8 @@ func (c *DefaultCompositePatternMatcher) isMatcherEnabled(patternType PatternTyp
 		return c.config.EnableScopeMatching
 	case PatternTypePolymorphic:
 		return c.config.EnablePolymorphicMatching
+	case PatternTypeBroadcast:
+		return c.config.EnableBroadcastMatching
 	default:
 		return false // Unknown pattern types are disabled by default
 	}
@@ -204,6 +207,10 @@ func (c *DefaultCompositePatternMatcher) processMatchResults(patternType Pattern
 		case PatternTypePolymorphic:
 			if polyMatch, ok := result.Data.(*PolymorphicMatch); ok {
 				patterns.Polymorphics = append(patterns.Polymorphics, polyMatch)
+			}
+		case PatternTypeBroadcast:
+			if broadcastMatch, ok := result.Data.(*BroadcastMatch); ok {
+				patterns.Broadcasts = append(patterns.Broadcasts, broadcastMatch)
 			}
 		}
 	}
@@ -317,6 +324,19 @@ func (p *DefaultPatternMatchingProcessor) initializeMatchers(language *sitter.La
 		}
 		if err := p.composite.AddMatcher(polymorphicMatcher); err != nil {
 			return fmt.Errorf("failed to add polymorphic matcher: %w", err)
+		}
+	}
+
+	// Initialize T10 pattern matchers if enabled
+	
+	// Broadcast matcher
+	if config.EnableBroadcastMatching {
+		broadcastMatcher, err := NewBroadcastMatcher(language, config)
+		if err != nil {
+			return fmt.Errorf("failed to create broadcast matcher: %w", err)
+		}
+		if err := p.composite.AddMatcher(broadcastMatcher); err != nil {
+			return fmt.Errorf("failed to add broadcast matcher: %w", err)
 		}
 	}
 
@@ -455,6 +475,50 @@ func (p *DefaultPatternMatchingProcessor) ConvertToEmitterFormat(patterns *Larav
 	}
 
 	return controller, nil
+}
+
+// ConvertToBroadcastFormat converts broadcast patterns to emitter.Broadcast format.
+func (p *DefaultPatternMatchingProcessor) ConvertToBroadcastFormat(patterns *LaravelPatterns) ([]emitter.Broadcast, error) {
+	if patterns == nil {
+		return nil, fmt.Errorf("patterns cannot be nil")
+	}
+
+	// Convert broadcast patterns to emitter format
+	broadcasts := make([]emitter.Broadcast, 0, len(patterns.Broadcasts))
+	for _, broadcastMatch := range patterns.Broadcasts {
+		broadcast := emitter.Broadcast{
+			Channel:    broadcastMatch.Channel,
+			Visibility: broadcastMatch.Visibility,
+		}
+
+		// Add parameters if present
+		if len(broadcastMatch.Params) > 0 {
+			// Sort params for deterministic output
+			params := make([]string, len(broadcastMatch.Params))
+			copy(params, broadcastMatch.Params)
+			sort.Strings(params)
+			broadcast.Params = params
+		}
+
+		// Add file path if specified
+		if broadcastMatch.File != "" {
+			broadcast.File = &broadcastMatch.File
+		}
+
+		// Add payload literal flag if detected
+		if broadcastMatch.PayloadLiteral {
+			broadcast.PayloadLiteral = &broadcastMatch.PayloadLiteral
+		}
+
+		broadcasts = append(broadcasts, broadcast)
+	}
+
+	// Sort broadcasts for deterministic output
+	sort.Slice(broadcasts, func(i, j int) bool {
+		return broadcasts[i].Channel < broadcasts[j].Channel
+	})
+
+	return broadcasts, nil
 }
 
 // ConvertToModelFormat converts patterns to emitter.Model format for models.
@@ -637,7 +701,7 @@ func ValidateMatcherConfiguration(config *MatcherConfig) error {
 	// At least one matcher type must be enabled
 	if !config.EnableHTTPStatusMatching && !config.EnableRequestMatching && !config.EnableResourceMatching &&
 		!config.EnablePivotMatching && !config.EnableAttributeMatching && !config.EnableScopeMatching &&
-		!config.EnablePolymorphicMatching {
+		!config.EnablePolymorphicMatching && !config.EnableBroadcastMatching {
 		return fmt.Errorf("at least one matcher type must be enabled")
 	}
 

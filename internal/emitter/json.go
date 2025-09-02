@@ -195,6 +195,18 @@ func (e *JSONEmitter) normalizeController(controller *Controller) {
 			}
 		}
 	}
+
+	// Sort polymorphic relations by relation name
+	if controller.Polymorphic != nil {
+		sort.Slice(controller.Polymorphic, func(i, j int) bool {
+			return controller.Polymorphic[i].Relation < controller.Polymorphic[j].Relation
+		})
+
+		// Sort sub-collections within each polymorphic relation
+		for i := range controller.Polymorphic {
+			e.normalizePolymorphicRelation(&controller.Polymorphic[i])
+		}
+	}
 }
 
 // normalizeModel ensures deterministic ordering of model sub-collections.
@@ -221,6 +233,41 @@ func (e *JSONEmitter) normalizeModel(model *Model) {
 		sort.Slice(model.Attributes, func(i, j int) bool {
 			return model.Attributes[i].Name < model.Attributes[j].Name
 		})
+	}
+
+	// Sort polymorphic relations by relation name
+	if model.Polymorphic != nil {
+		sort.Slice(model.Polymorphic, func(i, j int) bool {
+			return model.Polymorphic[i].Relation < model.Polymorphic[j].Relation
+		})
+
+		// Sort sub-collections within each polymorphic relation
+		for i := range model.Polymorphic {
+			e.normalizePolymorphicRelation(&model.Polymorphic[i])
+		}
+	}
+}
+
+// normalizePolymorphicRelation ensures deterministic ordering of polymorphic relation sub-collections.
+func (e *JSONEmitter) normalizePolymorphicRelation(relation *PolymorphicRelation) {
+	// Sort related models if present
+	if relation.RelatedModels != nil {
+		models := make([]string, len(relation.RelatedModels))
+		copy(models, relation.RelatedModels)
+		sort.Strings(models)
+		relation.RelatedModels = models
+	}
+
+	// Sort discriminator mapping if present
+	if relation.Discriminator != nil && relation.Discriminator.Mapping != nil {
+		// The mapping is a map[string]string, so we need to ensure consistent ordering
+		// when it's serialized. Go's JSON marshaler will automatically sort map keys,
+		// but we can ensure the structure is consistent.
+		mapping := make(map[string]string, len(relation.Discriminator.Mapping))
+		for k, v := range relation.Discriminator.Mapping {
+			mapping[k] = v
+		}
+		relation.Discriminator.Mapping = mapping
 	}
 }
 
