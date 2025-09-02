@@ -884,3 +884,132 @@ class UserController extends Controller
 	t.Logf("- Average confidence: %.2f", stats.AverageConfidence)
 	t.Logf("- Processing time: %dms", stats.ProcessingTimeMs)
 }
+
+func TestIntegration_PolymorphicRelationships(t *testing.T) {
+	language := php.GetLanguage()
+	config := DefaultMatcherConfig()
+	processor, err := NewPatternMatchingProcessor(language, config)
+	if err != nil {
+		t.Fatalf("Failed to create processor: %v", err)
+	}
+
+	// Model with polymorphic relationships
+	phpContent := `<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
+
+class Comment extends Model
+{
+    /**
+     * Polymorphic relationship to commentable entities.
+     */
+    public function commentable(): MorphTo
+    {
+        return $this->morphTo();
+    }
+    
+    /**
+     * Polymorphic relationship to user avatar.
+     */
+    public function avatar(): MorphOne
+    {
+        return $this->morphOne(Image::class, 'imageable');
+    }
+    
+    /**
+     * Polymorphic relationship to tags.
+     */
+    public function tags(): MorphMany
+    {
+        return $this->morphMany(Tag::class, 'taggable');
+    }
+    
+    /**
+     * Custom morphTo with explicit columns.
+     */
+    public function owner(): MorphTo
+    {
+        return $this->morphTo('owner', 'owner_type', 'owner_id');
+    }
+}
+
+class Image extends Model
+{
+    /**
+     * Get the owning imageable model.
+     */
+    public function imageable(): MorphTo
+    {
+        return $this->morphTo();
+    }
+}
+
+class Tag extends Model
+{
+    /**
+     * Get the owning taggable model.
+     */
+    public function taggable(): MorphTo
+    {
+        return $this->morphTo();
+    }
+}`
+
+	tree, err := parsePHPContent(phpContent, language)
+	if err != nil {
+		t.Fatalf("Failed to parse PHP content: %v", err)
+	}
+	defer tree.Close()
+
+	syntaxTree := &parser.SyntaxTree{
+		Root:   convertNode(tree.RootNode()),
+		Source: []byte(phpContent),
+	}
+
+	// Process the polymorphic models
+	ctx := context.Background()
+	filePath := "Comment.php"
+	patterns, err := processor.ProcessFile(ctx, syntaxTree, filePath)
+	if err != nil {
+		t.Fatalf("Processor failed on polymorphic model: %v", err)
+	}
+
+	// Verify polymorphic patterns were detected
+	if patterns == nil {
+		t.Fatal("Expected patterns result")
+	}
+
+	// Check that polymorphic patterns were detected
+	if len(patterns.Polymorphics) == 0 {
+		t.Error("Expected polymorphic patterns to be detected")
+	} else {
+		t.Logf("Detected %d polymorphic patterns", len(patterns.Polymorphics))
+		for i, poly := range patterns.Polymorphics {
+			t.Logf("Polymorphic %d: %s (%s)", i, poly.Relation, poly.Type)
+		}
+	}
+
+	// Convert to emitter format
+	model, err := processor.ConvertToModelFormat(patterns)
+	if err != nil {
+		t.Fatalf("Failed to convert to model format: %v", err)
+	}
+
+	// Verify polymorphic relationships are included in model format
+	if model != nil && len(model.Polymorphic) > 0 {
+		t.Logf("Converted %d polymorphic relationships to model format", len(model.Polymorphic))
+		for i, polyRel := range model.Polymorphic {
+			t.Logf("Model polymorphic %d: %s (%s)", i, polyRel.Relation, polyRel.Type)
+		}
+	}
+
+	t.Logf("Polymorphic integration test completed successfully:")
+	t.Logf("- File: %s", patterns.FilePath)
+	t.Logf("- Polymorphic patterns: %d", len(patterns.Polymorphics))
+	t.Logf("- Processing time: %dms", patterns.ProcessingMs)
+}

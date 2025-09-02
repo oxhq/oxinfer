@@ -17,12 +17,12 @@ func TestPolymorphicIntegration(t *testing.T) {
 		{
 			name:                      "polymorphic_matching_enabled",
 			enablePolymorphicMatching: true,
-			expectedPatternTypesCount: 7, // All pattern types including polymorphic
+			expectedPatternTypesCount: 8, // All pattern types including polymorphic and broadcast
 		},
 		{
 			name:                      "polymorphic_matching_disabled",
 			enablePolymorphicMatching: false,
-			expectedPatternTypesCount: 6, // All pattern types except polymorphic
+			expectedPatternTypesCount: 7, // All pattern types except polymorphic (but including broadcast)
 		},
 	}
 

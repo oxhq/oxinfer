@@ -499,6 +499,169 @@ var ScopeUsageQueries = []QueryDefinition{
 	},
 }
 
+// PolymorphicUsageQueries contains tree-sitter queries for Laravel polymorphic relationship detection.
+var PolymorphicUsageQueries = []QueryDefinition{
+	{
+		Name:        "morph_to_relationship",
+		Description: "Detect morphTo() polymorphic belongs-to relationships",
+		Pattern: `
+(member_call_expression
+  object: (variable_name) @this_var (#eq? @this_var "$this")
+  name: (name) @method (#eq? @method "morphTo")
+  arguments: (arguments) @args)
+`,
+		Confidence: 1.0,
+	},
+	{
+		Name:        "morph_one_relationship",
+		Description: "Detect morphOne() polymorphic one-to-one relationships",
+		Pattern: `
+(member_call_expression
+  object: (variable_name) @this_var (#eq? @this_var "$this")
+  name: (name) @method (#eq? @method "morphOne")
+  arguments: (arguments
+    (argument) @model_arg) @args)
+`,
+		Confidence: 1.0,
+	},
+	{
+		Name:        "morph_many_relationship",
+		Description: "Detect morphMany() polymorphic one-to-many relationships",
+		Pattern: `
+(member_call_expression
+  object: (variable_name) @this_var (#eq? @this_var "$this")
+  name: (name) @method (#eq? @method "morphMany")
+  arguments: (arguments
+    (argument) @model_arg) @args)
+`,
+		Confidence: 1.0,
+	},
+	{
+		Name:        "relation_morph_map",
+		Description: "Detect Relation::morphMap() global polymorphic type mappings",
+		Pattern: `
+(scoped_call_expression
+  scope: (name) @class (#eq? @class "Relation")
+  name: (name) @method (#eq? @method "morphMap")
+  arguments: (arguments
+    (argument (array_creation_expression) @mapping_array)))
+`,
+		Confidence: 1.0,
+	},
+	{
+		Name:        "polymorphic_in_return_statement",
+		Description: "Detect polymorphic relationships in return statements",
+		Pattern: `
+(return_statement
+  (member_call_expression
+    object: (variable_name) @this_var (#eq? @this_var "$this")
+    name: (name) @method (#match? @method "^(morphTo|morphOne|morphMany)$")
+    arguments: (arguments) @args))
+`,
+		Confidence: 0.95,
+	},
+	{
+		Name:        "morph_to_with_name",
+		Description: "Detect morphTo() with explicit name argument",
+		Pattern: `
+(member_call_expression
+  object: (variable_name) @this_var (#eq? @this_var "$this")
+  name: (name) @method (#eq? @method "morphTo")
+  arguments: (arguments
+    (argument (string) @name_arg) @args))
+`,
+		Confidence: 0.95,
+	},
+	{
+		Name:        "morph_to_with_type_and_id",
+		Description: "Detect morphTo() with type and id column arguments",
+		Pattern: `
+(member_call_expression
+  object: (variable_name) @this_var (#eq? @this_var "$this")
+  name: (name) @method (#eq? @method "morphTo")
+  arguments: (arguments
+    (argument) @name_arg
+    (argument (string) @type_arg)
+    (argument (string) @id_arg) @args))
+`,
+		Confidence: 0.98,
+	},
+	{
+		Name:        "morph_one_with_name",
+		Description: "Detect morphOne() with explicit name and type/id columns",
+		Pattern: `
+(member_call_expression
+  object: (variable_name) @this_var (#eq? @this_var "$this")
+  name: (name) @method (#eq? @method "morphOne")
+  arguments: (arguments
+    (argument) @model_arg
+    (argument (string) @name_arg) @args))
+`,
+		Confidence: 0.95,
+	},
+	{
+		Name:        "morph_many_with_name",
+		Description: "Detect morphMany() with explicit name and type/id columns",
+		Pattern: `
+(member_call_expression
+  object: (variable_name) @this_var (#eq? @this_var "$this")
+  name: (name) @method (#eq? @method "morphMany")
+  arguments: (arguments
+    (argument) @model_arg
+    (argument (string) @name_arg) @args))
+`,
+		Confidence: 0.95,
+	},
+	{
+		Name:        "morph_by_many_relationship",
+		Description: "Detect morphByMany() polymorphic many-to-many relationships",
+		Pattern: `
+(member_call_expression
+  object: (variable_name) @this_var (#eq? @this_var "$this")
+  name: (name) @method (#eq? @method "morphByMany")
+  arguments: (arguments) @args)
+`,
+		Confidence: 0.90,
+	},
+	{
+		Name:        "morph_to_many_relationship",
+		Description: "Detect morphToMany() polymorphic many-to-many relationships",
+		Pattern: `
+(member_call_expression
+  object: (variable_name) @this_var (#eq? @this_var "$this")
+  name: (name) @method (#eq? @method "morphToMany")
+  arguments: (arguments) @args)
+`,
+		Confidence: 0.90,
+	},
+	{
+		Name:        "dynamic_polymorphic_type_column",
+		Description: "Detect dynamic polymorphic type column patterns (_type suffix)",
+		Pattern: `
+(string) @type_column (#match? @type_column ".*_type$")
+`,
+		Confidence: 0.70,
+	},
+	{
+		Name:        "dynamic_polymorphic_id_column",
+		Description: "Detect dynamic polymorphic ID column patterns (_id suffix)",
+		Pattern: `
+(string) @id_column (#match? @id_column ".*_id$")
+`,
+		Confidence: 0.70,
+	},
+	{
+		Name:        "polymorphic_method_definition",
+		Description: "Detect method definitions that likely return polymorphic relationships",
+		Pattern: `
+(method_declaration
+  name: (name) @method_name (#match? @method_name "^(.*able|.*morphic)$")
+  body: (compound_statement) @body)
+`,
+		Confidence: 0.60,
+	},
+}
+
 // QueryCompiler manages compilation and caching of tree-sitter queries.
 type QueryCompiler struct {
 	language *sitter.Language
@@ -604,4 +767,138 @@ func GetAttributeUsageQuery(name string) (QueryDefinition, bool) {
 // GetScopeUsageQuery returns a specific scope usage query by name.
 func GetScopeUsageQuery(name string) (QueryDefinition, bool) {
 	return GetQueryDefinition(ScopeUsageQueries, name)
+}
+
+// GetPolymorphicUsageQuery returns a specific polymorphic usage query by name.
+func GetPolymorphicUsageQuery(name string) (QueryDefinition, bool) {
+	return GetQueryDefinition(PolymorphicUsageQueries, name)
+}
+
+// BroadcastUsageQueries contains tree-sitter queries for Laravel broadcast channel detection.
+var BroadcastUsageQueries = []QueryDefinition{
+	{
+		Name:        "broadcast_channel_public",
+		Description: "Detect Broadcast::channel() public channel definitions",
+		Pattern: `
+(scoped_call_expression
+  scope: (name) @class (#eq? @class "Broadcast")
+  name: (name) @method (#eq? @method "channel")
+  arguments: (arguments
+    (argument (string) @channel_name)
+    (argument) @callback) @args)
+`,
+		Confidence: 1.0,
+	},
+	{
+		Name:        "broadcast_private_channel",
+		Description: "Detect Broadcast::private() private channel definitions",
+		Pattern: `
+(scoped_call_expression
+  scope: (name) @class (#eq? @class "Broadcast")
+  name: (name) @method (#eq? @method "private")
+  arguments: (arguments
+    (argument (string) @channel_name)
+    (argument) @callback) @args)
+`,
+		Confidence: 1.0,
+	},
+	{
+		Name:        "broadcast_presence_channel",
+		Description: "Detect Broadcast::presence() presence channel definitions",
+		Pattern: `
+(scoped_call_expression
+  scope: (name) @class (#eq? @class "Broadcast")
+  name: (name) @method (#eq? @method "presence")
+  arguments: (arguments
+    (argument (string) @channel_name)
+    (argument) @callback) @args)
+`,
+		Confidence: 1.0,
+	},
+	{
+		Name:        "broadcast_channel_with_namespace",
+		Description: "Detect broadcast channel definitions with fully qualified Broadcast class",
+		Pattern: `
+(scoped_call_expression
+  scope: (qualified_name) @class (#match? @class ".*\\\\Broadcast$")
+  name: (name) @method (#match? @method "^(channel|private|presence)$")
+  arguments: (arguments
+    (argument (string) @channel_name)
+    (argument) @callback) @args)
+`,
+		Confidence: 0.95,
+	},
+	{
+		Name:        "broadcast_facade_call",
+		Description: "Detect broadcast facade calls in channel routes",
+		Pattern: `
+(member_call_expression
+  object: (name) @facade (#eq? @facade "Broadcast")
+  name: (name) @method (#match? @method "^(channel|private|presence)$")
+  arguments: (arguments
+    (argument (string) @channel_name)
+    (argument) @callback) @args)
+`,
+		Confidence: 0.90,
+	},
+	{
+		Name:        "channel_parameter_pattern",
+		Description: "Detect channel names with parameter placeholders {param}",
+		Pattern: `
+(string) @channel_name (#match? @channel_name ".*\\{[a-zA-Z_][a-zA-Z0-9_]*\\}.*")
+`,
+		Confidence: 0.85,
+	},
+	{
+		Name:        "broadcast_in_routes_file",
+		Description: "Detect broadcast channel definitions in routes/channels.php context",
+		Pattern: `
+(function_call_expression
+  function: (name) @function (#match? @function "^(channel|private|presence)$")
+  arguments: (arguments
+    (argument (string) @channel_name)
+    (argument) @callback) @args)
+`,
+		Confidence: 0.80,
+	},
+	{
+		Name:        "closure_with_user_param",
+		Description: "Detect broadcast channel closures with user parameter (indicates auth logic)",
+		Pattern: `
+(anonymous_function_creation_expression
+  parameters: (formal_parameters
+    (simple_parameter
+      name: (variable_name) @user_param (#match? @user_param "\\$(user|auth)")))
+  body: (compound_statement) @closure_body)
+`,
+		Confidence: 0.75,
+	},
+	{
+		Name:        "return_auth_check",
+		Description: "Detect return statements with auth checks in broadcast callbacks",
+		Pattern: `
+(return_statement
+  (member_call_expression
+    object: (variable_name) @user_var
+    name: (name) @method) @auth_check)
+`,
+		Confidence: 0.70,
+	},
+	{
+		Name:        "broadcast_channel_class_usage",
+		Description: "Detect direct broadcast channel class usage",
+		Pattern: `
+(function_call_expression
+  function: (scoped_call_expression
+    scope: (name) @class (#match? @class ".*Channel$")
+    name: (name) @method)
+  arguments: (arguments) @args)
+`,
+		Confidence: 0.65,
+	},
+}
+
+// GetBroadcastUsageQuery returns a specific broadcast usage query by name.
+func GetBroadcastUsageQuery(name string) (QueryDefinition, bool) {
+	return GetQueryDefinition(BroadcastUsageQueries, name)
 }

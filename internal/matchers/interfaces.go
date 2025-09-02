@@ -129,6 +129,17 @@ type PolymorphicDiscriminator struct {
 	DefaultType  string            `json:"defaultType,omitempty"`  // Default type if no mapping matches
 }
 
+// BroadcastMatch represents detected Laravel broadcast channel patterns.
+type BroadcastMatch struct {
+	Channel         string   `json:"channel"`                    // Channel name with parameter placeholders
+	Params          []string `json:"params"`                     // Extracted parameters from channel name
+	Visibility      string   `json:"visibility"`                 // Channel visibility (public, private, presence)
+	PayloadLiteral  bool     `json:"payloadLiteral"`             // Whether payload contains literal values
+	Method          string   `json:"method"`                     // Broadcast method used (channel, private, presence)
+	Pattern         string   `json:"pattern"`                    // Pattern type that matched
+	File            string   `json:"file,omitempty"`             // File path where channel is defined
+}
+
 // LaravelPatterns aggregates all detected Laravel patterns for a single file.
 type LaravelPatterns struct {
 	FilePath      string                `json:"filePath"`
@@ -140,6 +151,7 @@ type LaravelPatterns struct {
 	Attributes    []*AttributeMatch     `json:"attributes,omitempty"`
 	Scopes        []*ScopeMatch         `json:"scopes,omitempty"`
 	Polymorphics  []*PolymorphicMatch   `json:"polymorphics,omitempty"`
+	Broadcasts    []*BroadcastMatch     `json:"broadcasts,omitempty"`
 	ProcessedAt   int64                 `json:"processedAt"`
 	ProcessingMs  int64                 `json:"processingMs"`
 }
@@ -224,6 +236,14 @@ type PolymorphicMatcher interface {
 	GetMaxDepth() int
 }
 
+// BroadcastMatcher defines specialized interface for Laravel broadcast channel detection.
+type BroadcastMatcher interface {
+	PatternMatcher
+	
+	// MatchBroadcast finds Laravel broadcast channel patterns
+	MatchBroadcast(ctx context.Context, tree *parser.SyntaxTree, filePath string) ([]*BroadcastMatch, error)
+}
+
 // CompositePatternMatcher orchestrates multiple pattern matchers.
 type CompositePatternMatcher interface {
 	// AddMatcher registers a new pattern matcher
@@ -288,6 +308,9 @@ type MatcherConfig struct {
 	// Feature flags - T8 patterns
 	EnablePolymorphicMatching bool `json:"enablePolymorphicMatching"`
 	
+	// Feature flags - T10 patterns
+	EnableBroadcastMatching bool `json:"enableBroadcastMatching"`
+	
 	// Polymorphic relationship settings
 	MaxRelationshipDepth int `json:"maxRelationshipDepth"`
 	
@@ -309,6 +332,7 @@ func DefaultMatcherConfig() *MatcherConfig {
 		EnableAttributeMatching:   true,
 		EnableScopeMatching:       true,
 		EnablePolymorphicMatching: true,
+		EnableBroadcastMatching:   true,
 		MaxRelationshipDepth:      5,
 		StrictExplicitOnly:        false,
 		ResolveImportedClasses:    true,
@@ -379,5 +403,10 @@ func (config *MatcherConfig) ApplyFeatureFlags(features *FeatureConfig) {
 	// Apply T8 pattern flags
 	if features.Polymorphic != nil {
 		config.EnablePolymorphicMatching = *features.Polymorphic
+	}
+	
+	// Apply T10 pattern flags
+	if features.BroadcastChannels != nil {
+		config.EnableBroadcastMatching = *features.BroadcastChannels
 	}
 }
