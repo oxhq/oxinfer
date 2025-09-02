@@ -192,6 +192,11 @@ func (m *DefaultPivotMatcher) processPivotMatch(
 		}
 	}
 
+	// Extract alias from arguments if method is 'as' and we have arguments
+	if methodName == "as" && argsNode != nil && aliasName == "" {
+		aliasName = m.extractAliasFromArgs(argsNode, tree)
+	}
+
 	// Validate we found a pivot method
 	if methodName == "" {
 		return nil
@@ -237,6 +242,37 @@ func (m *DefaultPivotMatcher) processPivotMatch(
 	}
 }
 
+// extractAliasFromArgs extracts alias name from 'as' method arguments.
+func (m *DefaultPivotMatcher) extractAliasFromArgs(argsNode *sitter.Node, tree *parser.SyntaxTree) string {
+	// Walk through arguments to find the first string literal (alias name)
+	for i := uint32(0); i < argsNode.ChildCount(); i++ {
+		child := argsNode.Child(int(i))
+		if child == nil {
+			continue
+		}
+
+		// Handle argument nodes
+		if child.Type() == "argument" {
+			argChild := child.Child(0)
+			if argChild != nil && argChild.Type() == "string" {
+				alias := m.cleanStringLiteral(string(argChild.Content(tree.Source)))
+				if alias != "" {
+					return alias
+				}
+			}
+		}
+		// Handle direct string literals
+		if child.Type() == "string" {
+			alias := m.cleanStringLiteral(string(child.Content(tree.Source)))
+			if alias != "" {
+				return alias
+			}
+		}
+	}
+	
+	return ""
+}
+
 // extractPivotFields extracts field names from withPivot method arguments.
 func (m *DefaultPivotMatcher) extractPivotFields(argsNode *sitter.Node, tree *parser.SyntaxTree) []string {
 	var fields []string
@@ -250,17 +286,52 @@ func (m *DefaultPivotMatcher) extractPivotFields(argsNode *sitter.Node, tree *pa
 
 		// Handle argument nodes
 		if child.Type() == "argument" {
-			argChild := child.Child(0)
-			if argChild != nil && argChild.Type() == "string" {
-				fieldName := m.cleanStringLiteral(string(argChild.Content(tree.Source)))
-				if fieldName != "" {
-					fields = append(fields, fieldName)
-				}
+			fieldName := m.extractStringFromArgument(child, tree)
+			if fieldName != "" {
+				fields = append(fields, fieldName)
+			}
+		}
+		// Handle direct string literals (backup case)
+		if child.Type() == "string" || child.Type() == "encapsed_string" {
+			fieldName := m.extractStringContent(child, tree)
+			if fieldName != "" {
+				fields = append(fields, fieldName)
 			}
 		}
 	}
 
 	return fields
+}
+
+// extractStringFromArgument extracts string content from an argument node.
+func (m *DefaultPivotMatcher) extractStringFromArgument(argNode *sitter.Node, tree *parser.SyntaxTree) string {
+	// Look through the argument node's children for string content
+	for j := uint32(0); j < argNode.ChildCount(); j++ {
+		child := argNode.Child(int(j))
+		if child == nil {
+			continue
+		}
+		
+		// Handle both string types
+		if child.Type() == "string" || child.Type() == "encapsed_string" {
+			return m.extractStringContent(child, tree)
+		}
+	}
+	return ""
+}
+
+// extractStringContent extracts the actual string value from string or encapsed_string nodes.
+func (m *DefaultPivotMatcher) extractStringContent(stringNode *sitter.Node, tree *parser.SyntaxTree) string {
+	// For both string and encapsed_string, look for string_content child
+	for i := uint32(0); i < stringNode.ChildCount(); i++ {
+		child := stringNode.Child(int(i))
+		if child != nil && child.Type() == "string_content" {
+			return string(child.Content(tree.Source))
+		}
+	}
+	
+	// Fallback: clean the entire string content
+	return m.cleanStringLiteral(string(stringNode.Content(tree.Source)))
 }
 
 // cleanStringLiteral removes quotes from string literals.
@@ -486,3 +557,4 @@ func ValidatePivotMethodCall(methodName string, args []string) bool {
 		return false
 	}
 }
+

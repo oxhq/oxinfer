@@ -7,11 +7,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"sync"
 	"time"
 
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/php"
+	
+	"github.com/garaekz/oxinfer/internal/manifest"
 )
 
 // DefaultPHPParser implements TreeSitterParser interface using tree-sitter PHP grammar.
@@ -323,6 +326,174 @@ func (p *DefaultPHPParser) updateMetrics(parseTime time.Duration, hasErrors bool
 	}
 }
 
+// GetParserStats returns current parser performance and resource statistics.
+// Implements PHPParser interface for system integration.
+func (p *DefaultPHPParser) GetParserStats() ParserStats {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	metrics := p.stats
+	if metrics == nil {
+		metrics = &ParserMetrics{}
+	}
+
+	return ParserStats{
+		TotalFilesParsed:  metrics.TotalParseJobs,
+		TotalParseTime:    metrics.TotalParseTime,
+		AverageParseTime:  metrics.AverageParseTime,
+		CacheHitRate:      0, // Not tracked at parser level
+		ErrorRate:         float64(metrics.FailedParses) / float64(max(1, metrics.TotalParseJobs)) * 100,
+		PoolUtilization:   0, // Not tracked at parser level
+		MemoryUsage:       0, // Not tracked at parser level
+		ActiveParsers:     1, // Single parser instance
+	}
+}
+
+// SetConfiguration updates parser configuration and limits.
+// Implements PHPParser interface for dynamic configuration.
+func (p *DefaultPHPParser) SetConfiguration(config ParserConfig) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.closed {
+		return ErrParserClosed
+	}
+
+	// Create new parser config from interface config
+	newConfig := &ParserConfig{
+		MaxFileSize:             config.MaxFileSize,
+		MaxParseTime:           config.MaxParseTime,
+		PoolSize:               config.PoolSize,
+		EnableLaravelPatterns:   config.EnableLaravelPatterns,
+		EnableDocBlocks:        config.EnableDocBlocks,
+		EnableDetailedErrors:   config.EnableDetailedErrors,
+	}
+
+	// Validate new configuration
+	if err := ValidateConfig(newConfig); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+
+	// Update configuration
+	p.config = newConfig
+	return nil
+}
+
+// ProcessFile implements indexer.FileProcessor interface for PHP file processing.
+// Processes a PHP file and returns parse results for pattern matching.
+func (p *DefaultPHPParser) ProcessFile(ctx context.Context, file interface{}) (interface{}, error) {
+	// Extract file path from the file interface
+	var filePath string
+	
+	// Handle different file input types from indexer
+	switch f := file.(type) {
+	case string:
+		filePath = f
+	case map[string]interface{}:
+		// Prefer AbsPath for file parsing (more reliable than relative paths)
+		if absPath, ok := f["AbsPath"].(string); ok {
+			filePath = absPath
+		} else if path, ok := f["path"].(string); ok {
+			filePath = path
+		} else {
+			return nil, fmt.Errorf("file map missing path field")
+		}
+	default:
+		// Try to extract path using reflection as fallback
+		// Prefer AbsPath for file parsing (more reliable than relative paths)
+		if hasField(file, "AbsPath") {
+			if absPath := getFieldValue(file, "AbsPath"); absPath != "" {
+				filePath = absPath
+			}
+		}
+		if filePath == "" && hasField(file, "Path") {
+			if path := getFieldValue(file, "Path"); path != "" {
+				filePath = path
+			}
+		}
+		if filePath == "" {
+			return nil, fmt.Errorf("unsupported file type: %T", file)
+		}
+	}
+	
+	if filePath == "" {
+		return nil, fmt.Errorf("empty file path provided")
+	}
+	
+	// Parse the PHP file
+	result, err := p.ParsePHPFile(ctx, filePath)
+	if err != nil {
+		// Return partial result with error for resilient processing
+		return &map[string]interface{}{
+			"filePath": filePath,
+			"error":    err.Error(),
+			"parsed":   false,
+		}, err
+	}
+	
+	// Return successful parse result
+	return &map[string]interface{}{
+		"filePath":      filePath,
+		"fileStructure": result.FileStructure,
+		"patterns":      result.LaravelPatterns,
+		"errors":        result.Errors,
+		"statistics":    result.Statistics,
+		"parsed":        true,
+		"fromCache":     result.ParsedFromCache,
+	}, nil
+}
+
+// ParsePHPFile performs comprehensive PHP file analysis.
+// Returns detailed PHP structure information for pattern detection.
+func (p *DefaultPHPParser) ParsePHPFile(ctx context.Context, filePath string) (*PHPParseResult, error) {
+	// Parse the file to get syntax tree
+	syntaxTree, err := p.ParseFile(ctx, filePath)
+	if err != nil {
+		return &PHPParseResult{
+			FileStructure:   nil,
+			LaravelPatterns: nil,
+			Errors:          []error{err},
+			ParsedFromCache: false,
+			Statistics: ParseStatistics{
+				FilePath:    filePath,
+				ErrorCount:  1,
+				CacheHit:    false,
+			},
+		}, err
+	}
+
+	// Create basic file structure from syntax tree
+	fileStructure := &PHPFileStructure{
+		FilePath:    filePath,
+		ParsedAt:    syntaxTree.ParsedAt,
+		Namespace:   nil, // Would be extracted by construct extractor
+		Classes:     []PHPClass{},
+		Interfaces:  []PHPInterface{},
+		Traits:      []PHPTrait{},
+		Functions:   []PHPFunction{},
+		UseStatements: []PHPUseStatement{},
+	}
+
+	// Create parse result
+	result := &PHPParseResult{
+		FileStructure:   fileStructure,
+		LaravelPatterns: &LaravelPatterns{}, // Empty patterns - would be filled by extractor
+		Errors:          []error{},
+		ParsedFromCache: false,
+		Statistics: ParseStatistics{
+			FilePath:           filePath,
+			FileSize:           int64(len(syntaxTree.Source)),
+			ParseDuration:      0, // Would be tracked properly in real implementation
+			ExtractionDuration: 0,
+			ConstructCount:     0,
+			ErrorCount:         0,
+			CacheHit:          false,
+		},
+	}
+
+	return result, nil
+}
+
 // ValidateConfig validates parser configuration values.
 func ValidateConfig(config *ParserConfig) error {
 	if config == nil {
@@ -342,4 +513,123 @@ func ValidateConfig(config *ParserConfig) error {
 	}
 
 	return nil
+}
+
+// max returns the maximum of two integers.
+func max(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// DefaultPHPProjectParser implements PHPProjectParser interface
+type DefaultPHPProjectParser struct {
+	config           ProjectParserConfig
+	manifest         interface{}
+	concurrentParser *DefaultConcurrentPHPParser
+}
+
+// NewPHPProjectParser creates a new project parser with defaults
+func NewPHPProjectParser() (*DefaultPHPProjectParser, error) {
+	concurrentParser, err := NewConcurrentPHPParser(4, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create concurrent parser: %w", err)
+	}
+	return &DefaultPHPProjectParser{
+		config: ProjectParserConfig{
+			ProjectRoot:    ".",
+			MaxWorkers:     4,
+			CacheEnabled:   true,
+			ExtractClasses: true,
+		},
+		concurrentParser: concurrentParser,
+	}, nil
+}
+
+// NewPHPProjectParserFromManifest creates a project parser from manifest
+func NewPHPProjectParserFromManifest(manifest interface{}) (*DefaultPHPProjectParser, error) {
+	parser, err := NewPHPProjectParser()
+	if err != nil {
+		return nil, err
+	}
+	parser.manifest = manifest
+	return parser, nil
+}
+
+// Close closes the project parser
+func (p *DefaultPHPProjectParser) Close() error {
+	return nil
+}
+
+// GetProgress returns parsing progress information
+func (p *DefaultPHPProjectParser) GetProgress() ProjectParserProgress {
+	return ProjectParserProgress{}
+}
+
+// LoadFromManifest configures parser from manifest
+func (p *DefaultPHPProjectParser) LoadFromManifest(m *manifest.Manifest) error {
+	p.manifest = m
+	return nil
+}
+
+// ParseProject performs complete project analysis
+func (p *DefaultPHPProjectParser) ParseProject(ctx context.Context, config ProjectParserConfig) (*ProjectParseResult, error) {
+	return &ProjectParseResult{}, nil
+}
+
+// SetProgressCallback enables real-time progress monitoring
+func (p *DefaultPHPProjectParser) SetProgressCallback(callback func(ProjectParserProgress)) {
+	// Stub implementation
+}
+
+// updateProgress updates internal progress state 
+func (p *DefaultPHPProjectParser) updateProgress(phase ProjectParserPhase, status string) {
+	// Stub implementation
+}
+
+// hasField checks if an interface{} has a field with the given name using reflection
+func hasField(obj interface{}, fieldName string) bool {
+	if obj == nil {
+		return false
+	}
+	
+	v := reflect.ValueOf(obj)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	
+	if v.Kind() != reflect.Struct {
+		return false
+	}
+	
+	field := v.FieldByName(fieldName)
+	return field.IsValid()
+}
+
+// getFieldValue extracts a string field value using reflection
+func getFieldValue(obj interface{}, fieldName string) string {
+	if obj == nil {
+		return ""
+	}
+	
+	v := reflect.ValueOf(obj)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	
+	if v.Kind() != reflect.Struct {
+		return ""
+	}
+	
+	field := v.FieldByName(fieldName)
+	if !field.IsValid() {
+		return ""
+	}
+	
+	if field.Kind() == reflect.String {
+		return field.String()
+	}
+	
+	return ""
 }

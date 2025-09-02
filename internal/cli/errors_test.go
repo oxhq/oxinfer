@@ -281,7 +281,7 @@ func TestCLIErrorComparisons(t *testing.T) {
 // TestErrorMessages tests that error messages are properly formatted
 func TestErrorMessages(t *testing.T) {
 	tests := []struct {
-		name     string
+		name      string
 		errorFunc func(string) *CLIError
 		message   string
 	}{

@@ -41,16 +41,16 @@ func TestRun(t *testing.T) {
 			expectedStderr: false,
 		},
 		{
-			name:         "invalid flag",
-			args:         []string{"--invalid-flag"},
-			expectedExit: cli.ExitInputError,
+			name:           "invalid flag",
+			args:           []string{"--invalid-flag"},
+			expectedExit:   cli.ExitInputError,
 			expectedStdout: "",
 			expectedStderr: true,
 		},
 		{
-			name:         "nonexistent manifest file",
-			args:         []string{"--manifest", "/nonexistent/file.json"},
-			expectedExit: cli.ExitInputError,
+			name:           "nonexistent manifest file",
+			args:           []string{"--manifest", "/nonexistent/file.json"},
+			expectedExit:   cli.ExitInputError,
 			expectedStdout: "",
 			expectedStderr: true,
 		},
@@ -193,10 +193,10 @@ func TestRunWithStdinInput(t *testing.T) {
 
 func TestPrintError(t *testing.T) {
 	tests := []struct {
-		name      string
-		err       error
-		noColor   bool
-		wantJSON  bool
+		name     string
+		err      error
+		noColor  bool
+		wantJSON bool
 	}{
 		{
 			name:     "CLI error",

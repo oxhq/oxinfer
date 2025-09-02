@@ -296,9 +296,10 @@ type MatcherConfig struct {
 	MinConfidenceThreshold float64 `json:"minConfidenceThreshold"`
 	
 	// Feature flags - Core patterns
-	EnableHTTPStatusMatching bool `json:"enableHTTPStatusMatching"`
-	EnableRequestMatching    bool `json:"enableRequestMatching"`
-	EnableResourceMatching   bool `json:"enableResourceMatching"`
+	EnableHTTPStatusMatching   bool `json:"enableHTTPStatusMatching"`
+	EnableRequestUsageMatching bool `json:"enableRequestUsageMatching"`
+	EnableRequestMatching      bool `json:"enableRequestMatching"` // Alias for EnableRequestUsageMatching
+	EnableResourceMatching     bool `json:"enableResourceMatching"`
 	
 	// Feature flags - T7 patterns
 	EnablePivotMatching     bool `json:"enablePivotMatching"`
@@ -310,6 +311,10 @@ type MatcherConfig struct {
 	
 	// Feature flags - T10 patterns
 	EnableBroadcastMatching bool `json:"enableBroadcastMatching"`
+	
+	// Concurrency and timeout settings
+	MaxConcurrentMatchers int `json:"maxConcurrentMatchers"`
+	MatchTimeoutMs        int `json:"matchTimeoutMs"`
 	
 	// Polymorphic relationship settings
 	MaxRelationshipDepth int `json:"maxRelationshipDepth"`
@@ -323,20 +328,23 @@ type MatcherConfig struct {
 // DefaultMatcherConfig returns sensible defaults for pattern matching.
 func DefaultMatcherConfig() *MatcherConfig {
 	return &MatcherConfig{
-		MaxMatchesPerFile:         100,
-		MinConfidenceThreshold:    0.8,
-		EnableHTTPStatusMatching:  true,
-		EnableRequestMatching:     true,
-		EnableResourceMatching:    true,
-		EnablePivotMatching:       true,
-		EnableAttributeMatching:   true,
-		EnableScopeMatching:       true,
-		EnablePolymorphicMatching: true,
-		EnableBroadcastMatching:   true,
-		MaxRelationshipDepth:      5,
-		StrictExplicitOnly:        false,
-		ResolveImportedClasses:    true,
-		DeduplicateMatches:        true,
+		MaxMatchesPerFile:          100,
+		MinConfidenceThreshold:     0.8,
+		EnableHTTPStatusMatching:   true,
+		EnableRequestUsageMatching: true,
+		EnableRequestMatching:      true, // Keep both flags for compatibility
+		EnableResourceMatching:     true,
+		EnablePivotMatching:        true,
+		EnableAttributeMatching:    true,
+		EnableScopeMatching:        true,
+		EnablePolymorphicMatching:  true,
+		EnableBroadcastMatching:    true,
+		MaxConcurrentMatchers:      4,
+		MatchTimeoutMs:             5000,
+		MaxRelationshipDepth:       5,
+		StrictExplicitOnly:         false,
+		ResolveImportedClasses:     true,
+		DeduplicateMatches:         true,
 	}
 }
 
@@ -383,7 +391,8 @@ func (config *MatcherConfig) ApplyFeatureFlags(features *FeatureConfig) {
 		config.EnableHTTPStatusMatching = *features.HTTPStatus
 	}
 	if features.RequestUsage != nil {
-		config.EnableRequestMatching = *features.RequestUsage
+		config.EnableRequestUsageMatching = *features.RequestUsage
+		config.EnableRequestMatching = *features.RequestUsage // Keep both for compatibility
 	}
 	if features.ResourceUsage != nil {
 		config.EnableResourceMatching = *features.ResourceUsage

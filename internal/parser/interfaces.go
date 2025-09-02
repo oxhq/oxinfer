@@ -7,7 +7,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/indexer"
 	"github.com/garaekz/oxinfer/internal/manifest"
 )
 
@@ -106,7 +105,7 @@ type PHPConstructExtractor interface {
 type PHPParser interface {
 	// ProcessFile implements indexer.FileProcessor for system integration.
 	// Performs complete PHP analysis and returns structured results.
-	ProcessFile(ctx context.Context, file indexer.FileInfo) (*indexer.ProcessResult, error)
+	ProcessFile(ctx context.Context, file interface{}) (interface{}, error)
 
 	// ParsePHPFile performs comprehensive PHP file analysis.
 	// Returns detailed PHP structure information for pattern detection.
@@ -696,6 +695,15 @@ type ParserStats struct {
 	// TotalFilesParsed is the total number of files processed
 	TotalFilesParsed int64
 
+	// ParsedFiles is the number of successfully parsed files
+	ParsedFiles int64
+
+	// FailedFiles is the number of files that failed to parse
+	FailedFiles int64
+
+	// TotalJobsProcessed is the total number of parsing jobs processed
+	TotalJobsProcessed int64
+
 	// TotalParseTime is the cumulative parsing time
 	TotalParseTime time.Duration
 
@@ -795,7 +803,7 @@ type ProjectParserConfig struct {
 // ProjectParseResult contains the comprehensive results of PHP project parsing.
 type ProjectParseResult struct {
 	// Discovered files (file indexer integration)
-	DiscoveredFiles []indexer.FileInfo // Files found by indexer
+	DiscoveredFiles []interface{} // Files found by indexer
 
 	// Parse results
 	ParsedFiles []ParsedFileResult // Successfully parsed files

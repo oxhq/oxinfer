@@ -593,8 +593,14 @@ func buildCLIBinary(t *testing.T) string {
 	binaryPath := filepath.Join(tempDir, "oxinfer")
 
 	// Build the binary
-	cmd := exec.Command("go", "build", "-o", binaryPath, "../../cmd/oxinfer")
-	cmd.Dir = filepath.Dir(t.Name()) // Set working directory
+	cmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/oxinfer")
+	// Set working directory to the project root
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	projectRoot := filepath.Join(wd, "../..")
+	cmd.Dir = projectRoot
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

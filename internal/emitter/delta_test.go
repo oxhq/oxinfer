@@ -50,11 +50,11 @@ func TestDelta_StructureCompliance(t *testing.T) {
 							Status:   &[]int{200}[0],
 							Explicit: &[]bool{true}[0],
 						},
-                    Request: &RequestInfo{
-                        ContentTypes: []string{"application/json"},
-                        Body:         NewOrderedObjectFromMap(map[string]interface{}{"name": map[string]interface{}{}}),
-                        Query:        NewOrderedObjectFromMap(map[string]interface{}{"page": map[string]interface{}{}}),
-                    },
+						Request: &RequestInfo{
+							ContentTypes: []string{"application/json"},
+							Body:         NewOrderedObjectFromMap(map[string]interface{}{"name": map[string]interface{}{}}),
+							Query:        NewOrderedObjectFromMap(map[string]interface{}{"page": map[string]interface{}{}}),
+						},
 						Resources: []Resource{
 							{Class: "UserResource", Collection: true},
 						},
@@ -120,7 +120,7 @@ func TestDelta_StructureCompliance(t *testing.T) {
 				if len(d.Broadcast) != 1 {
 					t.Errorf("expected 1 broadcast, got %d", len(d.Broadcast))
 				}
-				
+
 				// Verify controller structure
 				controller := d.Controllers[0]
 				if controller.FQCN != "App\\Http\\Controllers\\UserController" {
@@ -245,12 +245,12 @@ func TestController_StructureValidation(t *testing.T) {
 					Status:   &[]int{200}[0],
 					Explicit: &[]bool{true}[0],
 				},
-                Request: &RequestInfo{
-                    ContentTypes: []string{"application/json", "multipart/form-data"},
-                    Body:         NewOrderedObjectFromMap(map[string]interface{}{"field": map[string]interface{}{}}),
-                    Query:        NewOrderedObjectFromMap(map[string]interface{}{"filter": map[string]interface{}{}}),
-                    Files:        NewOrderedObjectFromMap(map[string]interface{}{"upload": map[string]interface{}{}}),
-                },
+				Request: &RequestInfo{
+					ContentTypes: []string{"application/json", "multipart/form-data"},
+					Body:         NewOrderedObjectFromMap(map[string]interface{}{"field": map[string]interface{}{}}),
+					Query:        NewOrderedObjectFromMap(map[string]interface{}{"filter": map[string]interface{}{}}),
+					Files:        NewOrderedObjectFromMap(map[string]interface{}{"upload": map[string]interface{}{}}),
+				},
 				Resources: []Resource{
 					{Class: "TestResource", Collection: false},
 					{Class: "CollectionResource", Collection: true},
@@ -283,7 +283,7 @@ func TestController_StructureValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Validate according to schema requirements
 			isValid := len(tt.controller.FQCN) > 0 && len(tt.controller.Method) > 0
-			
+
 			if isValid != tt.wantValid {
 				t.Errorf("controller validation = %v, want %v", isValid, tt.wantValid)
 			}
@@ -300,7 +300,7 @@ func TestController_StructureValidation(t *testing.T) {
 			if tt.controller.Request != nil && tt.controller.Request.ContentTypes != nil {
 				allowedTypes := map[string]bool{
 					"application/json":                  true,
-					"multipart/form-data":              true,
+					"multipart/form-data":               true,
 					"application/x-www-form-urlencoded": true,
 				}
 				for _, contentType := range tt.controller.Request.ContentTypes {
@@ -354,7 +354,7 @@ func TestModel_ValidationRequirements(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			isValid := len(tt.model.FQCN) > 0
-			
+
 			if isValid != tt.wantValid {
 				t.Errorf("model validation = %v, want %v", isValid, tt.wantValid)
 			}
@@ -384,9 +384,9 @@ func TestModel_ValidationRequirements(t *testing.T) {
 
 func TestPolymorphic_ValidationRequirements(t *testing.T) {
 	tests := []struct {
-		name         string
-		polymorphic  Polymorphic
-		wantValid    bool
+		name        string
+		polymorphic Polymorphic
+		wantValid   bool
 	}{
 		{
 			name: "valid polymorphic configuration",

@@ -295,7 +295,8 @@ var PivotUsageQueries = []QueryDefinition{
 (member_call_expression
   object: (member_call_expression
     name: (name) @first_method (#match? @first_method "^(belongsToMany|withPivot|withTimestamps|as)$"))
-  name: (name) @second_method (#match? @second_method "^(withPivot|withTimestamps|as)$"))
+  name: (name) @second_method (#match? @second_method "^(withPivot|withTimestamps|as)$")
+  arguments: (arguments) @args)
 `,
 		Confidence: 0.95,
 	},
@@ -306,7 +307,8 @@ var PivotUsageQueries = []QueryDefinition{
 (member_call_expression
   object: (member_call_expression
     name: (name) @relation_method (#eq? @relation_method "belongsToMany"))
-  name: (name) @pivot_method (#match? @pivot_method "^(withPivot|withTimestamps|as)$"))
+  name: (name) @pivot_method (#match? @pivot_method "^(withPivot|withTimestamps|as)$")
+  arguments: (arguments) @args)
 `,
 		Confidence: 1.0,
 	},

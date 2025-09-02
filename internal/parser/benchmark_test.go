@@ -192,9 +192,9 @@ func BenchmarkConcurrentParsingPerformance(b *testing.B) {
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
 			concurrent, err := NewConcurrentPHPParser(tc.numWorkers, nil)
-			if err != nil {
-				b.Fatalf("Failed to create concurrent parser: %v", err)
-			}
+		if err != nil {
+			b.Fatal(err)
+		}
 			defer concurrent.Shutdown(context.Background())
 
 			// Generate test files
@@ -282,9 +282,9 @@ func BenchmarkEndToEndProjectAnalysis(b *testing.B) {
 			runtime.ReadMemStats(&startMem)
 
 			concurrent, err := NewConcurrentPHPParser(8, nil)
-			if err != nil {
-				b.Fatalf("Failed to create concurrent parser: %v", err)
-			}
+		if err != nil {
+			b.Fatal(err)
+		}
 			defer concurrent.Shutdown(context.Background())
 
 			b.ResetTimer()
@@ -368,9 +368,9 @@ func BenchmarkMemoryUsage(b *testing.B) {
 			// Create parser with memory optimizer
 			optimizer := NewMemoryOptimizer()
 			concurrent, err := NewConcurrentPHPParser(4, nil)
-			if err != nil {
-				b.Fatalf("Failed to create parser: %v", err)
-			}
+		if err != nil {
+			b.Fatal(err)
+		}
 			defer concurrent.Shutdown(context.Background())
 
 			files := generateTestParseJobs(tc.fileCount)
@@ -468,7 +468,7 @@ func BenchmarkFullIntegration(b *testing.B) {
 		
 		concurrent, err := NewConcurrentPHPParser(6, nil)
 		if err != nil {
-			b.Fatalf("Failed to create parser: %v", err)
+			b.Fatal(err)
 		}
 		defer concurrent.Shutdown(context.Background())
 

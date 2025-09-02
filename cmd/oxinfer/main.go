@@ -1,16 +1,18 @@
 package main
 
 import (
-    "encoding/json"
-    "fmt"
-    "os"
-    "crypto/sha256"
-    "path/filepath"
-    "time"
+	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
 
-    "github.com/garaekz/oxinfer/internal/cli"
-    "github.com/garaekz/oxinfer/internal/emitter"
-    "github.com/garaekz/oxinfer/internal/manifest"
+	"github.com/garaekz/oxinfer/internal/cli"
+	"github.com/garaekz/oxinfer/internal/emitter"
+	"github.com/garaekz/oxinfer/internal/manifest"
+	"github.com/garaekz/oxinfer/internal/pipeline"
 )
 
 const version = "0.1.0"
@@ -30,14 +32,14 @@ func main() {
 
 // run executes the main CLI logic and returns the appropriate exit code
 func run(args []string) cli.ExitCode {
-    config, err := cli.ParseFlags(args)
-    if err != nil {
-        printError(err, false)
-        if cliErr, ok := err.(*cli.CLIError); ok {
-            return cli.ExitCode(cliErr.ExitCode)
-        }
-        return cli.ExitInternal
-    }
+	config, err := cli.ParseFlags(args)
+	if err != nil {
+		printError(err, false)
+		if cliErr, ok := err.(*cli.CLIError); ok {
+			return cli.ExitCode(cliErr.ExitCode)
+		}
+		return cli.ExitInternal
+	}
 
 	// Handle special flags first
 	if config.ShouldShowVersion() {
@@ -50,33 +52,32 @@ func run(args []string) cli.ExitCode {
 		return cli.ExitOK
 	}
 
-    // Warn if both stdin is piped and a manifest path is provided; flag wins per precedence
-    if config.ManifestPath != "" && config.ManifestPath != "-" && cli.StdinIsPiped() {
-        if config.ShouldLogWarn() {
-            fmt.Fprintln(os.Stderr, "warning: stdin input detected but --manifest is set; ignoring stdin")
-        }
-    }
+	// Warn if both stdin is piped and a manifest path is provided; flag wins per precedence
+	if config.ManifestPath != "" && config.ManifestPath != "-" && cli.StdinIsPiped() {
+		if config.ShouldLogWarn() {
+			fmt.Fprintln(os.Stderr, "warning: stdin input detected but --manifest is set; ignoring stdin")
+		}
+	}
 
-    // Execute the main analysis workflow
-    if err := execute(config); err != nil {
-        printError(err, config.NoColor)
-        if cliErr, ok := err.(*cli.CLIError); ok {
-            return cli.ExitCode(cliErr.ExitCode)
-        }
-        return cli.ExitInternal
-    }
+	// Execute the main analysis workflow
+	if err := execute(config); err != nil {
+		printError(err, config.NoColor)
+		if cliErr, ok := err.(*cli.CLIError); ok {
+			return cli.ExitCode(cliErr.ExitCode)
+		}
+		return cli.ExitInternal
+	}
 
 	return cli.ExitOK
 }
 
-// execute runs the main analysis workflow
-// Initial implementation that demonstrates CLI orchestration
+// execute runs the main analysis workflow using the complete pipeline orchestrator
 func execute(config *cli.CLIConfig) error {
-    // Get manifest reader
-    manifestReader, err := config.GetManifestReader()
-    if err != nil {
-        return err
-    }
+	// Get manifest reader
+	manifestReader, err := config.GetManifestReader()
+	if err != nil {
+		return err
+	}
 	defer func() {
 		if manifestReader != os.Stdin {
 			manifestReader.Close()
@@ -86,79 +87,110 @@ func execute(config *cli.CLIConfig) error {
 	// Use real implementations from other workers
 	validator := manifest.NewValidator()
 	loader := manifest.NewLoader(validator)
-	emitter := emitter.NewJSONEmitter()
+	jsonEmitter := emitter.NewJSONEmitter()
 
 	// Load and validate manifest using the real manifest loader
 	// This ensures schema validation and path validation occur
-    var manifest *Manifest
-    // Input precedence:
-    // - If --manifest -: read from stdin
-    // - Else if --manifest <path>: read from file
-    // - Else if stdin is piped: read from stdin
-    // - Else: error (no input provided)
-    switch {
-    case config.ManifestPath == "-":
-        manifest, err = loader.LoadFromReader(manifestReader)
-    case config.ManifestPath != "":
-        manifest, err = loader.LoadFromFile(config.ManifestPath)
-    case cli.StdinIsPiped():
-        manifest, err = loader.LoadFromReader(manifestReader)
-    default:
-        return cli.NewInputError("no manifest provided: set --manifest <path> or pipe JSON to stdin")
-    }
-    if err != nil {
-        return err
-    }
+	var manifestData *Manifest
+	// Input precedence:
+	// - If --manifest -: read from stdin
+	// - Else if --manifest <path>: read from file
+	// - Else if stdin is piped: read from stdin
+	// - Else: error (no input provided)
+	switch {
+	case config.ManifestPath == "-":
+		manifestData, err = loader.LoadFromReader(manifestReader)
+	case config.ManifestPath != "":
+		manifestData, err = loader.LoadFromFile(config.ManifestPath)
+	case cli.StdinIsPiped():
+		manifestData, err = loader.LoadFromReader(manifestReader)
+	default:
+		return cli.NewInputError("no manifest provided: set --manifest <path> or pipe JSON to stdin")
+	}
+	if err != nil {
+		return err
+	}
 
-	// In this version, we validate the manifest but only emit a stub delta
-	// Future versions will use the manifest data for actual analysis
-	_ = manifest // Suppress unused variable warning - manifest is validated but not yet used
+	// Create pipeline configuration from defaults and CLI config
+	pipelineConfig := pipeline.DefaultPipelineConfig()
+	pipelineConfig.EnableStamp = config.Stamp
 
-    // Generate schema-compliant delta output
-    delta, err := emitter.EmitStub()
-    if err != nil {
-        return err
-    }
-    // Apply stamp/version
-    if config.Stamp {
-        ts := time.Now().UTC().Format(time.RFC3339)
-        delta.Meta.GeneratedAt = &ts
-    }
-    ver := version
-    delta.Meta.Version = &ver
+	// Configure pipeline from manifest
+	if err := pipelineConfig.ConfigureFromManifest(manifestData); err != nil {
+		return cli.WrapInternalError("failed to configure pipeline from manifest", err)
+	}
 
-    // Marshal deterministic JSON
-    data, err := emitter.MarshalDeterministic(delta)
-    if err != nil {
-        return cli.WrapInternalError("failed to marshal delta", err)
-    }
+	// Create and configure the pipeline orchestrator
+	orchestrator, err := pipeline.NewOrchestrator(pipelineConfig)
+	if err != nil {
+		return cli.WrapInternalError("failed to create pipeline orchestrator", err)
+	}
+	defer orchestrator.Close()
 
-    // Print canonical hash if requested
-    if config.PrintHash {
-        canon, err := emitter.CanonicalBytes(delta)
-        if err != nil {
-            return cli.WrapInternalError("failed to produce canonical bytes", err)
-        }
-        sum := sha256.Sum256(canon)
-        fmt.Fprintf(os.Stderr, "canonical_sha256=%x\n", sum)
-    }
+	// Set up progress callback if verbose mode is enabled
+	if config.ShouldLogInfo() {
+		orchestrator.SetProgressCallback(func(progress *pipeline.PipelineProgress) {
+			if progress.PhaseStatus != "" {
+				fmt.Fprintf(os.Stderr, "[%s] %s (%.1f%%)\n",
+					progress.Phase.String(), progress.PhaseStatus, progress.Progress*100)
+			}
+		})
+	}
 
-    // Write output: stdout or file; if file, write atomically
-    if config.IsStdoutOutput() || config.OutputPath == "-" {
-        if _, err := os.Stdout.Write(data); err != nil {
-            return cli.WrapInternalError("failed to write JSON to stdout", err)
-        }
-    } else {
-        dir := filepath.Dir(config.OutputPath)
-        base := filepath.Base(config.OutputPath)
-        tmp := filepath.Join(dir, "."+base+".tmp")
-        if err := os.WriteFile(tmp, data, 0644); err != nil {
-            return cli.WrapInternalError("failed to write temp output file", err)
-        }
-        if err := os.Rename(tmp, config.OutputPath); err != nil {
-            return cli.WrapInternalError("failed to atomically rename output file", err)
-        }
-    }
+	// Execute the complete pipeline
+	ctx := context.Background()
+	delta, err := orchestrator.ProcessProject(ctx, manifestData)
+	if err != nil {
+		return cli.WrapInternalError("pipeline execution failed", err)
+	}
+
+	// Apply stamp/version metadata
+	if config.Stamp {
+		ts := time.Now().UTC().Format(time.RFC3339)
+		delta.Meta.GeneratedAt = &ts
+	}
+	ver := version
+	delta.Meta.Version = &ver
+
+	// Marshal deterministic JSON
+	data, err := jsonEmitter.MarshalDeterministic(delta)
+	if err != nil {
+		return cli.WrapInternalError("failed to marshal delta", err)
+	}
+
+	// Print canonical hash if requested
+	if config.PrintHash {
+		canon, err := jsonEmitter.CanonicalBytes(delta)
+		if err != nil {
+			return cli.WrapInternalError("failed to produce canonical bytes", err)
+		}
+		sum := sha256.Sum256(canon)
+		fmt.Fprintf(os.Stderr, "canonical_sha256=%x\n", sum)
+	}
+
+	// Log pipeline statistics if verbose mode is enabled
+	if config.ShouldLogInfo() {
+		stats := orchestrator.GetStats()
+		fmt.Fprintf(os.Stderr, "Pipeline completed: %d files discovered, %d files processed, %d patterns detected, %d shapes inferred (duration: %v)\n",
+			stats.FilesDiscovered, stats.FilesProcessed, stats.PatternsDetected, stats.ShapesInferred, stats.TotalDuration)
+	}
+
+	// Write output: stdout or file; if file, write atomically
+	if config.IsStdoutOutput() || config.OutputPath == "-" {
+		if _, err := os.Stdout.Write(data); err != nil {
+			return cli.WrapInternalError("failed to write JSON to stdout", err)
+		}
+	} else {
+		dir := filepath.Dir(config.OutputPath)
+		base := filepath.Base(config.OutputPath)
+		tmp := filepath.Join(dir, "."+base+".tmp")
+		if err := os.WriteFile(tmp, data, 0644); err != nil {
+			return cli.WrapInternalError("failed to write temp output file", err)
+		}
+		if err := os.Rename(tmp, config.OutputPath); err != nil {
+			return cli.WrapInternalError("failed to atomically rename output file", err)
+		}
+	}
 
 	return nil
 }

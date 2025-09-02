@@ -158,7 +158,7 @@ func (c *DefaultCompositePatternMatcher) isMatcherEnabled(patternType PatternTyp
 	case PatternTypeHTTPStatus:
 		return c.config.EnableHTTPStatusMatching
 	case PatternTypeRequestUsage:
-		return c.config.EnableRequestMatching
+		return c.config.EnableRequestUsageMatching || c.config.EnableRequestMatching
 	case PatternTypeResource:
 		return c.config.EnableResourceMatching
 	case PatternTypePivot:
@@ -258,7 +258,7 @@ func (p *DefaultPatternMatchingProcessor) initializeMatchers(language *sitter.La
 	}
 
 	// Initialize request usage matcher if enabled
-	if config.EnableRequestMatching {
+	if config.EnableRequestUsageMatching || config.EnableRequestMatching {
 		requestMatcher, err := NewRequestUsageMatcher(language, config)
 		if err != nil {
 			return fmt.Errorf("failed to create request usage matcher: %w", err)
@@ -640,6 +640,11 @@ func (p *DefaultPatternMatchingProcessor) GetStats() *ProcessingStats {
 	}
 }
 
+// GetComposite returns the underlying composite pattern matcher.
+func (p *DefaultPatternMatchingProcessor) GetComposite() CompositePatternMatcher {
+	return p.composite
+}
+
 // Close releases processor resources.
 func (p *DefaultPatternMatchingProcessor) Close() error {
 	if p.composite != nil {
@@ -698,8 +703,18 @@ func ValidateMatcherConfiguration(config *MatcherConfig) error {
 		return fmt.Errorf("MinConfidenceThreshold must be between 0 and 1, got %f", config.MinConfidenceThreshold)
 	}
 
+	if config.MaxConcurrentMatchers <= 0 {
+		return fmt.Errorf("MaxConcurrentMatchers must be positive, got %d", config.MaxConcurrentMatchers)
+	}
+
+	if config.MatchTimeoutMs <= 0 {
+		return fmt.Errorf("MatchTimeoutMs must be positive, got %d", config.MatchTimeoutMs)
+	}
+
 	// At least one matcher type must be enabled
-	if !config.EnableHTTPStatusMatching && !config.EnableRequestMatching && !config.EnableResourceMatching &&
+	if !config.EnableHTTPStatusMatching && 
+		!(config.EnableRequestUsageMatching || config.EnableRequestMatching) && 
+		!config.EnableResourceMatching &&
 		!config.EnablePivotMatching && !config.EnableAttributeMatching && !config.EnableScopeMatching &&
 		!config.EnablePolymorphicMatching && !config.EnableBroadcastMatching {
 		return fmt.Errorf("at least one matcher type must be enabled")

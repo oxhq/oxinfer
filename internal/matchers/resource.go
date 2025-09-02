@@ -416,9 +416,24 @@ func (m *DefaultResourceMatcher) deduplicateResults(results []*MatchResult) []*M
         }
     }
 
+    // Sort keys for deterministic output
+    keys := make([]string, 0, len(selected))
+    for key := range selected {
+        keys = append(keys, key)
+    }
+    
+    // Sort keys alphabetically for consistent ordering
+    for i := 0; i < len(keys); i++ {
+        for j := i + 1; j < len(keys); j++ {
+            if keys[i] > keys[j] {
+                keys[i], keys[j] = keys[j], keys[i]
+            }
+        }
+    }
+    
     deduplicated := make([]*MatchResult, 0, len(selected))
-    for _, r := range selected {
-        deduplicated = append(deduplicated, r)
+    for _, key := range keys {
+        deduplicated = append(deduplicated, selected[key])
     }
     return deduplicated
 }

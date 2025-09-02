@@ -9,11 +9,11 @@ import (
 
 func TestParseFlags(t *testing.T) {
 	tests := []struct {
-		name        string
-		args        []string
-		expected    *CLIConfig
-		wantErr     bool
-		errorType   string
+		name      string
+		args      []string
+		expected  *CLIConfig
+		wantErr   bool
+		errorType string
 	}{
 		{
 			name: "default flags",
@@ -266,11 +266,11 @@ func TestCLIConfig_GetManifestReader(t *testing.T) {
 	}
 
 	tests := []struct {
-		name        string
-		config      *CLIConfig
-		wantStdin   bool
-		wantErr     bool
-		errorType   ExitCode
+		name      string
+		config    *CLIConfig
+		wantStdin bool
+		wantErr   bool
+		errorType ExitCode
 	}{
 		{
 			name:      "stdin input",
@@ -343,11 +343,11 @@ func TestCLIConfig_GetOutputWriter(t *testing.T) {
 	tempFile := filepath.Join(tempDir, "output.json")
 
 	tests := []struct {
-		name        string
-		config      *CLIConfig
-		wantStdout  bool
-		wantErr     bool
-		errorType   ExitCode
+		name       string
+		config     *CLIConfig
+		wantStdout bool
+		wantErr    bool
+		errorType  ExitCode
 	}{
 		{
 			name:       "stdout output",
@@ -362,11 +362,11 @@ func TestCLIConfig_GetOutputWriter(t *testing.T) {
 			wantErr:    false,
 		},
 		{
-			name:      "invalid directory",
-			config:    &CLIConfig{OutputPath: "/nonexistent/directory/output.json"},
+			name:       "invalid directory",
+			config:     &CLIConfig{OutputPath: "/nonexistent/directory/output.json"},
 			wantStdout: false,
-			wantErr:   true,
-			errorType: ExitInternalError,
+			wantErr:    true,
+			errorType:  ExitInternalError,
 		},
 	}
 
@@ -410,7 +410,7 @@ func TestCLIConfig_GetOutputWriter(t *testing.T) {
 				}
 				// Close the file writer if it's not stdout
 				defer writer.Close()
-				
+
 				// Verify file was created
 				if _, err := os.Stat(tempFile); os.IsNotExist(err) {
 					t.Errorf("GetOutputWriter() should have created file %s", tempFile)

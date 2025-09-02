@@ -10,12 +10,22 @@
 
 # Output of the go coverage tool
 *.out
+*.prof
+*.pprof
 coverage.html
+cover.out
+
+# Profiling files
+cpu.prof
+mem.prof
 
 # Build output
 /bin/
 /dist/
 /oxinfer
+/bench
+/validate-determinism
+/validate-mvp
 
 # Go mod cache
 /vendor/
