@@ -5,6 +5,7 @@ package bench
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -402,4 +403,198 @@ func GenerateTestPath(baseDir, scenarioName string) string {
 	safeName = strings.ToLower(safeName)
 
 	return filepath.Join(baseDir, "bench_scenarios", safeName)
+}
+
+// DefaultScenarioGenerator implements ScenarioGenerator interface.
+type DefaultScenarioGenerator struct{}
+
+// GenerateScenario creates test files for a benchmark scenario.
+func (g *DefaultScenarioGenerator) GenerateScenario(ctx context.Context, scenario *BenchmarkScenario, baseDir string) error {
+	// Create Laravel project structure
+	dirs := []string{
+		"app/Http/Controllers",
+		"app/Models", 
+		"routes",
+		"database/migrations",
+		"app/Http/Middleware",
+		"app/Providers",
+	}
+
+	for _, dir := range dirs {
+		fullPath := filepath.Join(baseDir, dir)
+		if err := os.MkdirAll(fullPath, 0755); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", fullPath, err)
+		}
+	}
+
+	// Generate controllers
+	for _, controller := range scenario.ProjectStructure.Controllers {
+		if err := g.generateControllerFile(baseDir, controller); err != nil {
+			return fmt.Errorf("failed to generate controller %s: %w", controller.Name, err)
+		}
+	}
+
+	// Generate models
+	for _, model := range scenario.ProjectStructure.Models {
+		if err := g.generateModelFile(baseDir, model); err != nil {
+			return fmt.Errorf("failed to generate model %s: %w", model.Name, err)
+		}
+	}
+
+	// Generate routes
+	if len(scenario.ProjectStructure.Routes) > 0 {
+		if err := g.generateRouteFile(baseDir, scenario.ProjectStructure.Routes); err != nil {
+			return fmt.Errorf("failed to generate route file: %w", err)
+		}
+	}
+
+	// Generate composer.json
+	if err := g.generateComposerFile(baseDir); err != nil {
+		return fmt.Errorf("failed to generate composer.json: %w", err)
+	}
+
+	return nil
+}
+
+// CleanupScenario removes generated test files.
+func (g *DefaultScenarioGenerator) CleanupScenario(ctx context.Context, scenario *BenchmarkScenario, baseDir string) error {
+	return os.RemoveAll(baseDir)
+}
+
+// ValidateScenario checks if scenario constraints are realistic.
+func (g *DefaultScenarioGenerator) ValidateScenario(scenario *BenchmarkScenario) error {
+	if scenario.FileCount < 1 {
+		return fmt.Errorf("file count must be positive")
+	}
+	if scenario.MaxDuration <= 0 {
+		return fmt.Errorf("max duration must be positive")
+	}
+	if scenario.MaxMemoryMB <= 0 {
+		return fmt.Errorf("max memory must be positive")
+	}
+	return nil
+}
+
+// Helper methods for file generation
+
+func (g *DefaultScenarioGenerator) generateControllerFile(baseDir string, controller ControllerInfo) error {
+	controllerContent := fmt.Sprintf(`<?php
+
+namespace %s;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+
+class %s extends Controller
+{
+`, controller.Namespace, controller.Name)
+
+	for _, method := range controller.Methods {
+		controllerContent += fmt.Sprintf(`
+    public function %s(Request $request): Response
+    {
+        return response()->json(['message' => '%s method'], 200);
+    }
+`, method, method)
+	}
+
+	controllerContent += "}\n"
+
+	fileName := filepath.Join(baseDir, "app/Http/Controllers", controller.Name+".php")
+	return os.WriteFile(fileName, []byte(controllerContent), 0644)
+}
+
+func (g *DefaultScenarioGenerator) generateModelFile(baseDir string, model ModelInfo) error {
+	modelContent := fmt.Sprintf(`<?php
+
+namespace %s;
+
+use Illuminate\Database\Eloquent\Model;
+
+class %s extends Model
+{
+    protected $fillable = [
+`, model.Namespace, model.Name)
+
+	for i, attr := range model.Attributes {
+		comma := ","
+		if i == len(model.Attributes)-1 {
+			comma = ""
+		}
+		modelContent += fmt.Sprintf("        '%s'%s\n", attr, comma)
+	}
+
+	modelContent += "    ];\n"
+
+	// Add relationships
+	for _, rel := range model.Relationships {
+		parts := strings.Split(rel, ":")
+		if len(parts) == 2 {
+			relType := parts[0]
+			relModel := parts[1]
+			modelContent += fmt.Sprintf(`
+    public function %s()
+    {
+        return $this->%s(%s::class);
+    }
+`, strings.ToLower(relModel), relType, strings.Title(relModel))
+		}
+	}
+
+	// Add scopes
+	for _, scope := range model.Scopes {
+		modelContent += fmt.Sprintf(`
+    public function scope%s($query)
+    {
+        return $query->where('status', '%s');
+    }
+`, strings.Title(scope), scope)
+	}
+
+	modelContent += "}\n"
+
+	fileName := filepath.Join(baseDir, "app/Models", model.Name+".php")
+	return os.WriteFile(fileName, []byte(modelContent), 0644)
+}
+
+func (g *DefaultScenarioGenerator) generateRouteFile(baseDir string, routes []RouteInfo) error {
+	routeContent := `<?php
+
+use Illuminate\Support\Facades\Route;
+
+`
+
+	for _, route := range routes {
+		routeContent += fmt.Sprintf("Route::%s('%s', '%s@%s');\n", 
+			strings.ToLower(route.Method), route.URI, route.Controller, route.Action)
+	}
+
+	fileName := filepath.Join(baseDir, "routes", "web.php")
+	if err := os.MkdirAll(filepath.Dir(fileName), 0755); err != nil {
+		return fmt.Errorf("failed to create routes directory: %w", err)
+	}
+	return os.WriteFile(fileName, []byte(routeContent), 0644)
+}
+
+func (g *DefaultScenarioGenerator) generateComposerFile(baseDir string) error {
+	composerContent := `{
+    "name": "oxinfer/benchmark-test",
+    "type": "project",
+    "require": {
+        "php": "^8.1",
+        "laravel/framework": "^10.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/",
+            "Database\\Factories\\": "database/factories/",
+            "Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}`
+
+	fileName := filepath.Join(baseDir, "composer.json")
+	return os.WriteFile(fileName, []byte(composerContent), 0644)
 }

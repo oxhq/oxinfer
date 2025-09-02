@@ -420,59 +420,8 @@ func (p *DefaultPatternMatchingProcessor) ConvertToEmitterFormat(patterns *Larav
 		}
 	}
 
-	// Convert polymorphic relationship patterns to controller.Polymorphic
-	controller.Polymorphic = make([]emitter.PolymorphicRelation, 0, len(patterns.Polymorphics))
-	for _, polyMatch := range patterns.Polymorphics {
-		// Create polymorphic relation with deterministic ordering
-		polyRelation := emitter.PolymorphicRelation{
-			Relation:  polyMatch.Relation,
-			Type:      polyMatch.Type,
-			MorphType: polyMatch.MorphType,
-			MorphId:   polyMatch.MorphId,
-		}
-		
-		// Add model if specified
-		if polyMatch.Model != "" {
-			polyRelation.Model = &polyMatch.Model
-		}
-		
-		// Add discriminator if present
-		if polyMatch.Discriminator != nil {
-			polyRelation.Discriminator = &emitter.PolymorphicDiscriminator{
-				PropertyName: polyMatch.Discriminator.PropertyName,
-				Mapping:      make(map[string]string),
-				Source:       polyMatch.Discriminator.Source,
-				IsExplicit:   polyMatch.Discriminator.IsExplicit,
-			}
-			
-			// Copy mapping with deterministic ordering
-			for key, value := range polyMatch.Discriminator.Mapping {
-				polyRelation.Discriminator.Mapping[key] = value
-			}
-			
-			if polyMatch.Discriminator.DefaultType != "" {
-				polyRelation.Discriminator.DefaultType = &polyMatch.Discriminator.DefaultType
-			}
-		}
-		
-		// Add related models with sorted order for determinism
-		if len(polyMatch.RelatedModels) > 0 {
-			sortedModels := make([]string, len(polyMatch.RelatedModels))
-			copy(sortedModels, polyMatch.RelatedModels)
-			sort.Strings(sortedModels)
-			polyRelation.RelatedModels = sortedModels
-		}
-		
-		// Add depth information if truncated
-		if polyMatch.DepthTruncated {
-			polyRelation.DepthTruncated = &polyMatch.DepthTruncated
-			if polyMatch.MaxDepth > 0 {
-				polyRelation.MaxDepth = &polyMatch.MaxDepth
-			}
-		}
-		
-		controller.Polymorphic = append(controller.Polymorphic, polyRelation)
-	}
+	// Polymorphic relationships are now handled at top-level by AssemblePolymorphic()
+	// No longer attached to individual controllers
 
 	return controller, nil
 }
@@ -568,61 +517,8 @@ func (p *DefaultPatternMatchingProcessor) ConvertToModelFormat(patterns *Laravel
 		}
 	}
 
-	// Convert polymorphic relationship patterns to model.Polymorphic
-	model.Polymorphic = make([]emitter.PolymorphicRelation, 0, len(patterns.Polymorphics))
-	for _, polyMatch := range patterns.Polymorphics {
-		// Only include polymorphic relationships defined in models
-		if polyMatch.Context == "model" || polyMatch.Context == "relationship" {
-			polyRelation := emitter.PolymorphicRelation{
-				Relation:  polyMatch.Relation,
-				Type:      polyMatch.Type,
-				MorphType: polyMatch.MorphType,
-				MorphId:   polyMatch.MorphId,
-			}
-			
-			// Add model if specified (for morphOne/morphMany)
-			if polyMatch.Model != "" {
-				polyRelation.Model = &polyMatch.Model
-			}
-			
-			// Add discriminator information
-			if polyMatch.Discriminator != nil {
-				polyRelation.Discriminator = &emitter.PolymorphicDiscriminator{
-					PropertyName: polyMatch.Discriminator.PropertyName,
-					Mapping:      make(map[string]string),
-					Source:       polyMatch.Discriminator.Source,
-					IsExplicit:   polyMatch.Discriminator.IsExplicit,
-				}
-				
-				// Copy mapping with deterministic ordering
-				for key, value := range polyMatch.Discriminator.Mapping {
-					polyRelation.Discriminator.Mapping[key] = value
-				}
-				
-				if polyMatch.Discriminator.DefaultType != "" {
-					polyRelation.Discriminator.DefaultType = &polyMatch.Discriminator.DefaultType
-				}
-			}
-			
-			// Add related models with sorted order for determinism
-			if len(polyMatch.RelatedModels) > 0 {
-				sortedModels := make([]string, len(polyMatch.RelatedModels))
-				copy(sortedModels, polyMatch.RelatedModels)
-				sort.Strings(sortedModels)
-				polyRelation.RelatedModels = sortedModels
-			}
-			
-			// Add depth information if truncated
-			if polyMatch.DepthTruncated {
-				polyRelation.DepthTruncated = &polyMatch.DepthTruncated
-				if polyMatch.MaxDepth > 0 {
-					polyRelation.MaxDepth = &polyMatch.MaxDepth
-				}
-			}
-			
-			model.Polymorphic = append(model.Polymorphic, polyRelation)
-		}
-	}
+	// Polymorphic relationships are now handled at top-level by AssemblePolymorphic()
+	// No longer attached to individual models
 
 	return model, nil
 }

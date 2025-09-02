@@ -223,7 +223,7 @@ func validateMinimalLaravelOutput(t *testing.T, expected, actual map[string]inte
 				continue
 			}
 
-			requiredFields := []string{"class", "file", "methods"}
+			requiredFields := []string{"fqcn", "method"}
 			for _, field := range requiredFields {
 				if _, exists := ctrl[field]; !exists {
 					t.Errorf("Controller %d missing %s field", i, field)
@@ -249,7 +249,7 @@ func validateMinimalLaravelOutput(t *testing.T, expected, actual map[string]inte
 				continue
 			}
 
-			requiredFields := []string{"class", "file"}
+			requiredFields := []string{"fqcn"}
 			for _, field := range requiredFields {
 				if _, exists := mdl[field]; !exists {
 					t.Errorf("Model %d missing %s field", i, field)
@@ -270,14 +270,10 @@ func validateApiProjectOutput(t *testing.T, expected, actual map[string]interfac
 		foundResourceUsage := false
 		for _, controller := range controllers {
 			if ctrl, ok := controller.(map[string]interface{}); ok {
-				if methods, ok := ctrl["methods"].([]interface{}); ok {
-					for _, method := range methods {
-						if methodObj, ok := method.(map[string]interface{}); ok {
-							if _, exists := methodObj["resourceUsage"]; exists {
-								foundResourceUsage = true
-								break
-							}
-						}
+				if resources, exists := ctrl["resources"]; exists {
+					if resourcesArray, ok := resources.([]interface{}); ok && len(resourcesArray) > 0 {
+						foundResourceUsage = true
+						break
 					}
 				}
 			}
@@ -293,14 +289,10 @@ func validateApiProjectOutput(t *testing.T, expected, actual map[string]interfac
 		foundPivot := false
 		for _, model := range models {
 			if mdl, ok := model.(map[string]interface{}); ok {
-				if relationships, ok := mdl["relationships"].([]interface{}); ok {
-					for _, rel := range relationships {
-						if relObj, ok := rel.(map[string]interface{}); ok {
-							if _, exists := relObj["withPivot"]; exists {
-								foundPivot = true
-								break
-							}
-						}
+				if withPivot, exists := mdl["withPivot"]; exists {
+					if pivotArray, ok := withPivot.([]interface{}); ok && len(pivotArray) > 0 {
+						foundPivot = true
+						break
 					}
 				}
 			}
@@ -329,7 +321,7 @@ func validateComplexAppOutput(t *testing.T, expected, actual map[string]interfac
 					continue
 				}
 
-				requiredFields := []string{"name", "discriminator", "relations"}
+				requiredFields := []string{"parent", "morph", "discriminator"}
 				for _, field := range requiredFields {
 					if _, exists := polyObj[field]; !exists {
 						t.Errorf("Polymorphic %d missing %s field", i, field)
@@ -354,7 +346,7 @@ func validateComplexAppOutput(t *testing.T, expected, actual map[string]interfac
 					continue
 				}
 
-				requiredFields := []string{"channel", "type", "parameters"}
+				requiredFields := []string{"channel", "params", "visibility"}
 				for _, field := range requiredFields {
 					if _, exists := channelObj[field]; !exists {
 						t.Errorf("Broadcast channel %d missing %s field", i, field)
@@ -371,16 +363,10 @@ func validateComplexAppOutput(t *testing.T, expected, actual map[string]interfac
 		foundScopes := false
 		for _, controller := range controllers {
 			if ctrl, ok := controller.(map[string]interface{}); ok {
-				if methods, ok := ctrl["methods"].([]interface{}); ok {
-					for _, method := range methods {
-						if methodObj, ok := method.(map[string]interface{}); ok {
-							if scopesUsed, exists := methodObj["scopesUsed"]; exists {
-								if scopes, ok := scopesUsed.([]interface{}); ok && len(scopes) > 0 {
-									foundScopes = true
-									break
-								}
-							}
-						}
+				if scopesUsed, exists := ctrl["scopesUsed"]; exists {
+					if scopes, ok := scopesUsed.([]interface{}); ok && len(scopes) > 0 {
+						foundScopes = true
+						break
 					}
 				}
 			}

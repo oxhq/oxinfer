@@ -136,7 +136,7 @@ func TestEmitterIntegration_DeterministicJSON(t *testing.T) {
 				Morph: emitter.MorphInfo{
 					Key:        "commentable",
 					TypeColumn: "commentable_type",
-					IDColumn:   "commentable_id",
+					IdColumn:   "commentable_id",
 				},
 				Discriminator: emitter.Discriminator{
 					PropertyName: "type",
@@ -284,7 +284,7 @@ func TestPolymorphicIntegration_DiscriminatorMapping(t *testing.T) {
 		Morph: emitter.MorphInfo{
 			Key:        "commentable",
 			TypeColumn: "commentable_type",
-			IDColumn:   "commentable_id",
+			IdColumn:   "commentable_id",
 		},
 		Discriminator: emitter.Discriminator{
 			PropertyName: "commentable_type",

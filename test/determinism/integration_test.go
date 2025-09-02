@@ -112,7 +112,7 @@ func TestDeterminismValidation_RegressionPrevention(t *testing.T) {
 				Morph: emitter.MorphInfo{
 					Key:        "morphable",
 					TypeColumn: "morphable_type",
-					IDColumn:   "morphable_id",
+					IdColumn:   "morphable_id",
 				},
 				Discriminator: emitter.Discriminator{
 					PropertyName: "type",

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 )
@@ -81,22 +82,61 @@ func (p *DefaultConcurrentPHPParser) ParseConcurrently(ctx context.Context, file
 				}
 				
 				// Simple parsing simulation for now
-				if len(parseJob.Content) > 0 {
-					// Simulate processing of PHP content
-					result.Result = &ParseResult{
-						FilePath:  parseJob.FilePath,
-						Content:   parseJob.Content,
-						HasErrors: false,
-						Errors:    []ParseError{},
-						ParsedAt:  time.Now(),
-						Stats: ParseStats{
-							ParseTime:   time.Millisecond * 10, // Simulated parse time
-							ContentSize: int64(len(parseJob.Content)),
-							TreeSize:    100, // Simulated
-							MaxDepth:    10,  // Simulated
-							ErrorCount:  0,
-							NodeTypes:   map[string]int{"class_declaration": 1},
-						},
+				if parseJob.Content != nil {
+					// Basic validation to detect malformed PHP
+					content := string(parseJob.Content)
+					hasErrors := false
+					var errors []ParseError
+					
+					// Check for empty content
+					if len(content) == 0 {
+						hasErrors = true
+						errors = append(errors, ParseError{
+							Message: "empty content",
+							Line:    0,
+							Column:  0,
+						})
+					} else if !strings.Contains(content, "<?php") {
+						// Check for basic PHP validity
+						hasErrors = true
+						errors = append(errors, ParseError{
+							Message: "missing PHP opening tag",
+							Line:    1,
+							Column:  1,
+						})
+					}
+					
+					// Check for unclosed braces (simple validation)
+					openBraces := strings.Count(content, "{")
+					closeBraces := strings.Count(content, "}")
+					if openBraces != closeBraces {
+						hasErrors = true
+						errors = append(errors, ParseError{
+							Message: "mismatched braces",
+							Line:    1,
+							Column:  len(content),
+						})
+					}
+					
+					if hasErrors {
+						result.Error = fmt.Errorf("parse validation failed: %s", errors[0].Message)
+					} else {
+						// Simulate processing of valid PHP content
+						result.Result = &ParseResult{
+							FilePath:  parseJob.FilePath,
+							Content:   parseJob.Content,
+							HasErrors: hasErrors,
+							Errors:    errors,
+							ParsedAt:  time.Now(),
+							Stats: ParseStats{
+								ParseTime:   time.Millisecond * 10, // Simulated parse time
+								ContentSize: int64(len(parseJob.Content)),
+								TreeSize:    100, // Simulated
+								MaxDepth:    10,  // Simulated
+								ErrorCount:  len(errors),
+								NodeTypes:   map[string]int{"class_declaration": 1},
+							},
+						}
 					}
 					result.Duration = time.Millisecond * 10
 				} else if parseJob.FilePath != "" {
@@ -118,7 +158,7 @@ func (p *DefaultConcurrentPHPParser) ParseConcurrently(ctx context.Context, file
 					}
 					result.Duration = time.Millisecond * 15
 				} else {
-					// Invalid job
+					// Invalid job - no content and no file path
 					result.Error = fmt.Errorf("no content or file path provided for job %s", parseJob.ID)
 					result.Duration = 0
 				}

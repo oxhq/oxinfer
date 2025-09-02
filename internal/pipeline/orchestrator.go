@@ -222,10 +222,22 @@ func (o *DefaultOrchestrator) RunParsingPhase(ctx context.Context, files []index
 			// Extract file path from result
 			if resultMap, ok := parseResult.(*map[string]interface{}); ok {
 				if filePath, ok := (*resultMap)["filePath"].(string); ok {
+					// Compute relative path from project root
+					relativePath, err := filepath.Rel(o.config.ProjectRoot, filePath)
+					if err != nil {
+						relativePath = filePath // Fallback to absolute path
+					}
+					
+					// Extract namespace from result if available
+					namespace := ""
+					if ns, ok := (*resultMap)["namespace"].(string); ok {
+						namespace = ns
+					}
+					
 					parsedFile := ParsedFile{
 						FilePath:     filePath,
-						RelativePath: filePath, // TODO: compute relative path properly
-						Namespace:    "",       // TODO: extract from result
+						RelativePath: relativePath,
+						Namespace:    namespace,
 					}
 					results.ParsedFiles = append(results.ParsedFiles, parsedFile)
 				}
@@ -430,6 +442,24 @@ func (o *DefaultOrchestrator) SetProgressCallback(callback func(*PipelineProgres
 	o.progressCallback = callback
 }
 
+// ClearCaches clears all internal caches and resets state.
+func (o *DefaultOrchestrator) ClearCaches() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	
+	// Clear results and stats
+	o.results = &PipelineResults{}
+	o.stats = &PipelineStats{}
+	o.progress = &PipelineProgress{
+		Phase: PipelinePhaseInitializing,
+	}
+	
+	// Clear component registry caches
+	if o.registry != nil {
+		o.registry.ClearCaches()
+	}
+}
+
 // Close releases all orchestrator resources.
 func (o *DefaultOrchestrator) Close() error {
 	if o.registry != nil {
@@ -577,13 +607,14 @@ func (o *DefaultOrchestrator) parseAndExtractFile(ctx context.Context, file inde
 
 	// Determine namespace using PSR-4 resolver if available
 	namespace := ""
-	// TODO: Implement ResolveClassFromFile method in PSR4Resolver
-	// if o.registry.PSR4Resolver != nil {
-	//     if resolved, err := o.registry.PSR4Resolver.ResolveClassFromFile(file.Path); err == nil && resolved != nil {
-	//         namespace = resolved.Namespace
-	//     }
-	// }
-	if namespace == "" && structure.Namespace != nil {
+	if o.registry.PSR4Resolver != nil {
+		// For now, we'll extract namespace from the PHP file structure
+		// In the future, we could implement reverse PSR-4 lookup
+		// by matching file paths against namespace mappings
+		if structure.Namespace != nil {
+			namespace = structure.Namespace.Name
+		}
+	} else if structure.Namespace != nil {
 		namespace = structure.Namespace.Name
 	}
 

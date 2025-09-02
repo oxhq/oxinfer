@@ -113,7 +113,7 @@ func validatePolymorphicStructure(t *testing.T, result map[string]interface{}) {
 	// Validate structure of first polymorphic relationship
 	polymorph := polymorphicArray[0].(map[string]interface{})
 	
-	requiredFields := []string{"from", "to", "relationship", "kind", "discriminator"}
+	requiredFields := []string{"parent", "morph", "discriminator"}
 	for _, field := range requiredFields {
 		if _, exists := polymorph[field]; !exists {
 			t.Errorf("Polymorphic relationship missing required field: %s", field)
@@ -122,29 +122,27 @@ func validatePolymorphicStructure(t *testing.T, result map[string]interface{}) {
 
 	// Validate discriminator structure
 	if discriminator, exists := polymorph["discriminator"].(map[string]interface{}); exists {
-		if _, hasTypeCol := discriminator["typeColumn"]; !hasTypeCol {
-			t.Error("Discriminator missing 'typeColumn' field")
+		if _, hasPropName := discriminator["propertyName"]; !hasPropName {
+			t.Error("Discriminator missing 'propertyName' field")
 		}
-		if _, hasIdCol := discriminator["idColumn"]; !hasIdCol {
-			t.Error("Discriminator missing 'idColumn' field")
-		}
-	}
-
-	// Validate from/to structure
-	if from, exists := polymorph["from"].(map[string]interface{}); exists {
-		if _, hasName := from["name"]; !hasName {
-			t.Error("From model missing 'name' field")
-		}
-		if _, hasMethod := from["method"]; !hasMethod {
-			t.Error("From model missing 'method' field")
+		if _, hasMapping := discriminator["mapping"]; !hasMapping {
+			t.Error("Discriminator missing 'mapping' field")
 		}
 	}
 
-	if to, exists := polymorph["to"].(map[string]interface{}); exists {
-		if _, hasTypes := to["types"]; !hasTypes {
-			t.Error("To models missing 'types' field")
+	// Validate morph structure
+	if morph, exists := polymorph["morph"].(map[string]interface{}); exists {
+		if _, hasKey := morph["key"]; !hasKey {
+			t.Error("Morph missing 'key' field")
+		}
+		if _, hasTypeCol := morph["typeColumn"]; !hasTypeCol {
+			t.Error("Morph missing 'typeColumn' field")
+		}
+		if _, hasIdCol := morph["idColumn"]; !hasIdCol {
+			t.Error("Morph missing 'idColumn' field")
 		}
 	}
+
 }
 
 // validateMorphRelationships validates different types of polymorphic relationships
@@ -501,8 +499,8 @@ func TestPolymorphicDeterministicOutput(t *testing.T) {
 		output := stdout.String()
 		outputs = append(outputs, output)
 
-		// Calculate hash
-		hash := fmt.Sprintf("%x", sha256.Sum256([]byte(output)))
+		// Calculate canonical hash (excluding volatile fields like durationMs)
+		hash := calculateCanonicalHash(output)
 		hashes = append(hashes, hash)
 	}
 
@@ -519,6 +517,10 @@ func TestPolymorphicDeterministicOutput(t *testing.T) {
 			// Compare polymorphic arrays specifically
 			if comparePolymorphicArrays(result0, resultI) {
 				t.Log("Polymorphic arrays are structurally identical despite hash difference (likely timestamp)")
+				
+				// Debug: print the first few characters of each output to identify differences
+				t.Logf("Output 0 (first 200 chars): %s", truncateString(outputs[0], 200))
+				t.Logf("Output %d (first 200 chars): %s", i, truncateString(outputs[i], 200))
 			} else {
 				t.Error("Polymorphic arrays differ structurally between runs")
 			}
@@ -824,8 +826,8 @@ func TestPolymorphicFeatureFlagHandling(t *testing.T) {
 		{
 			name:               "polymorphic_not_specified",
 			polymorphicEnabled: nil,
-			expectPolymorphic:  false,
-			description:        "Polymorphic patterns should be ignored when feature is not specified",
+			expectPolymorphic:  true,
+			description:        "Polymorphic patterns should be detected when feature is not specified (defaults to enabled)",
 		},
 	}
 
@@ -974,4 +976,40 @@ func TestPolymorphicGoldenFileComparison(t *testing.T) {
 	} else {
 		t.Log("Current output matches golden file expectations")
 	}
+}
+
+// calculateCanonicalHash creates a deterministic hash of JSON output by excluding volatile fields
+func calculateCanonicalHash(jsonOutput string) string {
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonOutput), &data); err != nil {
+		// If JSON parsing fails, fall back to raw hash
+		return fmt.Sprintf("%x", sha256.Sum256([]byte(jsonOutput)))
+	}
+	
+	// Exclude volatile fields from meta
+	if meta, exists := data["meta"].(map[string]interface{}); exists {
+		if stats, exists := meta["stats"].(map[string]interface{}); exists {
+			// Remove timing-related fields
+			delete(stats, "durationMs")
+		}
+		// Remove timestamp field
+		delete(meta, "generatedAt")
+	}
+	
+	// Re-marshal and hash
+	canonical, err := json.Marshal(data)
+	if err != nil {
+		// If re-marshaling fails, fall back to raw hash
+		return fmt.Sprintf("%x", sha256.Sum256([]byte(jsonOutput)))
+	}
+	
+	return fmt.Sprintf("%x", sha256.Sum256(canonical))
+}
+
+// truncateString truncates a string to maxLen characters
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

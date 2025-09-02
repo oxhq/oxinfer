@@ -6,7 +6,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/garaekz/oxinfer/internal/indexer"
 	"github.com/garaekz/oxinfer/internal/infer"
 	"github.com/garaekz/oxinfer/internal/manifest"
 	"github.com/garaekz/oxinfer/internal/matchers"
@@ -565,8 +564,11 @@ func (m *mockPSR4Resolver) Refresh() error {
 
 type mockPHPParser struct{}
 
-func (m *mockPHPParser) ProcessFile(ctx context.Context, file indexer.FileInfo) (*indexer.ProcessResult, error) {
-	return &indexer.ProcessResult{}, nil
+func (m *mockPHPParser) ProcessFile(ctx context.Context, file interface{}) (interface{}, error) {
+	return &map[string]interface{}{
+		"filePath": "test.php",
+		"namespace": "Test",
+	}, nil
 }
 
 func (m *mockPHPParser) ParsePHPFile(ctx context.Context, filePath string) (*parser.PHPParseResult, error) {

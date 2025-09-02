@@ -574,9 +574,9 @@ func TestT7PatternsIntegration(t *testing.T) {
 
 		output2 := stdout2.String()
 
-		// Compare hashes
-		hash1 := sha256.Sum256([]byte(output))
-		hash2 := sha256.Sum256([]byte(output2))
+		// Compare canonical hashes (excluding volatile fields)
+		hash1 := calculateCanonicalHash(output)
+		hash2 := calculateCanonicalHash(output2)
 
 		if hash1 != hash2 {
 			t.Error("CLI output is not deterministic - two runs produced different results")
@@ -667,3 +667,4 @@ func TestNonExistentManifestFile(t *testing.T) {
 		t.Errorf("Error output should be valid JSON: %v\nOutput: %s", err, stderrStr)
 	}
 }
+

@@ -348,7 +348,7 @@ func createComplexTestDelta() *Delta {
 				Morph: MorphInfo{
 					Key:        "commentable",
 					TypeColumn: "commentable_type",
-					IDColumn:   "commentable_id",
+					IdColumn:   "commentable_id",
 				},
 				Discriminator: Discriminator{
 					PropertyName: "type",

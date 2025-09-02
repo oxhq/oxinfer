@@ -514,8 +514,10 @@ func buildCLIBinaryForTesting(t *testing.T) string {
 	binaryPath := filepath.Join(t.TempDir(), "oxinfer-test")
 	
 	cmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/oxinfer")
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("Failed to build CLI binary: %v", err)
+	cmd.Dir = "../.." // Run from project root
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to build CLI binary: %v\nOutput: %s", err, string(output))
 	}
 
 	return binaryPath

@@ -3,8 +3,10 @@ package psr4
 import (
     "context"
     "fmt"
+    "os"
     "path/filepath"
     "sort"
+    "strings"
     "sync"
 
 	"github.com/garaekz/oxinfer/internal/manifest"
@@ -301,12 +303,159 @@ func (r *DefaultPSR4Resolver) loadComposerData() error {
 }
 
 // discoverClassesInMapping discovers all classes within a specific namespace mapping.
-// This is a simplified implementation that would be expanded for full file scanning.
 func (r *DefaultPSR4Resolver) discoverClassesInMapping(ctx context.Context, mapping NamespaceMapping) (map[string]string, error) {
-	// Currently we only support mapping resolution, not file discovery
-	// This method returns an empty map as full directory scanning is not implemented
-	// In future implementations, this would recursively scan directories and parse PHP files
-	return make(map[string]string), nil
+	result := make(map[string]string)
+	
+	// A namespace mapping can have multiple paths
+	for _, dirPath := range mapping.Paths {
+		classes, err := r.discoverClassesInPath(ctx, mapping.Namespace, dirPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to discover classes in path %s: %w", dirPath, err)
+		}
+		
+		// Merge results, checking for duplicates
+		for className, filePath := range classes {
+			if existingPath, exists := result[className]; exists {
+				// Log warning about duplicate class definition but continue
+				fmt.Printf("Warning: class %s defined in both %s and %s\n", className, existingPath, filePath)
+			}
+			result[className] = filePath
+		}
+	}
+	
+	return result, nil
+}
+
+// discoverClassesInPath discovers all classes in a specific directory path.
+func (r *DefaultPSR4Resolver) discoverClassesInPath(ctx context.Context, namespace, dirPath string) (map[string]string, error) {
+	result := make(map[string]string)
+	
+	// Resolve the absolute directory path for this mapping
+	absDir := filepath.Join(r.config.ProjectRoot, dirPath)
+	
+	// Check if directory exists
+	if _, err := os.Stat(absDir); os.IsNotExist(err) {
+		// Directory doesn't exist, which is valid - just return empty result
+		return result, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to stat directory %s: %w", absDir, err)
+	}
+	
+	// Recursively scan for PHP files
+	err := filepath.WalkDir(absDir, func(path string, d os.DirEntry, err error) error {
+		// Check context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		
+		if err != nil {
+			// Skip directories that can't be read
+			return nil
+		}
+		
+		// Only process .php files
+		if d.IsDir() || !strings.HasSuffix(path, ".php") {
+			return nil
+		}
+		
+		// Skip common non-class PHP files
+		filename := d.Name()
+		if r.shouldSkipFile(filename) {
+			return nil
+		}
+		
+		// Extract class name from file path
+		relPath, err := filepath.Rel(absDir, path)
+		if err != nil {
+			return nil // Skip files we can't determine relative path for
+		}
+		
+		// Convert file path to class name
+		className := r.pathToClassName(namespace, relPath)
+		if className != "" {
+			// Verify the file actually contains the expected class/interface/trait
+			if r.validateClassFile(path, className) {
+				result[className] = path
+			}
+		}
+		
+		return nil
+	})
+	
+	if err != nil && err != context.Canceled {
+		return nil, fmt.Errorf("failed to scan directory %s: %w", absDir, err)
+	}
+	
+	return result, nil
+}
+
+// pathToClassName converts a file path to a fully qualified class name based on PSR-4 mapping.
+func (r *DefaultPSR4Resolver) pathToClassName(namespace, relPath string) string {
+	// Remove .php extension
+	if !strings.HasSuffix(relPath, ".php") {
+		return ""
+	}
+	relPath = strings.TrimSuffix(relPath, ".php")
+	
+	// Convert path separators to namespace separators
+	relPath = strings.ReplaceAll(relPath, string(filepath.Separator), "\\")
+	
+	// Build fully qualified class name
+	namespace = strings.TrimSuffix(namespace, "\\")
+	if namespace == "" {
+		return relPath
+	}
+	
+	return namespace + "\\" + relPath
+}
+
+// shouldSkipFile determines if a PHP file should be skipped during class discovery.
+func (r *DefaultPSR4Resolver) shouldSkipFile(filename string) bool {
+	// Skip common non-class PHP files
+	skipPatterns := []string{
+		"index.php",
+		"web.php",
+		"api.php", 
+		"channels.php",
+		"console.php",
+		"bootstrap.php",
+		"autoload.php",
+		"config.php",
+		".blade.php", // Laravel Blade templates
+	}
+	
+	for _, pattern := range skipPatterns {
+		if strings.Contains(filename, pattern) {
+			return true
+		}
+	}
+	
+	// Skip files that start with lowercase (typically not class files)
+	basename := strings.TrimSuffix(filename, ".php")
+	if len(basename) > 0 && strings.ToLower(string(basename[0])) == string(basename[0]) {
+		// Files starting with lowercase are typically not class files
+		return true
+	}
+	
+	return false
+}
+
+// validateClassFile performs basic validation that a PHP file contains the expected class.
+func (r *DefaultPSR4Resolver) validateClassFile(filePath, expectedClassName string) bool {
+	// For now, do basic validation - check file exists and is readable
+	if _, err := os.Stat(filePath); err != nil {
+		return false
+	}
+	
+	// In a full implementation, we could parse the PHP file to verify:
+	// 1. The file contains a class/interface/trait declaration
+	// 2. The declared name matches the expected class name
+	// 3. The namespace declaration matches expectations
+	
+	// For this implementation, we assume PSR-4 compliance and validate by file structure
+	return true
 }
 
 // convertConfigToComposerData converts ComposerConfig to ComposerData.

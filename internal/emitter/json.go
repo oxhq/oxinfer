@@ -128,7 +128,7 @@ func (e *JSONEmitter) normalizeDelta(delta *Delta) *Delta {
 		e.normalizeController(&normalized.Controllers[i])
 	}
 
-	// Sort models by FQCN
+	// Sort models by FQCN for deterministic ordering
 	copy(normalized.Models, delta.Models)
 	sort.Slice(normalized.Models, func(i, j int) bool {
 		return normalized.Models[i].FQCN < normalized.Models[j].FQCN
@@ -196,17 +196,6 @@ func (e *JSONEmitter) normalizeController(controller *Controller) {
 		}
 	}
 
-	// Sort polymorphic relations by relation name
-	if controller.Polymorphic != nil {
-		sort.Slice(controller.Polymorphic, func(i, j int) bool {
-			return controller.Polymorphic[i].Relation < controller.Polymorphic[j].Relation
-		})
-
-		// Sort sub-collections within each polymorphic relation
-		for i := range controller.Polymorphic {
-			e.normalizePolymorphicRelation(&controller.Polymorphic[i])
-		}
-	}
 }
 
 // normalizeModel ensures deterministic ordering of model sub-collections.
@@ -235,17 +224,6 @@ func (e *JSONEmitter) normalizeModel(model *Model) {
 		})
 	}
 
-	// Sort polymorphic relations by relation name
-	if model.Polymorphic != nil {
-		sort.Slice(model.Polymorphic, func(i, j int) bool {
-			return model.Polymorphic[i].Relation < model.Polymorphic[j].Relation
-		})
-
-		// Sort sub-collections within each polymorphic relation
-		for i := range model.Polymorphic {
-			e.normalizePolymorphicRelation(&model.Polymorphic[i])
-		}
-	}
 }
 
 // normalizePolymorphicRelation ensures deterministic ordering of polymorphic relation sub-collections.

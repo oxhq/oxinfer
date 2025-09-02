@@ -133,47 +133,6 @@ func (a *DefaultDeltaAssembler) AssembleControllers(parseResults *ParseResults, 
 			controller.ScopesUsed = scopes
 		}
 
-		// Add polymorphic relationships
-		if len(cm.Polymorphic) > 0 {
-			polymorphicRels := make([]emitter.PolymorphicRelation, 0, len(cm.Polymorphic))
-			for _, poly := range cm.Polymorphic {
-				rel := emitter.PolymorphicRelation{
-					Relation:       poly.Relation,
-					Type:           poly.Type,
-					MorphType:      poly.MorphType,
-					MorphId:        poly.MorphId,
-					RelatedModels:  poly.RelatedModels,
-				}
-
-				if poly.Model != "" {
-					rel.Model = &poly.Model
-				}
-
-				if poly.DepthTruncated {
-					rel.DepthTruncated = &poly.DepthTruncated
-				}
-
-				if poly.MaxDepth > 0 {
-					rel.MaxDepth = &poly.MaxDepth
-				}
-
-				if poly.Discriminator != nil {
-					rel.Discriminator = &emitter.PolymorphicDiscriminator{
-						PropertyName: poly.Discriminator.PropertyName,
-						Mapping:      poly.Discriminator.Mapping,
-						Source:       poly.Discriminator.Source,
-						IsExplicit:   poly.Discriminator.IsExplicit,
-					}
-					if poly.Discriminator.DefaultType != "" {
-						rel.Discriminator.DefaultType = &poly.Discriminator.DefaultType
-					}
-				}
-
-				polymorphicRels = append(polymorphicRels, rel)
-			}
-			controller.Polymorphic = polymorphicRels
-		}
-
 		controllers = append(controllers, controller)
 	}
 
@@ -227,10 +186,13 @@ func (a *DefaultDeltaAssembler) AssembleModels(parseResults *ParseResults, match
 		if len(md.Attributes) > 0 {
 			attributes := make([]emitter.Attribute, 0, len(md.Attributes))
 			for _, attr := range md.Attributes {
-				attributes = append(attributes, emitter.Attribute{
-					Name: attr.Name,
-					Via:  attr.Method, // Use method as via
-				})
+				// Only include modern attributes created via Attribute::make
+				if attr.IsModern {
+					attributes = append(attributes, emitter.Attribute{
+						Name: attr.Name,
+						Via:  "Attribute::make",
+					})
+				}
 			}
 			model.Attributes = attributes
 		}
@@ -273,7 +235,7 @@ func (a *DefaultDeltaAssembler) AssembleModels(parseResults *ParseResults, match
 
 				polymorphicRels = append(polymorphicRels, rel)
 			}
-			model.Polymorphic = polymorphicRels
+			// Polymorphic relationships moved to top-level delta structure
 		}
 
 		models = append(models, model)
@@ -314,7 +276,7 @@ func (a *DefaultDeltaAssembler) AssemblePolymorphic(matchResults *MatchResults) 
 			Morph: emitter.MorphInfo{
 				Key:        match.Relation,
 				TypeColumn: match.MorphType,
-				IDColumn:   match.MorphId,
+				IdColumn:   match.MorphId,
 			},
 		}
 

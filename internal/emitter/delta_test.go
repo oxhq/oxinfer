@@ -85,7 +85,7 @@ func TestDelta_StructureCompliance(t *testing.T) {
 						Morph: MorphInfo{
 							Key:        "commentable",
 							TypeColumn: "commentable_type",
-							IDColumn:   "commentable_id",
+							IdColumn:   "commentable_id",
 						},
 						Discriminator: Discriminator{
 							PropertyName: "type",
@@ -395,7 +395,7 @@ func TestPolymorphic_ValidationRequirements(t *testing.T) {
 				Morph: MorphInfo{
 					Key:        "commentable",
 					TypeColumn: "commentable_type",
-					IDColumn:   "commentable_id",
+					IdColumn:   "commentable_id",
 				},
 				Discriminator: Discriminator{
 					PropertyName: "type",
@@ -414,7 +414,7 @@ func TestPolymorphic_ValidationRequirements(t *testing.T) {
 				Morph: MorphInfo{
 					Key:        "commentable",
 					TypeColumn: "commentable_type",
-					IDColumn:   "commentable_id",
+					IdColumn:   "commentable_id",
 				},
 				Discriminator: Discriminator{
 					PropertyName: "type",
@@ -430,7 +430,7 @@ func TestPolymorphic_ValidationRequirements(t *testing.T) {
 			isValid := len(tt.polymorphic.Parent) > 0 &&
 				len(tt.polymorphic.Morph.Key) > 0 &&
 				len(tt.polymorphic.Morph.TypeColumn) > 0 &&
-				len(tt.polymorphic.Morph.IDColumn) > 0 &&
+				len(tt.polymorphic.Morph.IdColumn) > 0 &&
 				len(tt.polymorphic.Discriminator.PropertyName) > 0 &&
 				len(tt.polymorphic.Discriminator.Mapping) > 0
 

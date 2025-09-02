@@ -4,6 +4,7 @@ package matchers
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -101,7 +102,7 @@ func (m *DefaultScopeMatcher) Match(ctx context.Context, tree *parser.SyntaxTree
 		}
 
 		queryDef := m.queryDefs[i]
-		
+
 		// Convert SyntaxTree back to tree-sitter node for querying
 		sitterNode, sitterTree, err := m.convertToSitterNode(tree)
 		if err != nil {
@@ -119,25 +120,27 @@ func (m *DefaultScopeMatcher) Match(ctx context.Context, tree *parser.SyntaxTree
 				break
 			}
 
-			result, err := m.processMatch(match, queryDef, tree, filePath)
-			if err != nil {
-				continue // Skip invalid matches
-			}
-
+			// Process scope matches
+			result := m.processScopeMatch(match, query, queryDef, tree, filePath)
 			if result != nil {
 				allResults = append(allResults, result)
-			}
 
-			// Apply resource limits
-			if len(allResults) >= m.config.MaxMatchesPerFile {
-				cursor.Close()
-				break
+				// Respect match limits
+				if len(allResults) >= m.config.MaxMatchesPerFile {
+					cursor.Close()
+					return m.deduplicateResults(allResults), nil
+				}
 			}
 		}
 		cursor.Close()
+		// Tree cleanup handled by defer statement
 	}
 
-	return allResults, nil
+	// Apply confidence filtering and deduplication
+	filteredResults := m.filterByConfidence(allResults)
+	finalResults := m.deduplicateResults(filteredResults)
+
+	return finalResults, nil
 }
 
 // MatchScopes finds Laravel query scope patterns with detailed extraction.
@@ -531,16 +534,115 @@ func (m *DefaultScopeMatcher) extractScopeArguments(node *sitter.Node, tree *par
 
 // extractClassName extracts the class name from the syntax tree.
 func (m *DefaultScopeMatcher) extractClassName(tree *parser.SyntaxTree, filePath string) string {
-	// This would typically walk the tree to find class declarations
-	// For now, return a placeholder - in practice this should extract
-	// the actual class name from the AST
-	return "Model" // Placeholder
+	if tree == nil || tree.Root == nil {
+		return "UnknownClass"
+	}
+
+	// Try to find class declaration using simple tree traversal
+	className := m.findClassNameInTree(tree)
+	if className != "" {
+		return className
+	}
+
+	// If no classes found in tree, try to extract from file path as fallback
+	if filePath != "" {
+		return m.inferClassNameFromFilePath(filePath)
+	}
+
+	return "UnknownClass"
+}
+
+// findClassNameInTree performs a simple traversal to find class declarations.
+func (m *DefaultScopeMatcher) findClassNameInTree(tree *parser.SyntaxTree) string {
+	if tree == nil || tree.Source == nil {
+		return ""
+	}
+
+	// Use simple regex to find class declarations in source code
+	// This is a basic implementation that works for most PHP class declarations
+	classPattern, err := regexp.Compile(`class\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:extends|implements|\{)`)
+	if err != nil {
+		return ""
+	}
+
+	matches := classPattern.FindSubmatch(tree.Source)
+	if len(matches) >= 2 {
+		return string(matches[1])
+	}
+
+	return ""
+}
+
+// inferClassNameFromFilePath attempts to infer a class name from the file path.
+func (m *DefaultScopeMatcher) inferClassNameFromFilePath(filePath string) string {
+	if filePath == "" {
+		return "UnknownClass"
+	}
+
+	// Extract filename without extension
+	fileName := filepath.Base(filePath)
+	if dotIndex := strings.LastIndex(fileName, "."); dotIndex != -1 {
+		fileName = fileName[:dotIndex]
+	}
+
+	// Convert to PascalCase (common PHP class naming convention)
+	if fileName != "" {
+		return strings.Title(fileName)
+	}
+
+	return "UnknownClass"
 }
 
 // inferModelFromVariable tries to infer model class from variable context.
 func (m *DefaultScopeMatcher) inferModelFromVariable(node *sitter.Node, tree *parser.SyntaxTree) string {
-	// This would analyze variable assignments and method calls to infer the model type
-	// For now, return empty string to indicate unknown
+	if node == nil || tree == nil {
+		return ""
+	}
+
+	// Get the variable name
+	varName := string(node.Content(tree.Source))
+	if varName == "" {
+		return ""
+	}
+
+	// Try to trace back to variable assignment or type declaration
+	// This is a simplified implementation - in practice you'd want to
+	// walk the AST to find variable assignments or type hints
+	
+	// Look for common Laravel model variable naming patterns
+	if strings.HasPrefix(varName, "$") {
+		varName = strings.TrimPrefix(varName, "$")
+	}
+
+	// Convert from camelCase/snake_case to PascalCase
+	modelName := m.variableNameToClassName(varName)
+	if modelName != "" {
+		return modelName
+	}
+
+	return ""
+}
+
+// variableNameToClassName converts a variable name to a likely class name.
+func (m *DefaultScopeMatcher) variableNameToClassName(varName string) string {
+	if varName == "" {
+		return ""
+	}
+
+	// Convert snake_case to PascalCase
+	if strings.Contains(varName, "_") {
+		parts := strings.Split(varName, "_")
+		for i, part := range parts {
+			parts[i] = strings.Title(part)
+		}
+		return strings.Join(parts, "")
+	}
+
+	// Convert camelCase to PascalCase
+	if varName != "" {
+		return strings.Title(varName)
+	}
+
 	return ""
 }
 
@@ -557,13 +659,175 @@ func (m *DefaultScopeMatcher) mapCaptures(match *sitter.QueryMatch) map[string]*
 	return captures
 }
 
-// convertToSitterNode converts our SyntaxTree back to a tree-sitter node.
-// This is a temporary implementation - ideally SyntaxTree would maintain
-// the original tree-sitter node reference.
+// convertToSitterNode converts SyntaxTree back to tree-sitter node and tree for querying.
+// This re-parses the content to get proper tree-sitter structures.
 func (m *DefaultScopeMatcher) convertToSitterNode(tree *parser.SyntaxTree) (*sitter.Node, *sitter.Tree, error) {
-	// This is a placeholder - in practice, we need the original tree-sitter tree
-	// The parser package should provide a way to get the underlying tree-sitter structures
-	return nil, nil, fmt.Errorf("conversion not implemented - needs parser integration")
+	// Re-parse the content to get a tree-sitter node
+	tempParser := sitter.NewParser()
+	if tempParser == nil {
+		return nil, nil, fmt.Errorf("failed to create temporary parser")
+	}
+
+	tempParser.SetLanguage(m.compiler.language)
+
+	sitterTree, err := tempParser.ParseCtx(context.Background(), nil, tree.Source)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to re-parse content: %w", err)
+	}
+	if sitterTree == nil {
+		return nil, nil, fmt.Errorf("re-parsing returned nil tree")
+	}
+
+	rootNode := sitterTree.RootNode()
+	if rootNode == nil {
+		sitterTree.Close()
+		return nil, nil, fmt.Errorf("re-parsing returned nil root node")
+	}
+
+	return rootNode, sitterTree, nil
+}
+
+// processScopeMatch processes individual scope matches.
+func (m *DefaultScopeMatcher) processScopeMatch(
+	match *sitter.QueryMatch,
+	query *sitter.Query,
+	queryDef QueryDefinition,
+	tree *parser.SyntaxTree,
+	filePath string,
+) *MatchResult {
+	var scopeName string
+	var position parser.Point
+
+	// Extract captures
+	for _, capture := range match.Captures {
+		captureName := query.CaptureNameForId(capture.Index)
+
+		switch captureName {
+		case "scope_name":
+			scopeNode := capture.Node
+			scopeName = string(scopeNode.Content(tree.Source))
+			position = parser.Point{Row: int(scopeNode.StartPoint().Row), Column: int(scopeNode.StartPoint().Column)}
+		case "method_name":
+			if scopeName == "" {
+				methodNode := capture.Node
+				methodName := string(methodNode.Content(tree.Source))
+				// Extract scope name from method name (remove "scope" prefix)
+				if strings.HasPrefix(strings.ToLower(methodName), "scope") {
+					scopeName = strings.TrimPrefix(methodName, "scope")
+					scopeName = strings.ToLower(scopeName[:1]) + scopeName[1:]
+				}
+				position = parser.Point{Row: int(methodNode.StartPoint().Row), Column: int(methodNode.StartPoint().Column)}
+			}
+		}
+	}
+
+	// Skip if we don't have essential information
+	if scopeName == "" {
+		return nil
+	}
+
+	// Create scope match
+	scopeMatch := &ScopeMatch{
+		Name:     scopeName,
+		On:       "Model",
+		Args:     []interface{}{},
+		IsGlobal: false,
+		IsLocal:  true,
+		Pattern:  queryDef.Name,
+		Method:   "scope" + strings.Title(scopeName),
+		Context:  "model_method",
+	}
+
+	return &MatchResult{
+		Type:       PatternTypeScope,
+		Position:   position,
+		Content:    m.buildDisplayContent(scopeName),
+		Confidence: queryDef.Confidence,
+		Data:       scopeMatch,
+		Context: &MatchContext{
+			FilePath: filePath,
+			Explicit: m.isExplicitScopeUsage(queryDef.Name),
+		},
+	}
+}
+
+// buildDisplayContent creates a human-readable string representation of the scope.
+func (m *DefaultScopeMatcher) buildDisplayContent(scopeName string) string {
+	return fmt.Sprintf("scope%s()", strings.Title(scopeName))
+}
+
+// isExplicitScopeUsage determines if scope usage is explicit.
+func (m *DefaultScopeMatcher) isExplicitScopeUsage(patternName string) bool {
+	switch patternName {
+	case "model_scope_method", "query_scope_call":
+		return true
+	default:
+		return false
+	}
+}
+
+// filterByConfidence removes matches below the minimum confidence threshold.
+func (m *DefaultScopeMatcher) filterByConfidence(results []*MatchResult) []*MatchResult {
+	if m.config == nil || m.config.MinConfidenceThreshold <= 0 {
+		return results // No filtering
+	}
+
+	filtered := make([]*MatchResult, 0, len(results))
+	for _, result := range results {
+		if result.Confidence >= m.config.MinConfidenceThreshold {
+			filtered = append(filtered, result)
+		}
+	}
+
+	return filtered
+}
+
+// deduplicateResults removes duplicate matches by position and scope name.
+func (m *DefaultScopeMatcher) deduplicateResults(results []*MatchResult) []*MatchResult {
+	if m.config == nil || !m.config.DeduplicateMatches {
+		return results
+	}
+
+	seen := make(map[string]*MatchResult)
+
+	for _, result := range results {
+		if scopeMatch, ok := result.Data.(*ScopeMatch); ok {
+			// Create unique key based on position and scope details
+			key := fmt.Sprintf("%s:%d:%d:%s", scopeMatch.Name, result.Position.Row, result.Position.Column, scopeMatch.Method)
+
+			if existing, exists := seen[key]; exists {
+				// Keep the match with higher confidence
+				if result.Confidence > existing.Confidence {
+					seen[key] = result
+				}
+			} else {
+				seen[key] = result
+			}
+		}
+	}
+
+	// Convert back to slice with deterministic ordering
+	deduplicated := make([]*MatchResult, 0, len(seen))
+
+	// Sort keys for deterministic output
+	keys := make([]string, 0, len(seen))
+	for key := range seen {
+		keys = append(keys, key)
+	}
+	// Simple sort without external dependencies
+	for i := 0; i < len(keys); i++ {
+		for j := i + 1; j < len(keys); j++ {
+			if keys[i] > keys[j] {
+				keys[i], keys[j] = keys[j], keys[i]
+			}
+		}
+	}
+
+	for _, key := range keys {
+		deduplicated = append(deduplicated, seen[key])
+	}
+
+	return deduplicated
 }
 
 // GetQueries returns the tree-sitter queries used by this matcher.

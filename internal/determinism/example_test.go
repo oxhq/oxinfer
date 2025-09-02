@@ -61,7 +61,7 @@ func TestDeltaHasher_DemoTripleRun(t *testing.T) {
 					Morph: emitter.MorphInfo{
 						Key:        "commentable",
 						TypeColumn: "commentable_type",
-						IDColumn:   "commentable_id",
+						IdColumn:   "commentable_id",
 					},
 					Discriminator: emitter.Discriminator{
 						PropertyName: "type",
@@ -241,7 +241,7 @@ func TestDeterminismDemo_RealWorldScenario(t *testing.T) {
 					Morph: emitter.MorphInfo{
 						Key:        "commentable",
 						TypeColumn: "commentable_type",
-						IDColumn:   "commentable_id",
+						IdColumn:   "commentable_id",
 					},
 					Discriminator: emitter.Discriminator{
 						PropertyName: "type",

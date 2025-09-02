@@ -291,7 +291,7 @@ func validatePolymorphicMatching(t *testing.T, result map[string]interface{}) {
 			// Validate structure
 			for i, poly := range polymorphic {
 				if polyObj, ok := poly.(map[string]interface{}); ok {
-					requiredFields := []string{"name", "discriminator", "relations"}
+					requiredFields := []string{"parent", "morph", "discriminator"}
 					for _, field := range requiredFields {
 						if _, exists := polyObj[field]; !exists {
 							t.Errorf("Polymorphic pattern %d missing %s field", i, field)
@@ -316,7 +316,7 @@ func validateBroadcastMatching(t *testing.T, result map[string]interface{}) {
 			// Validate structure
 			for i, channel := range broadcast {
 				if channelObj, ok := channel.(map[string]interface{}); ok {
-					requiredFields := []string{"channel", "type", "parameters"}
+					requiredFields := []string{"channel", "params", "visibility"}
 					for _, field := range requiredFields {
 						if _, exists := channelObj[field]; !exists {
 							t.Errorf("Broadcast channel %d missing %s field", i, field)

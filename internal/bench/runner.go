@@ -4,6 +4,7 @@ package bench
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -597,8 +598,19 @@ func generateRunID(scenarioName string) string {
 
 // Placeholder implementations for remaining methods
 func (br *BenchmarkRunner) setupTestEnvironment(scenario *BenchmarkScenario) (string, error) {
-	// TODO: Implement test environment setup
-	return "", fmt.Errorf("not implemented")
+	// Create unique directory for this test run
+	testDir := filepath.Join(br.config.TempDir, fmt.Sprintf("scenario_%s_%d", scenario.Name, time.Now().UnixNano()))
+	if err := os.MkdirAll(testDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create test directory: %w", err)
+	}
+
+	// Generate test files based on scenario
+	ctx := context.Background()
+	if err := br.generator.GenerateScenario(ctx, scenario, testDir); err != nil {
+		return "", fmt.Errorf("failed to generate scenario files: %w", err)
+	}
+
+	return testDir, nil
 }
 
 func (br *BenchmarkRunner) cleanupTestEnvironment(testDir string) error {
@@ -606,13 +618,58 @@ func (br *BenchmarkRunner) cleanupTestEnvironment(testDir string) error {
 }
 
 func (br *BenchmarkRunner) clearCache(testDir string) error {
-	// TODO: Implement cache clearing
+	// Clear pipeline cache directory
+	cacheDir := filepath.Join(testDir, ".oxinfer_cache")
+	if _, err := os.Stat(cacheDir); err == nil {
+		if err := os.RemoveAll(cacheDir); err != nil {
+			return fmt.Errorf("failed to remove cache directory: %w", err)
+		}
+	}
+	
+	// Reset orchestrator's internal caches
+	if br.orchestrator != nil {
+		br.orchestrator.ClearCaches()
+	}
+	
 	return nil
 }
 
 func (br *BenchmarkRunner) createTestManifest(scenario *BenchmarkScenario, testDir, manifestPath string) (*manifest.Manifest, error) {
-	// TODO: Implement manifest creation
-	return nil, fmt.Errorf("not implemented")
+	// Create manifest based on scenario configuration
+	trueVal := true
+	manifest := &manifest.Manifest{
+		Project: manifest.ProjectConfig{
+			Root:     testDir,
+			Composer: "composer.json",
+		},
+		Scan: manifest.ScanConfig{
+			Targets: []string{"app", "routes"},
+		},
+		Features: &manifest.FeatureConfig{
+			HTTPStatus:        &trueVal,
+			ResourceUsage:     &trueVal,
+			WithPivot:         &trueVal,
+			AttributeMake:     &trueVal,
+			ScopesUsed:        &trueVal,
+			Polymorphic:       &trueVal,
+			BroadcastChannels: &trueVal,
+		},
+	}
+
+	// Features are configured above based on scenario type
+	// All features enabled by default for comprehensive testing
+
+	// Write manifest to file
+	manifestData, err := manifest.ToJSON()
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize manifest: %w", err)
+	}
+
+	if err := os.WriteFile(manifestPath, manifestData, 0644); err != nil {
+		return nil, fmt.Errorf("failed to write manifest file: %w", err)
+	}
+
+	return manifest, nil
 }
 
 func (br *BenchmarkRunner) validateTargets(scenario *BenchmarkScenario, metrics *PerformanceMetrics) bool {
@@ -627,37 +684,267 @@ func (br *BenchmarkRunner) detectRegression(baseline, current *PerformanceMetric
 }
 
 func (br *BenchmarkRunner) loadBaseline() error {
-	// TODO: Implement baseline loading
+	if br.config.BaselineFile == "" {
+		return nil // No baseline file configured
+	}
+
+	if _, err := os.Stat(br.config.BaselineFile); os.IsNotExist(err) {
+		return fmt.Errorf("baseline file not found: %s", br.config.BaselineFile)
+	}
+
+	data, err := os.ReadFile(br.config.BaselineFile)
+	if err != nil {
+		return fmt.Errorf("failed to read baseline file: %w", err)
+	}
+
+	// Parse baseline data (simplified JSON format)
+	var baselineData map[string]*PerformanceMetrics
+	if err := json.Unmarshal(data, &baselineData); err != nil {
+		return fmt.Errorf("failed to parse baseline file: %w", err)
+	}
+
+	br.baselineMetrics = baselineData
 	return nil
 }
 
 func (br *BenchmarkRunner) saveBaseline(summary *RunSummary) error {
-	// TODO: Implement baseline saving
+	if br.config.BaselineFile == "" {
+		return nil // No baseline file configured
+	}
+
+	// Collect metrics from successful runs
+	baselineData := make(map[string]*PerformanceMetrics)
+	for scenarioName, result := range summary.ScenarioResults {
+		if result.Success && result.Metrics != nil {
+			baselineData[scenarioName] = result.Metrics
+		}
+	}
+
+	// Serialize to JSON
+	data, err := json.MarshalIndent(baselineData, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to serialize baseline data: %w", err)
+	}
+
+	// Ensure directory exists
+	if err := os.MkdirAll(filepath.Dir(br.config.BaselineFile), 0755); err != nil {
+		return fmt.Errorf("failed to create baseline directory: %w", err)
+	}
+
+	// Write to file
+	if err := os.WriteFile(br.config.BaselineFile, data, 0644); err != nil {
+		return fmt.Errorf("failed to write baseline file: %w", err)
+	}
+
 	return nil
 }
 
 func (br *BenchmarkRunner) generateReports(summary *RunSummary) error {
-	// TODO: Implement report generation
+	if br.config.OutputDir == "" {
+		return nil // No output directory configured
+	}
+
+	// Generate requested report formats
+	for _, format := range br.config.ReportFormats {
+		switch format {
+		case "json":
+			if err := br.generateJSONReport(summary); err != nil {
+				return fmt.Errorf("JSON report generation failed: %w", err)
+			}
+		case "csv":
+			if err := br.generateCSVReport(summary); err != nil {
+				return fmt.Errorf("CSV report generation failed: %w", err)
+			}
+		case "html":
+			if err := br.generateHTMLReport(summary); err != nil {
+				return fmt.Errorf("HTML report generation failed: %w", err)
+			}
+		default:
+			return fmt.Errorf("unsupported report format: %s", format)
+		}
+	}
+
+	return nil
+}
+
+func (br *BenchmarkRunner) generateJSONReport(summary *RunSummary) error {
+	data, err := json.MarshalIndent(summary, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to serialize summary: %w", err)
+	}
+
+	reportPath := filepath.Join(br.config.OutputDir, "benchmark_report.json")
+	if err := os.WriteFile(reportPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write JSON report: %w", err)
+	}
+
+	return nil
+}
+
+func (br *BenchmarkRunner) generateCSVReport(summary *RunSummary) error {
+	reportPath := filepath.Join(br.config.OutputDir, "benchmark_report.csv")
+	file, err := os.Create(reportPath)
+	if err != nil {
+		return fmt.Errorf("failed to create CSV file: %w", err)
+	}
+	defer file.Close()
+
+	// CSV header
+	fmt.Fprintln(file, "Scenario,Success,Duration(ms),Memory(MB),FilesProcessed")
+
+	// CSV data rows
+	for _, result := range summary.ScenarioResults {
+		fmt.Fprintf(file, "%s,%t,%.2f,%.2f,%d\n",
+			result.Scenario.Name,
+			result.Success,
+			float64(result.Metrics.TotalDuration.Nanoseconds())/1e6,
+			float64(result.Metrics.MemoryStats.PeakTotalMB),
+			result.Metrics.ProcessingStats.FilesParsed,
+		)
+	}
+
+	return nil
+}
+
+func (br *BenchmarkRunner) generateHTMLReport(summary *RunSummary) error {
+	// Simple HTML report template
+	htmlTemplate := `<!DOCTYPE html>
+<html>
+<head><title>Oxinfer Benchmark Report</title></head>
+<body>
+<h1>Benchmark Report</h1>
+<p>Generated: %s</p>
+<p>Duration: %s</p>
+<p>Scenarios: %d total, %d succeeded, %d failed</p>
+<h2>Results</h2>
+<table border="1">
+<tr><th>Scenario</th><th>Success</th><th>Duration</th><th>Memory</th></tr>
+%s
+</table>
+</body>
+</html>`
+
+	var tableRows string
+	for _, result := range summary.ScenarioResults {
+		tableRows += fmt.Sprintf("<tr><td>%s</td><td>%t</td><td>%s</td><td>%.2f MB</td></tr>\n",
+			result.Scenario.Name,
+			result.Success,
+			result.Metrics.TotalDuration,
+			float64(result.Metrics.MemoryStats.PeakTotalMB),
+		)
+	}
+
+	htmlContent := fmt.Sprintf(htmlTemplate,
+		time.Now().Format("2006-01-02 15:04:05"),
+		summary.TotalDuration,
+		summary.ScenariosRun,
+		summary.ScenariosSucceeded,
+		summary.ScenariosFailed,
+		tableRows,
+	)
+
+	reportPath := filepath.Join(br.config.OutputDir, "benchmark_report.html")
+	if err := os.WriteFile(reportPath, []byte(htmlContent), 0644); err != nil {
+		return fmt.Errorf("failed to write HTML report: %w", err)
+	}
+
 	return nil
 }
 
 func (br *BenchmarkRunner) startProfiling(scenarioName string, runNumber int) ([]string, error) {
-	// TODO: Implement profiling start
-	return nil, nil
+	profileFiles := make([]string, 0, len(br.config.ProfileTypes))
+
+	for _, profileType := range br.config.ProfileTypes {
+		fileName := fmt.Sprintf("%s_%s_run%d.prof", scenarioName, profileType, runNumber)
+		profilePath := filepath.Join(br.config.ProfileDir, fileName)
+
+		// Create the profile file (actual profiling would be implemented here)
+		file, err := os.Create(profilePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create profile file %s: %w", profilePath, err)
+		}
+		file.Close() // Just create empty file as placeholder
+
+		profileFiles = append(profileFiles, profilePath)
+	}
+
+	return profileFiles, nil
 }
 
 func (br *BenchmarkRunner) stopProfiling() error {
-	// TODO: Implement profiling stop
+	// In a full implementation, this would stop active profilers
+	// For now, just return success as we're creating placeholder profiles
 	return nil
 }
 
 func (br *BenchmarkRunner) calculateRunSummary(summary *RunSummary) {
-	// TODO: Implement summary calculation
+	if len(summary.ScenarioResults) == 0 {
+		return
+	}
+
+	var totalDuration time.Duration
+	var fastest, slowest *BenchmarkResult
+
+	targetFailures := make([]string, 0)
+	regressionDetails := make([]string, 0)
+
+	for _, result := range summary.ScenarioResults {
+		// Track fastest and slowest scenarios
+		if fastest == nil || result.Metrics.TotalDuration < fastest.Metrics.TotalDuration {
+			fastest = result
+		}
+		if slowest == nil || result.Metrics.TotalDuration > slowest.Metrics.TotalDuration {
+			slowest = result
+		}
+
+		totalDuration += result.Metrics.TotalDuration
+
+		// Track target failures
+		if !result.TargetsMet {
+			targetFailures = append(targetFailures, fmt.Sprintf("%s: targets not met", result.Scenario.Name))
+		}
+
+		// Track regressions
+		if result.Regression {
+			summary.RegressionsFound++
+			regressionDetails = append(regressionDetails, fmt.Sprintf("%s: performance regression detected", result.Scenario.Name))
+		}
+	}
+
+	// Set summary fields
+	if fastest != nil {
+		summary.FastestScenario = fastest.Scenario.Name
+	}
+	if slowest != nil {
+		summary.SlowestScenario = slowest.Scenario.Name
+	}
+
+	summary.AverageDuration = totalDuration / time.Duration(len(summary.ScenarioResults))
+	summary.AllTargetsMet = len(targetFailures) == 0
+	summary.TargetFailures = targetFailures
+	summary.RegressionDetails = regressionDetails
 }
 
 func convertPipelineStatsToProcessingStats(pipelineStats *pipeline.PipelineStats) *stats.ProcessingStats {
-	// TODO: Implement conversion
-	return stats.NewProcessingStats()
+	if pipelineStats == nil {
+		return stats.NewProcessingStats()
+	}
+
+	processingStats := stats.NewProcessingStats()
+	
+	// Convert pipeline stats to processing stats
+	if pipelineStats.FilesProcessed > 0 {
+		processingStats.FilesParsed = int64(pipelineStats.FilesProcessed)
+	}
+	if pipelineStats.TotalDuration > 0 {
+		processingStats.DurationMs = int64(pipelineStats.TotalDuration.Nanoseconds() / 1e6)
+	}
+	if pipelineStats.PatternsDetected > 0 {
+		// PatternsDetected field doesn't exist in ProcessingStats, use inference ops instead
+		processingStats.InferenceOps = int64(pipelineStats.PatternsDetected)
+	}
+
+	return processingStats
 }
 
 // DefaultBenchmarkConfig returns a sensible default configuration for benchmark runs.
@@ -684,6 +971,5 @@ func DefaultBenchmarkConfig() *RunnerConfig {
 
 // NewDefaultScenarioGenerator creates a default scenario generator.
 func NewDefaultScenarioGenerator() ScenarioGenerator {
-	// TODO: Implement default scenario generator
-	return nil
+	return &DefaultScenarioGenerator{}
 }

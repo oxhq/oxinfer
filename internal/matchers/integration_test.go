@@ -1000,12 +1000,9 @@ class Tag extends Model
 		t.Fatalf("Failed to convert to model format: %v", err)
 	}
 
-	// Verify polymorphic relationships are included in model format
-	if model != nil && len(model.Polymorphic) > 0 {
-		t.Logf("Converted %d polymorphic relationships to model format", len(model.Polymorphic))
-		for i, polyRel := range model.Polymorphic {
-			t.Logf("Model polymorphic %d: %s (%s)", i, polyRel.Relation, polyRel.Type)
-		}
+	// Note: Polymorphic relationships are now handled at the top-level delta, not on individual models
+	if model != nil {
+		t.Logf("Model converted successfully: %s", model.FQCN)
 	}
 
 	t.Logf("Polymorphic integration test completed successfully:")

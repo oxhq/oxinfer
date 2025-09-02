@@ -28,46 +28,11 @@ func TestPolymorphicIntegrationEndToEnd(t *testing.T) {
 				Resources: []Resource{
 					{Class: "CommentResource", Collection: false},
 				},
-				Polymorphic: []PolymorphicRelation{
-					{
-						Relation:  "commentable",
-						Type:      "morphTo",
-						MorphType: "commentable_type",
-						MorphId:   "commentable_id",
-						Discriminator: &PolymorphicDiscriminator{
-							PropertyName: "commentable_type",
-							Mapping: map[string]string{
-								"post":  "App\\Models\\Post",
-								"video": "App\\Models\\Video",
-							},
-							Source:     "morphMap",
-							IsExplicit: true,
-						},
-						RelatedModels: []string{"App\\Models\\Post", "App\\Models\\Video"},
-					},
-				},
 			},
 		},
 		Models: []Model{
 			{
 				FQCN: "App\\Models\\Post",
-				Polymorphic: []PolymorphicRelation{
-					{
-						Relation:  "comments",
-						Type:      "morphMany",
-						Model:     stringPtr("App\\Models\\Comment"),
-						MorphType: "commentable_type",
-						MorphId:   "commentable_id",
-						Discriminator: &PolymorphicDiscriminator{
-							PropertyName: "commentable_type",
-							Mapping: map[string]string{
-								"post": "App\\Models\\Post",
-							},
-							Source:     "inferred",
-							IsExplicit: false,
-						},
-					},
-				},
 			},
 		},
 		Polymorphic: []Polymorphic{
@@ -76,7 +41,7 @@ func TestPolymorphicIntegrationEndToEnd(t *testing.T) {
 				Morph: MorphInfo{
 					Key:        "commentable",
 					TypeColumn: "commentable_type",
-					IDColumn:   "commentable_id",
+					IdColumn:   "commentable_id",
 				},
 				Discriminator: Discriminator{
 					PropertyName: "commentable_type",
@@ -104,25 +69,25 @@ func TestPolymorphicIntegrationEndToEnd(t *testing.T) {
 		t.Fatalf("Generated JSON is not valid: %v", err)
 	}
 
-	// Verify structure includes polymorphic data
-	controllers, ok := unmarshaled["controllers"].([]interface{})
-	if !ok || len(controllers) == 0 {
-		t.Fatal("Controllers not found in JSON output")
-	}
-
-	controller := controllers[0].(map[string]interface{})
-	polymorphics, ok := controller["polymorphic"].([]interface{})
+	// Verify structure includes polymorphic data at top level
+	polymorphics, ok := unmarshaled["polymorphic"].([]interface{})
 	if !ok || len(polymorphics) == 0 {
-		t.Fatal("Polymorphic relations not found in controller")
+		t.Fatal("Polymorphic relations not found at top level")
 	}
 
-	// Verify polymorphic structure
+	// Verify polymorphic structure matches plan.md schema
 	polyRelation := polymorphics[0].(map[string]interface{})
-	if polyRelation["relation"] != "commentable" {
-		t.Errorf("Expected relation 'commentable', got %v", polyRelation["relation"])
+	if polyRelation["parent"] == nil {
+		t.Error("Expected 'parent' field in polymorphic relation")
 	}
-	if polyRelation["type"] != "morphTo" {
-		t.Errorf("Expected type 'morphTo', got %v", polyRelation["type"])
+	
+	// Verify morph structure
+	morph, ok := polyRelation["morph"].(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected 'morph' field in polymorphic relation")
+	}
+	if morph["key"] == nil {
+		t.Error("Expected 'key' field in morph")
 	}
 
 	// Verify discriminator structure
@@ -134,16 +99,15 @@ func TestPolymorphicIntegrationEndToEnd(t *testing.T) {
 		t.Errorf("Expected propertyName 'commentable_type', got %v", discriminator["propertyName"])
 	}
 
-	// Verify models section
+	// Verify models section (models no longer have polymorphic fields directly)
 	models, ok := unmarshaled["models"].([]interface{})
 	if !ok || len(models) == 0 {
 		t.Fatal("Models not found in JSON output")
 	}
 
 	model := models[0].(map[string]interface{})
-	modelPolymorphics, ok := model["polymorphic"].([]interface{})
-	if !ok || len(modelPolymorphics) == 0 {
-		t.Fatal("Polymorphic relations not found in model")
+	if model["fqcn"] == nil {
+		t.Error("Expected 'fqcn' field in model")
 	}
 
 	// Verify global polymorphic section

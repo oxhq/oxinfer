@@ -293,6 +293,7 @@ type PipelineOrchestrator interface {
 
 	// Resource management
 	SetProgressCallback(callback func(*PipelineProgress))
+	ClearCaches() // Clear all internal caches and reset state
 	Close() error
 }
 
@@ -334,6 +335,27 @@ func NewComponentRegistry() *ComponentRegistry {
 		MatcherConfig:   matchers.DefaultMatcherConfig(),
 		InferenceConfig: infer.DefaultInferenceConfig(),
 	}
+}
+
+// ClearCaches clears all component caches and resets state.
+func (r *ComponentRegistry) ClearCaches() {
+	// Clear PSR-4 resolver cache if it has one
+	// PSR4Resolver interface would need to define this method
+	
+	// Clear parser caches if available
+	// PHPParser interface would need to define this method
+	
+	// Clear pattern matcher caches if available
+	// CompositePatternMatcher interface would need to define this method
+	
+	// For now, we'll reset component references to force re-initialization
+	// This is a safe approach that ensures clean state
+	r.PSR4Resolver = nil
+	r.FileIndexer = nil
+	r.PHPParser = nil
+	r.PatternMatcher = nil
+	r.ShapeInferencer = nil
+	r.DeltaEmitter = nil
 }
 
 // Close releases all component resources.

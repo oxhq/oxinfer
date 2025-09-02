@@ -644,7 +644,7 @@ func generatePolymorphic(i int) emitter.Polymorphic {
 		Morph: emitter.MorphInfo{
 			Key:        fmt.Sprintf("morphable%d", i),
 			TypeColumn: fmt.Sprintf("morphable%d_type", i),
-			IDColumn:   fmt.Sprintf("morphable%d_id", i),
+			IdColumn:   fmt.Sprintf("morphable%d_id", i),
 		},
 		Discriminator: emitter.Discriminator{
 			PropertyName: "type",

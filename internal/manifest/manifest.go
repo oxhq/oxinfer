@@ -1,5 +1,9 @@
 package manifest
 
+import (
+	"encoding/json"
+)
+
 // Manifest represents the structure of the manifest configuration file
 // according to the JSON schema specification in plan.md section 10
 type Manifest struct {
@@ -47,3 +51,11 @@ type FeatureConfig struct {
 	Polymorphic       *bool `json:"polymorphic,omitempty"`
 	BroadcastChannels *bool `json:"broadcast_channels,omitempty"`
 }
+
+// ToJSON serializes the manifest to JSON bytes.
+func (m *Manifest) ToJSON() ([]byte, error) {
+	return json.MarshalIndent(m, "", "  ")
+}
+
+// Backward compatibility type alias for legacy code
+type Features = FeatureConfig

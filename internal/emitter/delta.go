@@ -171,15 +171,14 @@ func NewMetaStatsFromProcessingStats(processingStats interface{}) MetaStats {
 	return meta
 }
 
-// Controller represents a Laravel controller class with its methods and detected patterns.
+// Controller represents a Laravel controller method with its detected patterns.
 type Controller struct {
-	FQCN        string                `json:"fqcn"`
-	Method      string                `json:"method"`
-	HTTP        *HTTPInfo             `json:"http,omitempty"`
-	Request     *RequestInfo          `json:"request,omitempty"`
-	Resources   []Resource            `json:"resources,omitempty"`
-	ScopesUsed  []ScopeUsed           `json:"scopesUsed,omitempty"`
-	Polymorphic []PolymorphicRelation `json:"polymorphic,omitempty"`
+	FQCN        string        `json:"fqcn"`
+	Method      string        `json:"method"`
+	HTTP        *HTTPInfo     `json:"http,omitempty"`
+	Request     *RequestInfo  `json:"request,omitempty"`
+	Resources   []Resource    `json:"resources,omitempty"`
+	ScopesUsed  []ScopeUsed   `json:"scopesUsed,omitempty"`
 }
 
 // HTTPInfo captures HTTP-related metadata for controller methods.
@@ -281,7 +280,6 @@ type Model struct {
 	FQCN        string                `json:"fqcn"`
 	WithPivot   []PivotInfo           `json:"withPivot,omitempty"`
 	Attributes  []Attribute           `json:"attributes,omitempty"`
-	Polymorphic []PolymorphicRelation `json:"polymorphic,omitempty"`
 }
 
 // PivotInfo describes pivot table configurations in many-to-many relationships.
@@ -332,7 +330,7 @@ type Polymorphic struct {
 type MorphInfo struct {
 	Key        string `json:"key"`
 	TypeColumn string `json:"typeColumn"`
-	IDColumn   string `json:"idColumn"`
+	IdColumn   string `json:"idColumn"`
 }
 
 // Discriminator provides type mapping for polymorphic relationships.
@@ -345,7 +343,7 @@ type Discriminator struct {
 type Broadcast struct {
 	File           *string  `json:"file,omitempty"`
 	Channel        string   `json:"channel"`
-	Params         []string `json:"params,omitempty"`
+	Params         []string `json:"params"`
 	Visibility     string   `json:"visibility"`
 	PayloadLiteral *bool    `json:"payloadLiteral,omitempty"`
 }

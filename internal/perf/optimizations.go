@@ -336,7 +336,7 @@ func (pool *OptimizedWorkerPool) submitToPriorityQueue(queue chan WorkItem, item
 	select {
 	case workerQueue <- item:
 		atomic.AddInt64(&pool.loadBalancer.workerLoads[leastLoadedWorker], 1)
-		atomic.AddInt64(&pool.metrics.TotalProcessed, 1)
+		// Note: TotalProcessed is incremented on completion, not submission
 		return nil
 	case <-time.After(10 * time.Millisecond):
 		// Worker queue full, try global queue
@@ -395,6 +395,7 @@ func (worker *PerformantWorker) processWorkItem(item WorkItem) {
 	
 	// Update metrics
 	atomic.AddInt64(&worker.processedCount, 1)
+	atomic.AddInt64(&worker.pool.metrics.TotalProcessed, 1) // Increment on completion
 	if err != nil {
 		atomic.AddInt64(&worker.errorCount, 1)
 		atomic.AddInt64(&worker.pool.metrics.TotalFailed, 1)

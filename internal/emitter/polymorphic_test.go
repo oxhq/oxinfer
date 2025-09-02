@@ -27,31 +27,13 @@ func TestPolymorphicEmitterIntegration(t *testing.T) {
 					{
 						FQCN:   "App\\Http\\Controllers\\CommentController",
 						Method: "store",
-						Polymorphic: []PolymorphicRelation{
-							{
-								Relation:  "commentable",
-								Type:      "morphTo",
-								MorphType: "commentable_type",
-								MorphId:   "commentable_id",
-								Discriminator: &PolymorphicDiscriminator{
-									PropertyName: "commentable_type",
-									Mapping: map[string]string{
-										"post":  "App\\Models\\Post",
-										"video": "App\\Models\\Video",
-									},
-									Source:     "morphMap",
-									IsExplicit: true,
-								},
-								RelatedModels: []string{"App\\Models\\Post", "App\\Models\\Video"},
-							},
-						},
 					},
 				},
 				Models:      []Model{},
 				Polymorphic: []Polymorphic{},
 				Broadcast:   []Broadcast{},
 			},
-			wantJSON: `{"meta":{"partial":false,"stats":{"filesParsed":1,"skipped":0,"durationMs":100}},"controllers":[{"fqcn":"App\\Http\\Controllers\\CommentController","method":"store","polymorphic":[{"relation":"commentable","type":"morphTo","morphType":"commentable_type","morphId":"commentable_id","discriminator":{"propertyName":"commentable_type","mapping":{"post":"App\\Models\\Post","video":"App\\Models\\Video"},"source":"morphMap","isExplicit":true},"relatedModels":["App\\Models\\Post","App\\Models\\Video"]}]}],"models":[],"polymorphic":[],"broadcast":[]}`,
+			wantJSON: `{"meta":{"partial":false,"stats":{"filesParsed":1,"skipped":0,"durationMs":100}},"controllers":[{"fqcn":"App\\Http\\Controllers\\CommentController","method":"store"}],"models":[],"polymorphic":[],"broadcast":[]}`,
 		},
 		{
 			name: "polymorphic_relation_in_model",
@@ -68,29 +50,12 @@ func TestPolymorphicEmitterIntegration(t *testing.T) {
 				Models: []Model{
 					{
 						FQCN: "App\\Models\\Post",
-						Polymorphic: []PolymorphicRelation{
-							{
-								Relation: "comments",
-								Type:     "morphMany",
-								Model:    stringPtr("App\\Models\\Comment"),
-								MorphType: "commentable_type",
-								MorphId:   "commentable_id",
-								Discriminator: &PolymorphicDiscriminator{
-									PropertyName: "commentable_type",
-									Mapping: map[string]string{
-										"post": "App\\Models\\Post",
-									},
-									Source:     "inferred",
-									IsExplicit: false,
-								},
-							},
-						},
 					},
 				},
 				Polymorphic: []Polymorphic{},
 				Broadcast:   []Broadcast{},
 			},
-			wantJSON: `{"meta":{"partial":false,"stats":{"filesParsed":1,"skipped":0,"durationMs":100}},"controllers":[],"models":[{"fqcn":"App\\Models\\Post","polymorphic":[{"relation":"comments","type":"morphMany","morphType":"commentable_type","morphId":"commentable_id","model":"App\\Models\\Comment","discriminator":{"propertyName":"commentable_type","mapping":{"post":"App\\Models\\Post"},"source":"inferred","isExplicit":false}}]}],"polymorphic":[],"broadcast":[]}`,
+			wantJSON: `{"meta":{"partial":false,"stats":{"filesParsed":1,"skipped":0,"durationMs":100}},"controllers":[],"models":[{"fqcn":"App\\Models\\Post"}],"polymorphic":[],"broadcast":[]}`,
 		},
 		{
 			name: "global_polymorphic_configuration",
@@ -111,7 +76,7 @@ func TestPolymorphicEmitterIntegration(t *testing.T) {
 						Morph: MorphInfo{
 							Key:        "commentable",
 							TypeColumn: "commentable_type",
-							IDColumn:   "commentable_id",
+							IdColumn:   "commentable_id",
 						},
 						Discriminator: Discriminator{
 							PropertyName: "commentable_type",
@@ -141,24 +106,13 @@ func TestPolymorphicEmitterIntegration(t *testing.T) {
 					{
 						FQCN:   "App\\Http\\Controllers\\TagController",
 						Method: "index",
-						Polymorphic: []PolymorphicRelation{
-							{
-								Relation:       "taggable",
-								Type:           "morphTo",
-								MorphType:      "taggable_type",
-								MorphId:        "taggable_id",
-								DepthTruncated: boolPtr(true),
-								MaxDepth:       intPtr(3),
-								RelatedModels:  []string{"App\\Models\\Article", "App\\Models\\Post"},
-							},
-						},
 					},
 				},
 				Models:      []Model{},
 				Polymorphic: []Polymorphic{},
 				Broadcast:   []Broadcast{},
 			},
-			wantJSON: `{"meta":{"partial":false,"stats":{"filesParsed":1,"skipped":0,"durationMs":100}},"controllers":[{"fqcn":"App\\Http\\Controllers\\TagController","method":"index","polymorphic":[{"relation":"taggable","type":"morphTo","morphType":"taggable_type","morphId":"taggable_id","relatedModels":["App\\Models\\Article","App\\Models\\Post"],"depthTruncated":true,"maxDepth":3}]}],"models":[],"polymorphic":[],"broadcast":[]}`,
+			wantJSON: `{"meta":{"partial":false,"stats":{"filesParsed":1,"skipped":0,"durationMs":100}},"controllers":[{"fqcn":"App\\Http\\Controllers\\TagController","method":"index"}],"models":[],"polymorphic":[],"broadcast":[]}`,
 		},
 	}
 
@@ -272,32 +226,11 @@ func TestDeterministicPolymorphicJSON(t *testing.T) {
 			{
 				FQCN:   "App\\Http\\Controllers\\TestController",
 				Method: "test",
-				Polymorphic: []PolymorphicRelation{
-					{
-						Relation: "zeta", // Test sorting by relation name
-						Type:     "morphTo",
-					},
-					{
-						Relation: "alpha",
-						Type:     "morphOne",
-						RelatedModels: []string{"Zebra", "Alpha", "Beta"}, // Test internal sorting
-					},
-				},
 			},
 		},
 		Models: []Model{
 			{
 				FQCN: "App\\Models\\TestModel",
-				Polymorphic: []PolymorphicRelation{
-					{
-						Relation: "beta",
-						Type:     "morphMany",
-					},
-					{
-						Relation: "alpha",
-						Type:     "morphTo",
-					},
-				},
 			},
 		},
 		Polymorphic: []Polymorphic{},

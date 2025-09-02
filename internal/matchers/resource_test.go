@@ -407,15 +407,10 @@ func TestResourceMatcher_ImportResolution(t *testing.T) {
 			phpContent: `<?php
 namespace App\Http\Controllers;
 use App\Http\Resources\UserResource;
-use App\Http\Resources\PostResource as Posts;
 use Illuminate\Http\Request;
 class TestController extends Controller {
     public function users() {
         return UserResource::collection($users);
-    }
-    
-    public function posts() {
-        return Posts::collection($posts);
     }
 }`,
             expectedClass: "UserResource",

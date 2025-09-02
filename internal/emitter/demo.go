@@ -69,7 +69,7 @@ func DemoComplexDelta() error {
 				},
 				Request: &RequestInfo{
 					ContentTypes: []string{"application/json"},
-                Body:         NewOrderedObjectFromMap(map[string]interface{}{"name": map[string]interface{}{}, "email": map[string]interface{}{}}),
+					Body:         NewOrderedObjectFromMap(map[string]interface{}{"name": map[string]interface{}{}, "email": map[string]interface{}{}}),
 				},
 				Resources: []Resource{
 					{Class: "UserResource", Collection: false},
