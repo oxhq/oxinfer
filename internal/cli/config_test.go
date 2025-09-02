@@ -519,3 +519,185 @@ func TestParseFlagsErrorMessages(t *testing.T) {
 		t.Errorf("ParseFlags() error message should mention flag parsing, got: %s", errStr)
 	}
 }
+
+func TestCLIConfig_GetCacheDir(t *testing.T) {
+	// Get current working directory for absolute path comparisons
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current working directory: %v", err)
+	}
+
+	tests := []struct {
+		name        string
+		config      *CLIConfig
+		projectRoot string
+		envVar      string
+		want        string
+		wantAbs     bool // whether result should be absolute path
+	}{
+		{
+			name:        "flag takes priority over env and default",
+			config:      &CLIConfig{CacheDir: "/flag/cache/dir"},
+			projectRoot: "/project/root",
+			envVar:      "/env/cache/dir",
+			want:        "/flag/cache/dir",
+			wantAbs:     true,
+		},
+		{
+			name:        "flag with relative path converted to absolute",
+			config:      &CLIConfig{CacheDir: "relative/cache"},
+			projectRoot: "/project/root",
+			envVar:      "",
+			want:        filepath.Join(cwd, "relative/cache"),
+			wantAbs:     true,
+		},
+		{
+			name:        "env var takes priority over default when flag empty",
+			config:      &CLIConfig{CacheDir: ""},
+			projectRoot: "/project/root",
+			envVar:      "/env/cache/dir",
+			want:        "/env/cache/dir",
+			wantAbs:     true,
+		},
+		{
+			name:        "env var with relative path converted to absolute",
+			config:      &CLIConfig{CacheDir: ""},
+			projectRoot: "/project/root",
+			envVar:      "relative/env/cache",
+			want:        filepath.Join(cwd, "relative/env/cache"),
+			wantAbs:     true,
+		},
+		{
+			name:        "default path when flag and env empty",
+			config:      &CLIConfig{CacheDir: ""},
+			projectRoot: "/project/root",
+			envVar:      "",
+			want:        "/project/root/.oxinfer/cache/v1",
+			wantAbs:     true,
+		},
+		{
+			name:        "default path with relative project root",
+			config:      &CLIConfig{CacheDir: ""},
+			projectRoot: "relative/project",
+			envVar:      "",
+			want:        filepath.Join(cwd, "relative/project/.oxinfer/cache/v1"),
+			wantAbs:     true,
+		},
+		{
+			name:        "empty project root uses current dir",
+			config:      &CLIConfig{CacheDir: ""},
+			projectRoot: "",
+			envVar:      "",
+			want:        filepath.Join(cwd, ".oxinfer/cache/v1"),
+			wantAbs:     true,
+		},
+		{
+			name:        "flag priority with all three options set",
+			config:      &CLIConfig{CacheDir: "/priority/flag"},
+			projectRoot: "/some/project",
+			envVar:      "/env/fallback",
+			want:        "/priority/flag",
+			wantAbs:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up environment variable for this test
+			oldEnv := os.Getenv("OXINFER_CACHE_DIR")
+			if tt.envVar != "" {
+				err := os.Setenv("OXINFER_CACHE_DIR", tt.envVar)
+				if err != nil {
+					t.Fatalf("failed to set environment variable: %v", err)
+				}
+			} else {
+				err := os.Unsetenv("OXINFER_CACHE_DIR")
+				if err != nil {
+					t.Fatalf("failed to unset environment variable: %v", err)
+				}
+			}
+			// Restore environment variable after test
+			defer func() {
+				if oldEnv != "" {
+					os.Setenv("OXINFER_CACHE_DIR", oldEnv)
+				} else {
+					os.Unsetenv("OXINFER_CACHE_DIR")
+				}
+			}()
+
+			got := tt.config.GetCacheDir(tt.projectRoot)
+
+			if got != tt.want {
+				t.Errorf("GetCacheDir() = %v, want %v", got, tt.want)
+			}
+
+			// Verify absolute path requirement
+			if tt.wantAbs && !filepath.IsAbs(got) {
+				t.Errorf("GetCacheDir() returned relative path %v, expected absolute", got)
+			}
+		})
+	}
+}
+
+func TestCLIConfig_GetCacheDir_EnvironmentVariablePrecedence(t *testing.T) {
+	tests := []struct {
+		name     string
+		flag     string
+		envVar   string
+		expected string
+	}{
+		{
+			name:     "flag overrides environment",
+			flag:     "/flag/path",
+			envVar:   "/env/path",
+			expected: "/flag/path",
+		},
+		{
+			name:     "environment used when flag empty",
+			flag:     "",
+			envVar:   "/env/path",
+			expected: "/env/path",
+		},
+		{
+			name:     "default used when both empty",
+			flag:     "",
+			envVar:   "",
+			expected: "", // will be tested separately since it's project-root dependent
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up environment
+			oldEnv := os.Getenv("OXINFER_CACHE_DIR")
+			defer func() {
+				if oldEnv != "" {
+					os.Setenv("OXINFER_CACHE_DIR", oldEnv)
+				} else {
+					os.Unsetenv("OXINFER_CACHE_DIR")
+				}
+			}()
+
+			if tt.envVar != "" {
+				os.Setenv("OXINFER_CACHE_DIR", tt.envVar)
+			} else {
+				os.Unsetenv("OXINFER_CACHE_DIR")
+			}
+
+			config := &CLIConfig{CacheDir: tt.flag}
+			got := config.GetCacheDir("/test/project")
+
+			if tt.expected != "" && got != tt.expected {
+				t.Errorf("GetCacheDir() = %v, want %v", got, tt.expected)
+			}
+
+			// For default case, verify it follows the expected pattern
+			if tt.expected == "" {
+				expectedDefault := "/test/project/.oxinfer/cache/v1"
+				if got != expectedDefault {
+					t.Errorf("GetCacheDir() default = %v, want %v", got, expectedDefault)
+				}
+			}
+		})
+	}
+}
