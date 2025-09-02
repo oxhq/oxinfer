@@ -743,3 +743,362 @@ func BenchmarkCacheConcurrent(b *testing.B) {
 		}
 	})
 }
+
+// Test project key computation
+func TestComputeProjectKey(t *testing.T) {
+	// Create temporary project structure
+	tempDir := t.TempDir()
+	composerPath := "composer.json"
+	composerFile := filepath.Join(tempDir, composerPath)
+	composerLockFile := filepath.Join(tempDir, "composer.lock")
+
+	// Test with empty inputs
+	_, err := ComputeProjectKey("", composerPath)
+	if err == nil {
+		t.Error("Expected error for empty project root")
+	}
+
+	_, err = ComputeProjectKey(tempDir, "")
+	if err == nil {
+		t.Error("Expected error for empty composer path")
+	}
+
+	// Test with missing composer.json
+	_, err = ComputeProjectKey(tempDir, composerPath)
+	if err == nil {
+		t.Error("Expected error for missing composer.json")
+	}
+
+	// Create composer.json
+	composerContent := `{"name": "test/project", "version": "1.0.0"}`
+	if err := os.WriteFile(composerFile, []byte(composerContent), 0644); err != nil {
+		t.Fatalf("Failed to create composer.json: %v", err)
+	}
+
+	// Test with composer.json only
+	key1, err := ComputeProjectKey(tempDir, composerPath)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	if len(key1) != 16 {
+		t.Errorf("Expected key length 16, got %d", len(key1))
+	}
+
+	// Create composer.lock
+	lockContent := `{"_readme": ["This file locks the dependencies"]}`
+	if err := os.WriteFile(composerLockFile, []byte(lockContent), 0644); err != nil {
+		t.Fatalf("Failed to create composer.lock: %v", err)
+	}
+
+	// Test with both composer.json and composer.lock
+	key2, err := ComputeProjectKey(tempDir, composerPath)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	if len(key2) != 16 {
+		t.Errorf("Expected key length 16, got %d", len(key2))
+	}
+
+	// Keys should be different when composer.lock is added
+	if key1 == key2 {
+		t.Error("Expected different keys when composer.lock is added")
+	}
+
+	// Test deterministic behavior
+	key3, err := ComputeProjectKey(tempDir, composerPath)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	if key2 != key3 {
+		t.Error("Expected deterministic key generation")
+	}
+}
+
+// Test cache with persistence
+func TestFileCacheWithPersistence(t *testing.T) {
+	// Create temporary cache directory
+	cacheDir := t.TempDir()
+	projectKey := "test1234567890ab"
+
+	config := &manifest.CacheConfig{
+		Kind: &[]string{CacheModeModTime}[0],
+	}
+
+	// Create cache with persistence
+	cache, err := NewFileCacheWithDir(config, cacheDir, projectKey)
+	if err != nil {
+		t.Fatalf("Failed to create cache with dir: %v", err)
+	}
+
+	if cache.cacheDir != cacheDir {
+		t.Errorf("Expected cacheDir %s, got %s", cacheDir, cache.cacheDir)
+	}
+	if cache.projectKey != projectKey {
+		t.Errorf("Expected projectKey %s, got %s", projectKey, cache.projectKey)
+	}
+
+	// Verify cache directory structure is created
+	projectKeyPath := filepath.Join(cacheDir, "project.key")
+	if _, err := os.Stat(projectKeyPath); err != nil {
+		t.Errorf("Project key file not created: %v", err)
+	}
+
+	// Verify project key content
+	storedKey, err := os.ReadFile(projectKeyPath)
+	if err != nil {
+		t.Errorf("Failed to read project key: %v", err)
+	}
+	if string(storedKey) != projectKey {
+		t.Errorf("Expected stored key %s, got %s", projectKey, string(storedKey))
+	}
+}
+
+// Test cache persistence round-trip
+func TestCachePersistenceRoundTrip(t *testing.T) {
+	cacheDir := t.TempDir()
+	projectKey := "test1234567890ab"
+
+	config := &manifest.CacheConfig{
+		Kind: &[]string{CacheModeSHA256MTime}[0],
+	}
+
+	// Create temporary files
+	tempFile1 := createTempFile(t, "test1.php", "content1")
+	tempFile2 := createTempFile(t, "test2.php", "content2")
+	defer os.Remove(tempFile1)
+	defer os.Remove(tempFile2)
+
+	stat1, _ := os.Stat(tempFile1)
+	stat2, _ := os.Stat(tempFile2)
+
+	// Create first cache instance
+	cache1, err := NewFileCacheWithDir(config, cacheDir, projectKey)
+	if err != nil {
+		t.Fatalf("Failed to create first cache: %v", err)
+	}
+
+	// Add cache entries
+	entry1 := &CacheEntry{
+		Path:        tempFile1,
+		Hash:        calculateSHA256(t, tempFile1),
+		Size:        stat1.Size(),
+		ModTime:     stat1.ModTime(),
+		ProcessedAt: time.Now(),
+		Valid:       true,
+	}
+	entry2 := &CacheEntry{
+		Path:        tempFile2,
+		Hash:        calculateSHA256(t, tempFile2),
+		Size:        stat2.Size(),
+		ModTime:     stat2.ModTime(),
+		ProcessedAt: time.Now(),
+		Valid:       true,
+	}
+
+	if err := cache1.SetCacheEntry(tempFile1, entry1); err != nil {
+		t.Errorf("Failed to set entry1: %v", err)
+	}
+	if err := cache1.SetCacheEntry(tempFile2, entry2); err != nil {
+		t.Errorf("Failed to set entry2: %v", err)
+	}
+
+	// Save to disk explicitly
+	if err := cache1.saveToDisk(); err != nil {
+		t.Errorf("Failed to save to disk: %v", err)
+	}
+
+	// Create second cache instance (should load from disk)
+	cache2, err := NewFileCacheWithDir(config, cacheDir, projectKey)
+	if err != nil {
+		t.Fatalf("Failed to create second cache: %v", err)
+	}
+
+	// Verify entries were loaded
+	if len(cache2.cache) != 2 {
+		t.Errorf("Expected 2 loaded entries, got %d", len(cache2.cache))
+	}
+
+	// Verify first entry
+	loaded1, err := cache2.GetCacheEntry(tempFile1)
+	if err != nil {
+		t.Errorf("Failed to get entry1 from loaded cache: %v", err)
+	} else if loaded1 == nil {
+		t.Error("Entry1 not found in loaded cache")
+	} else {
+		if loaded1.Path != entry1.Path {
+			t.Errorf("Path mismatch: expected %s, got %s", entry1.Path, loaded1.Path)
+		}
+		if loaded1.Hash != entry1.Hash {
+			t.Errorf("Hash mismatch: expected %s, got %s", entry1.Hash, loaded1.Hash)
+		}
+		if loaded1.Size != entry1.Size {
+			t.Errorf("Size mismatch: expected %d, got %d", entry1.Size, loaded1.Size)
+		}
+	}
+}
+
+// Test project key validation
+func TestProjectKeyValidation(t *testing.T) {
+	cacheDir := t.TempDir()
+	projectKey1 := "test1234567890ab"
+	projectKey2 := "different12345abc"
+
+	config := &manifest.CacheConfig{
+		Kind: &[]string{CacheModeModTime}[0],
+	}
+
+	// Create cache with first project key
+	cache1, err := NewFileCacheWithDir(config, cacheDir, projectKey1)
+	if err != nil {
+		t.Fatalf("Failed to create first cache: %v", err)
+	}
+
+	// Add an entry and save
+	tempFile := createTempFile(t, "test.php", "content")
+	defer os.Remove(tempFile)
+
+	stat, _ := os.Stat(tempFile)
+	entry := &CacheEntry{
+		Path:        tempFile,
+		Size:        stat.Size(),
+		ModTime:     stat.ModTime(),
+		ProcessedAt: time.Now(),
+		Valid:       true,
+	}
+
+	cache1.SetCacheEntry(tempFile, entry)
+	cache1.saveToDisk()
+
+	// Create cache with different project key (should reinitialize)
+	cache2, err := NewFileCacheWithDir(config, cacheDir, projectKey2)
+	if err != nil {
+		t.Fatalf("Failed to create second cache: %v", err)
+	}
+
+	// Cache should be empty due to project key mismatch
+	if len(cache2.cache) != 0 {
+		t.Errorf("Expected empty cache after project key change, got %d entries", len(cache2.cache))
+	}
+
+	// Verify project key was updated
+	projectKeyPath := filepath.Join(cacheDir, "project.key")
+	storedKey, err := os.ReadFile(projectKeyPath)
+	if err != nil {
+		t.Errorf("Failed to read project key: %v", err)
+	}
+	if string(storedKey) != projectKey2 {
+		t.Errorf("Expected updated key %s, got %s", projectKey2, string(storedKey))
+	}
+}
+
+// Test mtime+size optimization
+func TestMTimeSizeOptimization(t *testing.T) {
+	config := &manifest.CacheConfig{
+		Kind: &[]string{CacheModeSHA256MTime}[0],
+	}
+	cache := NewFileCache(config)
+
+	// Create a temporary file
+	content := "test content for optimization"
+	tempFile := createTempFile(t, "test.php", content)
+	defer os.Remove(tempFile)
+
+	stat, err := os.Stat(tempFile)
+	if err != nil {
+		t.Fatalf("Failed to stat temp file: %v", err)
+	}
+
+	hash := calculateSHA256(t, tempFile)
+
+	// Create cache entry with hash
+	entry := &CacheEntry{
+		Path:        tempFile,
+		Hash:        hash,
+		Size:        stat.Size(),
+		ModTime:     stat.ModTime(),
+		ProcessedAt: time.Now(),
+		Valid:       true,
+	}
+
+	cache.SetCacheEntry(tempFile, entry)
+
+	// First validation should use optimization (no hash calculation)
+	valid, err := cache.validateEntry(entry)
+	if err != nil {
+		t.Errorf("Unexpected validation error: %v", err)
+	}
+	if !valid {
+		t.Error("Entry should be valid with mtime+size optimization")
+	}
+
+	// Modify file size but preserve mtime (edge case)
+	modTime := stat.ModTime()
+	newContent := content + " modified"
+	err = os.WriteFile(tempFile, []byte(newContent), 0644)
+	if err != nil {
+		t.Fatalf("Failed to modify temp file: %v", err)
+	}
+	err = os.Chtimes(tempFile, modTime, modTime)
+	if err != nil {
+		t.Fatalf("Failed to restore mtime: %v", err)
+	}
+
+	// Should detect size change and validate properly
+	valid, err = cache.validateEntry(entry)
+	if err != nil {
+		t.Errorf("Unexpected validation error: %v", err)
+	}
+	if valid {
+		t.Error("Entry should be invalid after size change")
+	}
+}
+
+// Test CreateCacheEntry with size population
+func TestCreateCacheEntryWithSize(t *testing.T) {
+	// Create temporary file
+	content := "test content"
+	tempFile := createTempFile(t, "test.php", content)
+	defer os.Remove(tempFile)
+
+	stat, err := os.Stat(tempFile)
+	if err != nil {
+		t.Fatalf("Failed to stat temp file: %v", err)
+	}
+
+	fileInfo := FileInfo{
+		Path:        tempFile,
+		AbsPath:     tempFile,
+		ModTime:     stat.ModTime(),
+		Size:        stat.Size(),
+		IsDirectory: false,
+	}
+
+	// Test mtime mode
+	entry, err := CreateCacheEntry(tempFile, fileInfo, CacheModeModTime)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	if entry.Size != stat.Size() {
+		t.Errorf("Expected size %d, got %d", stat.Size(), entry.Size)
+	}
+	if entry.Hash != "" {
+		t.Error("Expected empty hash for mtime mode")
+	}
+
+	// Test sha256+mtime mode
+	entry, err = CreateCacheEntry(tempFile, fileInfo, CacheModeSHA256MTime)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	if entry.Size != stat.Size() {
+		t.Errorf("Expected size %d, got %d", stat.Size(), entry.Size)
+	}
+	if entry.Hash == "" {
+		t.Error("Expected hash for sha256+mtime mode")
+	}
+
+	expectedHash := calculateSHA256(t, tempFile)
+	if entry.Hash != expectedHash {
+		t.Errorf("Expected hash %s, got %s", expectedHash, entry.Hash)
+	}
+}

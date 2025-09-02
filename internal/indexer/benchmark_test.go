@@ -1,4 +1,4 @@
-// Package indexer provides comprehensive performance benchmarks for Sprint 3 validation.
+// Package indexer provides comprehensive performance benchmarks for indexer validation.
 // This file contains end-to-end benchmarks, component performance tests, and real-world
 // Laravel project simulation to validate against performance targets.
 package indexer

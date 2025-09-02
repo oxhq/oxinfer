@@ -1,13 +1,15 @@
 package indexer
 
 import (
-	"context"
-	"fmt"
-	"sort"
-	"sync"
-	"time"
+    "context"
+    "fmt"
+    "sort"
+    "sync"
+    "time"
 
-	"github.com/garaekz/oxinfer/internal/manifest"
+    "github.com/garaekz/oxinfer/internal/manifest"
+    "path/filepath"
+    "strings"
 )
 
 // DefaultFileIndexer implements the FileIndexer interface
@@ -56,7 +58,7 @@ func (p *SimpleFileProcessor) ProcessFile(ctx context.Context, file FileInfo) (*
 		}
 	}
 	
-	// Simulate processing (in Sprint 4, this will be PHP parsing)
+	// Simulate processing (this will be replaced with PHP parsing)
 	// For now, just validate the file exists and is accessible
 	result := &ProcessResult{
 		File:       file,
@@ -82,9 +84,14 @@ func (p *SimpleFileProcessor) ProcessFile(ctx context.Context, file FileInfo) (*
 
 // NewDefaultFileIndexer creates a new DefaultFileIndexer instance
 func NewDefaultFileIndexer() *DefaultFileIndexer {
+	// Initialize with sensible defaults to prevent nil pointer dereferences
+	maxFiles, maxWorkers, maxDepth := ApplyDefaultLimits(nil, nil, nil)
+	
 	return &DefaultFileIndexer{
-		discoverer: NewFileDiscoverer(),
-		// cacher and workerPool will be set during LoadFromManifest
+		discoverer:      NewFileDiscoverer(),
+		limitsEnforcer:  NewLimitsEnforcer(maxFiles, maxWorkers, maxDepth),
+		workerPool:      NewWorkerPoolManager(),
+		// cacher will be set during LoadFromManifest if cache is enabled
 		stats: IndexStats{
 			LastRun: time.Now(),
 		},
@@ -125,15 +132,16 @@ func (dfi *DefaultFileIndexer) LoadFromManifest(manifest *manifest.Manifest) err
 	}
 	
 	// Configure indexer
-	dfi.config = IndexConfig{
-		Targets:      manifest.Scan.Targets,
-		Globs:        getGlobsWithDefaults(manifest.Scan.Globs),
-		BaseDir:      manifest.Project.Root,
-		MaxWorkers:   maxWorkers,
-		MaxFiles:     maxFiles,
-		CacheEnabled: isCacheEnabled(manifest.Cache),
-		CacheKind:    getCacheKind(manifest.Cache),
-	}
+dfi.config = IndexConfig{
+    Targets:      manifest.Scan.Targets,
+    Globs:        getGlobsWithDefaults(manifest.Scan.Globs),
+    BaseDir:      manifest.Project.Root,
+    MaxWorkers:   maxWorkers,
+    MaxFiles:     maxFiles,
+    CacheEnabled: isCacheEnabled(manifest.Cache),
+    CacheKind:    getCacheKind(manifest.Cache),
+    VendorWhitelist: manifest.Scan.VendorWhitelist,
+}
 	
 	// Initialize limits enforcer
 	dfi.limitsEnforcer = NewLimitsEnforcer(maxFiles, maxWorkers, maxDepth)
@@ -178,11 +186,14 @@ func (dfi *DefaultFileIndexer) IndexFiles(ctx context.Context, config IndexConfi
 	// Update progress to discovering phase
 	dfi.updateProgress("discovering", "")
 	
-	// Phase 1: Discover files
-	files, err := dfi.discoverer.DiscoverFiles(ctx, indexConfig.Targets, indexConfig.Globs, indexConfig.BaseDir)
-	if err != nil {
-		return nil, fmt.Errorf("file discovery failed: %w", err)
-	}
+    // Phase 1: Discover files
+    files, err := dfi.discoverer.DiscoverFiles(ctx, indexConfig.Targets, indexConfig.Globs, indexConfig.BaseDir)
+    if err != nil {
+        return nil, fmt.Errorf("file discovery failed: %w", err)
+    }
+
+    // Apply vendor whitelist filtering: denylist vendor/** except whitelisted paths
+    files = dfi.filterVendorFiles(files)
 	
 	// Update progress with discovered files
 	dfi.updateProgress("enforcing-limits", "")
@@ -204,7 +215,13 @@ func (dfi *DefaultFileIndexer) IndexFiles(ctx context.Context, config IndexConfi
 	dfi.updateProgress("processing", "")
 	
 	processor := &SimpleFileProcessor{cacher: dfi.cacher}
-	workerCount := dfi.limitsEnforcer.EnforceWorkerLimit(indexConfig.MaxWorkers)
+	var workerCount int
+	if dfi.limitsEnforcer != nil {
+		workerCount = dfi.limitsEnforcer.EnforceWorkerLimit(indexConfig.MaxWorkers)
+	} else {
+		// Fallback to config value if limitsEnforcer is somehow nil
+		workerCount = indexConfig.MaxWorkers
+	}
 	
 	// Process files concurrently
 	err = dfi.workerPool.ProcessFiles(ctx, limitedFiles, workerCount, processor)
@@ -229,6 +246,70 @@ func (dfi *DefaultFileIndexer) IndexFiles(ctx context.Context, config IndexConfi
 	dfi.updateStats(result)
 	
 	return result, nil
+}
+
+// filterVendorFiles enforces vendor whitelist rules: all vendor paths are denied unless
+// explicitly whitelisted via IndexConfig.VendorWhitelist. Whitelist entries are treated
+// as relative to BaseDir; if they don't start with "vendor/", that prefix is added.
+func (dfi *DefaultFileIndexer) filterVendorFiles(files []FileInfo) []FileInfo {
+    dfi.mu.RLock()
+    baseDir := dfi.config.BaseDir
+    whitelist := dfi.config.VendorWhitelist
+    dfi.mu.RUnlock()
+
+    if len(whitelist) == 0 {
+        // No whitelist: denylist vendor entirely
+        out := make([]FileInfo, 0, len(files))
+        for _, f := range files {
+            // Use forward slashes check for vendor segment
+            p := filepath.ToSlash(f.Path)
+            if !strings.Contains(p, "/vendor/") && !strings.HasPrefix(p, "vendor/") {
+                out = append(out, f)
+            }
+        }
+        return out
+    }
+
+    // Build absolute, normalized whitelist prefixes
+    var prefixes []string
+    for _, w := range whitelist {
+        entry := w
+        if entry == "" {
+            continue
+        }
+        entry = filepath.ToSlash(entry)
+        if !strings.HasPrefix(entry, "vendor/") && !strings.HasPrefix(entry, "vendor\\") {
+            entry = filepath.ToSlash(filepath.Join("vendor", entry))
+        }
+        abs := filepath.Clean(filepath.Join(baseDir, entry))
+        if resolved, err := filepath.EvalSymlinks(abs); err == nil && resolved != "" {
+            abs = resolved
+        }
+        prefixes = append(prefixes, filepath.ToSlash(abs))
+    }
+
+    out := make([]FileInfo, 0, len(files))
+    for _, f := range files {
+        rel := filepath.ToSlash(f.Path)
+        if strings.Contains(rel, "/vendor/") || strings.HasPrefix(rel, "vendor/") {
+            // Allow only if AbsPath has whitelisted prefix
+            abs := filepath.ToSlash(f.AbsPath)
+            allowed := false
+            for _, pref := range prefixes {
+                if strings.HasPrefix(abs, pref) {
+                    allowed = true
+                    break
+                }
+            }
+            if allowed {
+                out = append(out, f)
+            }
+            continue
+        }
+        out = append(out, f)
+    }
+
+    return out
 }
 
 // RefreshIndex invalidates caches and re-indexes all files

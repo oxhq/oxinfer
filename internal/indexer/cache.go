@@ -3,11 +3,14 @@ package indexer
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash"
 	"io"
 	"os"
+	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -22,11 +25,14 @@ const (
 )
 
 var (
-	ErrCacheNotFound   = errors.New("cache entry not found")
-	ErrCacheInvalid    = errors.New("cache entry is invalid")
-	ErrInvalidCacheKey = errors.New("invalid cache key")
-	ErrFileNotFound    = errors.New("file not found")
-	ErrCacheFull       = errors.New("cache is full")
+	ErrCacheNotFound       = errors.New("cache entry not found")
+	ErrCacheInvalid        = errors.New("cache entry is invalid")
+	ErrInvalidCacheKey     = errors.New("invalid cache key")
+	ErrFileNotFound        = errors.New("file not found")
+	ErrCacheFull           = errors.New("cache is full")
+	ErrProjectKeyMismatch  = errors.New("project key mismatch")
+	ErrCacheDirNotFound    = errors.New("cache directory not found")
+	ErrPersistenceFailed   = errors.New("cache persistence failed")
 )
 
 // CacheError wraps cache-related errors with additional context
@@ -62,16 +68,19 @@ type lruNode struct {
 
 // FileCacheImpl implements the FileCacher interface with configurable validation modes
 type FileCacheImpl struct {
-	cache     map[string]*lruNode // Cache storage mapped to LRU nodes
-	config    *manifest.CacheConfig
-	stats     CacheStats
-	mutex     sync.RWMutex
-	hasher    hash.Hash // Reusable SHA256 hasher
-	maxSize   int
-	head      *lruNode // LRU list head (most recently used)
-	tail      *lruNode // LRU list tail (least recently used)
-	hitCount  int64
-	missCount int64
+	cache       map[string]*lruNode // Cache storage mapped to LRU nodes
+	config      *manifest.CacheConfig
+	stats       CacheStats
+	mutex       sync.RWMutex
+	hasher      hash.Hash // Reusable SHA256 hasher
+	maxSize     int
+	head        *lruNode // LRU list head (most recently used)
+	tail        *lruNode // LRU list tail (least recently used)
+	hitCount    int64
+	missCount   int64
+	cacheDir    string   // Directory for on-disk cache persistence
+	projectKey  string   // Project key for cache validation
+	persistLoad bool     // Flag to track if persistence has been loaded
 }
 
 // NewFileCache creates a new FileCacheImpl with the provided configuration
@@ -95,6 +104,100 @@ func NewFileCache(config *manifest.CacheConfig) *FileCacheImpl {
 	cache.tail.prev = cache.head
 	
 	return cache
+}
+
+// NewFileCacheWithDir creates a new FileCacheImpl with cache directory support
+// It automatically loads existing cache entries from disk if available
+func NewFileCacheWithDir(config *manifest.CacheConfig, cacheDir, projectKey string) (*FileCacheImpl, error) {
+	maxSize := DefaultCacheSize
+	
+	cache := &FileCacheImpl{
+		cache:      make(map[string]*lruNode),
+		config:     config,
+		hasher:     sha256.New(),
+		maxSize:    maxSize,
+		cacheDir:   cacheDir,
+		projectKey: projectKey,
+		stats: CacheStats{
+			LastCleanup: time.Now(),
+		},
+	}
+	
+	// Initialize LRU list with dummy head and tail nodes
+	cache.head = &lruNode{}
+	cache.tail = &lruNode{}
+	cache.head.next = cache.tail
+	cache.tail.prev = cache.head
+	
+	// Load from disk if cache directory exists
+	if cacheDir != "" {
+		if err := cache.loadFromDisk(); err != nil {
+			// Log error but don't fail construction - cache can work without persistence
+			// In production, you might want to log this error
+		}
+		cache.persistLoad = true // Mark as loaded to enable persistence
+	}
+	
+	return cache, nil
+}
+
+// ComputeProjectKey computes a unique project key based on composer.json, composer.lock, and project root
+func ComputeProjectKey(projectRoot, composerPath string) (string, error) {
+	if projectRoot == "" {
+		return "", fmt.Errorf("project root cannot be empty")
+	}
+	if composerPath == "" {
+		return "", fmt.Errorf("composer path cannot be empty")
+	}
+
+	hasher := sha256.New()
+
+	// Hash the resolved project root path
+	absRoot, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return "", fmt.Errorf("resolve project root: %w", err)
+	}
+	hasher.Write([]byte(absRoot))
+
+	// Hash composer.json content
+	absComposerPath := filepath.Join(absRoot, composerPath)
+	composerData, err := os.ReadFile(absComposerPath)
+	if err != nil {
+		return "", fmt.Errorf("read composer.json: %w", err)
+	}
+	hasher.Write(composerData)
+
+	// Hash composer.lock content if it exists
+	composerLockPath := filepath.Join(filepath.Dir(absComposerPath), "composer.lock")
+	if lockData, err := os.ReadFile(composerLockPath); err == nil {
+		hasher.Write(lockData)
+	}
+	// Note: We don't fail if composer.lock doesn't exist
+
+	// Return first 16 characters of hex-encoded hash
+	hash := hex.EncodeToString(hasher.Sum(nil))
+	if len(hash) < 16 {
+		return "", fmt.Errorf("hash too short: %d", len(hash))
+	}
+	return hash[:16], nil
+}
+
+// CacheIndex represents the on-disk cache index metadata
+type CacheIndex struct {
+	ProjectKey   string            `json:"project_key"`
+	CreatedAt    time.Time         `json:"created_at"`
+	LastModified time.Time         `json:"last_modified"`
+	Entries      map[string]string `json:"entries"` // path -> filename mapping
+}
+
+// DiskCacheEntry represents a single cache entry stored on disk
+type DiskCacheEntry struct {
+	Path        string    `json:"path"`
+	Hash        string    `json:"hash"`
+	Size        int64     `json:"size"`
+	ModTime     time.Time `json:"mod_time"`
+	ProcessedAt time.Time `json:"processed_at"`
+	Valid       bool      `json:"valid"`
 }
 
 // GetCacheEntry retrieves a cache entry for the specified file path
@@ -169,6 +272,18 @@ func (c *FileCacheImpl) SetCacheEntry(path string, entry *CacheEntry) error {
 	}
 	c.cache[path] = node
 	c.addToFront(node)
+
+	// Trigger persistence if cache directory is configured
+	if c.cacheDir != "" {
+		// Note: In a production system, you might want to batch persistence operations
+		// or use a background goroutine to avoid blocking the main thread
+		go func() {
+			if err := c.saveToDisk(); err != nil {
+				// Log error but don't fail the cache operation
+				// In production, you might want to log this error
+			}
+		}()
+	}
 
 	return nil
 }
@@ -246,6 +361,198 @@ func (c *FileCacheImpl) GetCacheStats() CacheStats {
 	}
 }
 
+// loadFromDisk loads cache entries from disk storage
+func (c *FileCacheImpl) loadFromDisk() error {
+	if c.cacheDir == "" {
+		return nil // No cache directory configured
+	}
+
+	// Check if project key is valid
+	if !c.validateProjectKey() {
+		// Project key mismatch, clear cache and create new structure
+		return c.initializeCacheDir()
+	}
+
+	// Load index file
+	indexPath := filepath.Join(c.cacheDir, "index.json")
+	indexData, err := os.ReadFile(indexPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// No index file, initialize cache directory
+			return c.initializeCacheDir()
+		}
+		return NewCacheError("loadFromDisk", indexPath, fmt.Errorf("read index: %w", err))
+	}
+
+	var index CacheIndex
+	if err := json.Unmarshal(indexData, &index); err != nil {
+		return NewCacheError("loadFromDisk", indexPath, fmt.Errorf("unmarshal index: %w", err))
+	}
+
+	// Verify project key matches
+	if index.ProjectKey != c.projectKey {
+		// Project changed, reinitialize
+		return c.initializeCacheDir()
+	}
+
+	// Load individual cache entries
+	filesDir := filepath.Join(c.cacheDir, "files")
+	for path, filename := range index.Entries {
+		entryPath := filepath.Join(filesDir, filename)
+		entryData, err := os.ReadFile(entryPath)
+		if err != nil {
+			continue // Skip corrupted entries
+		}
+
+		var diskEntry DiskCacheEntry
+		if err := json.Unmarshal(entryData, &diskEntry); err != nil {
+			continue // Skip corrupted entries
+		}
+
+		// Convert to in-memory cache entry
+		cacheEntry := &CacheEntry{
+			Path:        diskEntry.Path,
+			Hash:        diskEntry.Hash,
+			Size:        diskEntry.Size,
+			ModTime:     diskEntry.ModTime,
+			ProcessedAt: diskEntry.ProcessedAt,
+			Valid:       diskEntry.Valid,
+		}
+
+		// Add to in-memory cache (without triggering disk save)
+		node := &lruNode{
+			key:   path,
+			entry: cacheEntry,
+		}
+		c.cache[path] = node
+		c.addToFront(node)
+	}
+
+	c.persistLoad = true
+	return nil
+}
+
+// saveToDisk persists cache entries to disk storage
+func (c *FileCacheImpl) saveToDisk() error {
+	if c.cacheDir == "" {
+		return nil // No cache directory configured
+	}
+
+	// Ensure cache directory structure exists
+	if err := c.initializeCacheDir(); err != nil {
+		return fmt.Errorf("initialize cache dir: %w", err)
+	}
+
+	// Create files directory
+	filesDir := filepath.Join(c.cacheDir, "files")
+	if err := os.MkdirAll(filesDir, 0755); err != nil {
+		return NewCacheError("saveToDisk", filesDir, fmt.Errorf("create files dir: %w", err))
+	}
+
+	// Build index and save individual entries
+	index := CacheIndex{
+		ProjectKey:   c.projectKey,
+		CreatedAt:    time.Now(),
+		LastModified: time.Now(),
+		Entries:      make(map[string]string),
+	}
+
+	// Sort paths for deterministic output
+	var paths []string
+	for path := range c.cache {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+
+	for _, path := range paths {
+		node := c.cache[path]
+		if node == nil || node.entry == nil {
+			continue
+		}
+
+		// Generate filename from hash of path
+		hasher := sha256.New()
+		hasher.Write([]byte(path))
+		filename := hex.EncodeToString(hasher.Sum(nil))[:16] + ".json"
+
+		// Convert to disk format
+		diskEntry := DiskCacheEntry{
+			Path:        node.entry.Path,
+			Hash:        node.entry.Hash,
+			Size:        node.entry.Size,
+			ModTime:     node.entry.ModTime,
+			ProcessedAt: node.entry.ProcessedAt,
+			Valid:       node.entry.Valid,
+		}
+
+		// Serialize and write entry
+		entryData, err := json.MarshalIndent(diskEntry, "", "  ")
+		if err != nil {
+			continue // Skip entries that can't be serialized
+		}
+
+		entryPath := filepath.Join(filesDir, filename)
+		if err := os.WriteFile(entryPath, entryData, 0644); err != nil {
+			continue // Skip entries that can't be written
+		}
+
+		index.Entries[path] = filename
+	}
+
+	// Write index file
+	indexData, err := json.MarshalIndent(index, "", "  ")
+	if err != nil {
+		return NewCacheError("saveToDisk", c.cacheDir, fmt.Errorf("marshal index: %w", err))
+	}
+
+	indexPath := filepath.Join(c.cacheDir, "index.json")
+	if err := os.WriteFile(indexPath, indexData, 0644); err != nil {
+		return NewCacheError("saveToDisk", indexPath, fmt.Errorf("write index: %w", err))
+	}
+
+	return nil
+}
+
+// validateProjectKey checks if the cached project key matches the current project
+func (c *FileCacheImpl) validateProjectKey() bool {
+	if c.cacheDir == "" || c.projectKey == "" {
+		return false
+	}
+
+	keyPath := filepath.Join(c.cacheDir, "project.key")
+	cachedKey, err := os.ReadFile(keyPath)
+	if err != nil {
+		return false
+	}
+
+	return string(cachedKey) == c.projectKey
+}
+
+// initializeCacheDir creates the cache directory structure and writes the project key
+func (c *FileCacheImpl) initializeCacheDir() error {
+	if c.cacheDir == "" {
+		return nil
+	}
+
+	// Create cache directory
+	if err := os.MkdirAll(c.cacheDir, 0755); err != nil {
+		return NewCacheError("initializeCacheDir", c.cacheDir, fmt.Errorf("create cache dir: %w", err))
+	}
+
+	// Write project key
+	keyPath := filepath.Join(c.cacheDir, "project.key")
+	if err := os.WriteFile(keyPath, []byte(c.projectKey), 0644); err != nil {
+		return NewCacheError("initializeCacheDir", keyPath, fmt.Errorf("write project key: %w", err))
+	}
+
+	return nil
+}
+
+// SaveToDiskSync saves cache to disk synchronously (for testing)
+func (c *FileCacheImpl) SaveToDiskSync() error {
+	return c.saveToDisk()
+}
+
 // validateEntry checks if a cache entry is still valid based on the cache mode
 func (c *FileCacheImpl) validateEntry(entry *CacheEntry) (bool, error) {
 	if c.config == nil {
@@ -262,13 +569,31 @@ func (c *FileCacheImpl) validateEntry(entry *CacheEntry) (bool, error) {
 	}
 
 	currentModTime := stat.ModTime()
+	currentSize := stat.Size()
 
-	// Check modification time first (both modes use this)
+	// OPTIMIZATION: Check mtime + size first for quick validation
+	// If both match, we can skip hash calculation in sha256+mtime mode
+	if currentModTime.Equal(entry.ModTime) && currentSize == entry.Size {
+		// For mtime-only mode, this is sufficient validation
+		if c.getCacheKind() == CacheModeModTime {
+			return true, nil
+		}
+
+		// For sha256+mtime mode, mtime+size match allows us to skip hash calculation
+		// This is a safe optimization because if both mtime and size are unchanged,
+		// the content is very likely unchanged as well
+		if c.getCacheKind() == CacheModeSHA256MTime && entry.Hash != "" {
+			return true, nil
+		}
+	}
+
+	// If mtime or size changed, fall back to traditional validation
 	if !currentModTime.Equal(entry.ModTime) {
 		return false, nil
 	}
 
-	// For sha256+mtime mode, also validate file hash
+	// For sha256+mtime mode, validate file hash when mtime matches but size differs
+	// or when hash is missing (backward compatibility)
 	if c.getCacheKind() == CacheModeSHA256MTime {
 		if entry.Hash == "" {
 			return false, nil // No hash stored, invalid
@@ -352,6 +677,7 @@ func CreateCacheEntry(path string, fileInfo FileInfo, cacheKind string) (*CacheE
 	entry := &CacheEntry{
 		Path:        path,
 		ModTime:     fileInfo.ModTime,
+		Size:        fileInfo.Size, // Populate size field for optimization
 		ProcessedAt: time.Now(),
 		Valid:       true,
 	}

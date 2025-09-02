@@ -106,17 +106,20 @@ type FileInfo struct {
 
 // CacheEntry represents a cached file entry with validation metadata.
 type CacheEntry struct {
-	// Path is the file path this cache entry represents
-	Path string
+    // Path is the file path this cache entry represents
+    Path string
 
-	// Hash is the SHA256 hash when kind=sha256+mtime, empty when kind=mtime
-	Hash string
+    // Hash is the SHA256 hash when kind=sha256+mtime, empty when kind=mtime
+    Hash string
 
-	// ModTime is the file modification time when cached
-	ModTime time.Time
+    // Size is the file size in bytes when cached
+    Size int64
 
-	// ProcessedAt is when this entry was last processed
-	ProcessedAt time.Time
+    // ModTime is the file modification time when cached
+    ModTime time.Time
+
+    // ProcessedAt is when this entry was last processed
+    ProcessedAt time.Time
 
 	// Valid indicates if this cache entry is still valid
 	Valid bool
@@ -157,8 +160,11 @@ type IndexConfig struct {
 	// CacheEnabled indicates if caching should be used
 	CacheEnabled bool
 
-	// CacheKind specifies the cache validation mode ("sha256+mtime" or "mtime")
-	CacheKind string
+    // CacheKind specifies the cache validation mode ("sha256+mtime" or "mtime")
+    CacheKind string
+
+    // VendorWhitelist lists allowed vendor subpaths (relative to project root)
+    VendorWhitelist []string
 }
 
 // IndexResult contains the complete results of a file indexing operation.
