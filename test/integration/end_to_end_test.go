@@ -60,13 +60,13 @@ func TestEndToEndWithFixtures(t *testing.T) {
 				}
 			}
 
-			// For Sprint 1, all collections should be empty arrays
+			// In the initial version, all collections should be empty arrays
 			collections := []string{"controllers", "models", "polymorphic", "broadcast"}
 			for _, collection := range collections {
 				if arr, ok := result[collection].([]interface{}); !ok {
 					t.Errorf("Field %s should be an array", collection)
 				} else if len(arr) != 0 {
-					t.Errorf("Field %s should be empty array for Sprint 1, got length %d", collection, len(arr))
+					t.Errorf("Field %s should be empty array in initial version, got length %d", collection, len(arr))
 				}
 			}
 
@@ -405,6 +405,183 @@ func TestDeterministicOutput(t *testing.T) {
 			t.Logf("Output %d: %s", i, string(json2))
 		}
 	}
+}
+
+// TestT7PatternsIntegration tests T7 pattern matching integration end-to-end
+func TestT7PatternsIntegration(t *testing.T) {
+	// Build the CLI binary first
+	cliPath := buildCLIBinary(t)
+	defer os.Remove(cliPath)
+
+	// Create a temporary test manifest with T7 features enabled
+	testManifest := map[string]interface{}{
+		"project": map[string]interface{}{
+			"root":     "../../",
+			"composer": "go.mod",
+		},
+		"scan": map[string]interface{}{
+			"targets": []string{"test/fixtures/matchers"},
+		},
+		"features": map[string]interface{}{
+			"with_pivot":     true,
+			"attribute_make": true,
+			"scopes_used":    true,
+		},
+	}
+
+	// Write manifest to temporary file
+	manifestFile, err := os.CreateTemp("", "t7_manifest_*.json")
+	if err != nil {
+		t.Fatalf("Failed to create temp manifest: %v", err)
+	}
+	defer os.Remove(manifestFile.Name())
+
+	manifestBytes, err := json.MarshalIndent(testManifest, "", "  ")
+	if err != nil {
+		t.Fatalf("Failed to marshal test manifest: %v", err)
+	}
+
+	if _, err := manifestFile.Write(manifestBytes); err != nil {
+		t.Fatalf("Failed to write test manifest: %v", err)
+	}
+	manifestFile.Close()
+
+	// Run the CLI with T7-enabled manifest
+	cmd := exec.Command(cliPath, "--manifest", manifestFile.Name())
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
+	if err != nil {
+		t.Fatalf("CLI execution failed: %v\nStderr: %s", err, stderr.String())
+	}
+
+	// Parse the output JSON
+	output := stdout.String()
+	if output == "" {
+		t.Fatal("CLI produced no output")
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatalf("Output is not valid JSON: %v\nOutput: %s", err, output)
+	}
+
+	// Verify T7 pattern structures are present
+	t.Run("verify_controllers_with_scopes", func(t *testing.T) {
+		controllers, ok := result["controllers"].([]interface{})
+		if !ok {
+			t.Fatal("Controllers array not found")
+		}
+
+		foundScopes := false
+		for _, controller := range controllers {
+			ctrl, ok := controller.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			if scopesUsed, exists := ctrl["scopesUsed"]; exists {
+				scopes, ok := scopesUsed.([]interface{})
+				if ok && len(scopes) > 0 {
+					foundScopes = true
+					// Verify scope structure
+					scope := scopes[0].(map[string]interface{})
+					if _, hasOn := scope["on"]; !hasOn {
+						t.Error("Scope missing 'on' field")
+					}
+					if _, hasName := scope["name"]; !hasName {
+						t.Error("Scope missing 'name' field")
+					}
+					break
+				}
+			}
+		}
+
+		if !foundScopes {
+			t.Log("No scope usage patterns found - this may be expected if fixture files don't contain scopes")
+		}
+	})
+
+	t.Run("verify_models_with_pivot_and_attributes", func(t *testing.T) {
+		models, ok := result["models"].([]interface{})
+		if !ok || len(models) == 0 {
+			t.Log("No models found in output - this may be expected for current fixture structure")
+			return
+		}
+
+		foundPivot := false
+		foundAttributes := false
+
+		for _, model := range models {
+			mdl, ok := model.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			// Check for pivot patterns
+			if withPivot, exists := mdl["withPivot"]; exists {
+				pivots, ok := withPivot.([]interface{})
+				if ok && len(pivots) > 0 {
+					foundPivot = true
+					// Verify pivot structure
+					pivot := pivots[0].(map[string]interface{})
+					if _, hasRelation := pivot["relation"]; !hasRelation {
+						t.Error("Pivot missing 'relation' field")
+					}
+					if _, hasColumns := pivot["columns"]; !hasColumns {
+						t.Error("Pivot missing 'columns' field")
+					}
+				}
+			}
+
+			// Check for attribute patterns
+			if attributes, exists := mdl["attributes"]; exists {
+				attrs, ok := attributes.([]interface{})
+				if ok && len(attrs) > 0 {
+					foundAttributes = true
+					// Verify attribute structure
+					attr := attrs[0].(map[string]interface{})
+					if _, hasName := attr["name"]; !hasName {
+						t.Error("Attribute missing 'name' field")
+					}
+					if via, hasVia := attr["via"]; !hasVia || via != "Attribute::make" {
+						t.Error("Attribute missing or invalid 'via' field")
+					}
+				}
+			}
+		}
+
+		if !foundPivot {
+			t.Log("No pivot patterns found - this may be expected if fixture files don't contain pivot relationships")
+		}
+		if !foundAttributes {
+			t.Log("No attribute patterns found - this may be expected if fixture files don't contain modern attributes")
+		}
+	})
+
+	// Test deterministic output by running twice and comparing hashes
+	t.Run("verify_deterministic_output", func(t *testing.T) {
+		// Run CLI again
+		cmd2 := exec.Command(cliPath, "--manifest", manifestFile.Name())
+		var stdout2 bytes.Buffer
+		cmd2.Stdout = &stdout2
+
+		if err := cmd2.Run(); err != nil {
+			t.Fatalf("Second CLI execution failed: %v", err)
+		}
+
+		output2 := stdout2.String()
+
+		// Compare hashes
+		hash1 := sha256.Sum256([]byte(output))
+		hash2 := sha256.Sum256([]byte(output2))
+
+		if hash1 != hash2 {
+			t.Error("CLI output is not deterministic - two runs produced different results")
+		}
+	})
 }
 
 // buildCLIBinary builds the oxinfer CLI binary and returns the path

@@ -55,7 +55,7 @@ func TestManifestProcessingPerformance(t *testing.T) {
 			Enabled: boolPtr(true),
 			Kind:    stringPtr("sha256+mtime"),
 		},
-		// Features removed for Sprint 1 - only manifest validation required
+		// Features deferred for initial version - only manifest validation required
 	}
 
 	// Create validator
