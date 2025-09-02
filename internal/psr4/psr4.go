@@ -1,11 +1,11 @@
 package psr4
 
 import (
-	"context"
-	"fmt"
-	"path/filepath"
-	"sort"
-	"sync"
+    "context"
+    "fmt"
+    "path/filepath"
+    "sort"
+    "sync"
 
 	"github.com/garaekz/oxinfer/internal/manifest"
 )
@@ -72,13 +72,15 @@ func NewPSR4Resolver(config *ResolverConfig) (*DefaultPSR4Resolver, error) {
 		config.CacheSize = 1000
 	}
 	
-	// Initialize components
-	composerLoader := NewComposerLoader()
-	
-	pathResolver, err := NewPathResolver(config.ProjectRoot)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create path resolver: %w", err)
-	}
+    // Initialize components
+    composerLoader := NewComposerLoader()
+
+    // Resolve base directory relative to composer.json
+    composerBase := filepath.Dir(filepath.Join(config.ProjectRoot, config.ComposerPath))
+    pathResolver, err := NewPathResolver(composerBase)
+    if err != nil {
+        return nil, fmt.Errorf("failed to create path resolver: %w", err)
+    }
 	
 	var cache *PSR4Cache
 	if config.CacheEnabled {
@@ -166,11 +168,11 @@ func (r *DefaultPSR4Resolver) ResolveClass(ctx context.Context, fqcn string) (st
 		return "", NewClassNotMappableError(fqcn)
 	}
 	
-	// Step 2: Resolve paths against filesystem
-	resolvedPath, err := r.pathResolver.ResolvePath(ctx, candidates, r.config.ProjectRoot)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve class %s: %w", fqcn, err)
-	}
+    // Step 2: Resolve paths against filesystem using resolver's base dir (composer dir)
+    resolvedPath, err := r.pathResolver.ResolvePath(ctx, candidates, "")
+    if err != nil {
+        return "", fmt.Errorf("failed to resolve class %s: %w", fqcn, err)
+    }
 	
 	// Cache the successful resolution
 	if r.cache != nil {
@@ -301,9 +303,9 @@ func (r *DefaultPSR4Resolver) loadComposerData() error {
 // discoverClassesInMapping discovers all classes within a specific namespace mapping.
 // This is a simplified implementation that would be expanded for full file scanning.
 func (r *DefaultPSR4Resolver) discoverClassesInMapping(ctx context.Context, mapping NamespaceMapping) (map[string]string, error) {
-	// For Sprint 2, we only support mapping resolution, not file discovery
+	// Currently we only support mapping resolution, not file discovery
 	// This method returns an empty map as full directory scanning is not implemented
-	// In future sprints, this would recursively scan directories and parse PHP files
+	// In future implementations, this would recursively scan directories and parse PHP files
 	return make(map[string]string), nil
 }
 

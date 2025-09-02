@@ -3,9 +3,8 @@
 // This package implements composer.json parsing, FQCN to file path mapping,
 // and filesystem resolution following the PSR-4 autoloading specification.
 //
-// Interface contracts are frozen for Sprint 2 and must not be modified
-// during implementation. Any interface changes require architect approval
-// and sprint restart.
+// Interface contracts are stable and should not be modified without
+// careful consideration of backward compatibility and system integration.
 package psr4
 
 import "context"

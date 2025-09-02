@@ -365,8 +365,16 @@ func TestPSR4Resolver_ResolveClass(t *testing.T) {
 				return
 			}
 			
-			if gotPath != tt.wantPath {
-				t.Errorf("ResolveClass() = %v, want %v", gotPath, tt.wantPath)
+			// Resolve expected path symlinks for comparison (handles macOS /private differences)
+			expectedResolved := tt.wantPath
+			if tt.wantPath != "" {
+				if resolved, err := filepath.EvalSymlinks(tt.wantPath); err == nil {
+					expectedResolved = resolved
+				}
+			}
+			
+			if gotPath != expectedResolved {
+				t.Errorf("ResolveClass() = %v, want %v", gotPath, expectedResolved)
 			}
 			
 			// Verify the resolved file actually exists
@@ -437,7 +445,7 @@ func TestPSR4Resolver_GetAllClasses(t *testing.T) {
 		t.Fatalf("GetAllClasses() failed: %v", err)
 	}
 	
-	// For Sprint 2, the implementation returns empty map as file discovery is not yet implemented
+	// The implementation returns empty map as file discovery is not yet implemented
 	// This test verifies the method works without error
 	if classes == nil {
 		t.Error("GetAllClasses() returned nil map")
@@ -673,8 +681,15 @@ class HomeController {}`,
 			}
 			
 			expectedPath := filepath.Join(tempDir, tt.wantFile)
-			if resolvedPath != expectedPath {
-				t.Errorf("ResolveClass(%s) = %s, want %s", tt.fqcn, resolvedPath, expectedPath)
+			
+			// Resolve expected path symlinks for comparison (handles macOS /private differences)
+			expectedResolved, err := filepath.EvalSymlinks(expectedPath)
+			if err != nil {
+				expectedResolved = expectedPath // fallback to original if can't resolve
+			}
+			
+			if resolvedPath != expectedResolved {
+				t.Errorf("ResolveClass(%s) = %s, want %s", tt.fqcn, resolvedPath, expectedResolved)
 			}
 		})
 	}

@@ -583,11 +583,11 @@ func generateComplexLaravelClasses(count, numNamespaces int) []string {
 
 // ===== VALIDATION BENCHMARKS =====
 
-// BenchmarkValidation_SprintTargets validates Sprint 2 performance targets
-func BenchmarkValidation_SprintTargets(b *testing.B) {
+// BenchmarkValidation_PerformanceTargets validates PSR-4 resolver performance targets
+func BenchmarkValidation_PerformanceTargets(b *testing.B) {
 	resolver := setupBenchmarkResolver(b)
 	
-	// Sprint 2 performance targets from plan.md:
+	// PSR-4 resolver performance targets:
 	// - Medium project (200-600 PHP files): <10s cold/full, <2s incremental with cache
 	// - Stable memory usage; no catastrophic spikes
 	

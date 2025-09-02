@@ -8,11 +8,12 @@ import (
 type ExitCode int
 
 const (
-	ExitOK          ExitCode = 0 // Success  
-	ExitValidation  ExitCode = 1 // Input validation error
-	ExitInternal    ExitCode = 2 // Internal processing error
-	ExitSchema      ExitCode = 3 // Schema load/validation failure
-	ExitLimit       ExitCode = 4 // Hard limit exceeded
+    ExitOK          ExitCode = 0 // Success  
+    ExitValidation  ExitCode = 1 // Input validation error
+    ExitInternal    ExitCode = 2 // Internal processing error
+    ExitSchema      ExitCode = 3 // Schema load/validation failure
+    ExitLimit       ExitCode = 4 // Hard limit exceeded
+    ExitOwnership   ExitCode = 5 // Ownership violation (reserved)
 )
 
 // Aliases for backward compatibility with tests
@@ -25,20 +26,22 @@ const (
 
 // String returns the human-readable description of the exit code
 func (e ExitCode) String() string {
-	switch e {
-	case ExitOK:
-		return "success"
-	case ExitValidation:
-		return "input validation error"
-	case ExitInternal:
-		return "internal processing error"
-	case ExitSchema:
-		return "schema load/validation failure"
-	case ExitLimit:
-		return "hard limit exceeded"
-	default:
-		return fmt.Sprintf("unknown exit code %d", int(e))
-	}
+    switch e {
+    case ExitOK:
+        return "success"
+    case ExitValidation:
+        return "input validation error"
+    case ExitInternal:
+        return "internal processing error"
+    case ExitSchema:
+        return "schema load/validation failure"
+    case ExitLimit:
+        return "hard limit exceeded"
+    case ExitOwnership:
+        return "ownership violation"
+    default:
+        return fmt.Sprintf("unknown exit code %d", int(e))
+    }
 }
 
 // CLIError represents an error that occurred during CLI execution
