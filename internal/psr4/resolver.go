@@ -22,11 +22,19 @@ type pathResolver struct {
 // The baseDir parameter should be the absolute path to the project root
 // containing composer.json.
 func NewPathResolver(baseDir string) (PathResolver, error) {
-	// Normalize and validate base directory
-	absBaseDir, err := filepath.Abs(baseDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve absolute path for base directory %s: %w", baseDir, err)
-	}
+    // Normalize and validate base directory
+    absBaseDir, err := filepath.Abs(baseDir)
+    if err != nil {
+        return nil, fmt.Errorf("failed to resolve absolute path for base directory %s: %w", baseDir, err)
+    }
+    
+    // Resolve symlinks for deterministic paths
+    resolvedBaseDir, err := filepath.EvalSymlinks(absBaseDir)
+    if err != nil {
+        return nil, fmt.Errorf("failed to resolve symlinks for base directory %s: %w", absBaseDir, err)
+    }
+    absBaseDir = resolvedBaseDir
+
 	
 	// Verify base directory exists
 	if info, err := os.Stat(absBaseDir); err != nil {
@@ -50,16 +58,28 @@ func (r *pathResolver) ResolvePath(ctx context.Context, candidates []string, bas
 		resolveBaseDir = r.baseDir
 	}
 	
-	// Normalize base directory
-	absBaseDir, err := filepath.Abs(resolveBaseDir)
-	if err != nil {
-		return "", &ResolutionError{
-			Candidates: candidates,
-			BaseDir:    resolveBaseDir,
-			Message:    fmt.Sprintf("failed to resolve absolute path for base directory %s", resolveBaseDir),
-			Cause:      err,
-		}
-	}
+    // Normalize base directory
+    absBaseDir, err := filepath.Abs(resolveBaseDir)
+    if err != nil {
+        return "", &ResolutionError{
+            Candidates: candidates,
+            BaseDir:    resolveBaseDir,
+            Message:    fmt.Sprintf("failed to resolve absolute path for base directory %s", resolveBaseDir),
+            Cause:      err,
+        }
+    }
+    
+    // Resolve symlinks for deterministic paths
+    resolvedBaseDir, err := filepath.EvalSymlinks(absBaseDir)
+    if err != nil {
+        return "", &ResolutionError{
+            Candidates: candidates,
+            BaseDir:    absBaseDir,
+            Message:    fmt.Sprintf("failed to resolve symlinks for base directory %s", absBaseDir),
+            Cause:      err,
+        }
+    }
+    absBaseDir = resolvedBaseDir
 	
 	if len(candidates) == 0 {
 		return "", &ResolutionError{
