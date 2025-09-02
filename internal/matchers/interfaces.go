@@ -104,6 +104,31 @@ type ScopeMatch struct {
 	Context    string        `json:"context,omitempty"`  // Usage context (model, query, etc.)
 }
 
+// PolymorphicMatch represents detected Laravel polymorphic relationship patterns.
+type PolymorphicMatch struct {
+	Relation         string                         `json:"relation"`                   // Relationship method name
+	Type             string                         `json:"type"`                       // Polymorphic type (morphTo, morphOne, morphMany)
+	MorphType        string                         `json:"morphType,omitempty"`        // Morph type column (e.g., 'imageable_type')
+	MorphId          string                         `json:"morphId,omitempty"`          // Morph ID column (e.g., 'imageable_id')
+	Model            string                         `json:"model,omitempty"`            // Target model class for morphOne/morphMany
+	Discriminator    *PolymorphicDiscriminator      `json:"discriminator,omitempty"`    // Discriminator mapping information
+	DepthTruncated   bool                           `json:"depthTruncated"`             // True if max depth reached
+	MaxDepth         int                            `json:"maxDepth,omitempty"`         // Maximum traversal depth configured
+	Pattern          string                         `json:"pattern"`                    // Pattern type that matched
+	Method           string                         `json:"method"`                     // Method name (morphTo, morphOne, etc.)
+	Context          string                         `json:"context,omitempty"`          // Context (model, relationship, etc.)
+	RelatedModels    []string                       `json:"relatedModels,omitempty"`    // Models that can be related through this polymorphic relationship
+}
+
+// PolymorphicDiscriminator contains discriminator mapping information for polymorphic relationships.
+type PolymorphicDiscriminator struct {
+	PropertyName string            `json:"propertyName"`           // Discriminator property name (usually morph type column)
+	Mapping      map[string]string `json:"mapping"`                // Type mappings (type value -> model class)
+	Source       string            `json:"source"`                 // Source of mapping (morphMap, explicit, inferred)
+	IsExplicit   bool              `json:"isExplicit"`             // Whether mapping is explicitly defined
+	DefaultType  string            `json:"defaultType,omitempty"`  // Default type if no mapping matches
+}
+
 // LaravelPatterns aggregates all detected Laravel patterns for a single file.
 type LaravelPatterns struct {
 	FilePath      string                `json:"filePath"`
@@ -114,6 +139,7 @@ type LaravelPatterns struct {
 	Pivots        []*PivotMatch         `json:"pivots,omitempty"`
 	Attributes    []*AttributeMatch     `json:"attributes,omitempty"`
 	Scopes        []*ScopeMatch         `json:"scopes,omitempty"`
+	Polymorphics  []*PolymorphicMatch   `json:"polymorphics,omitempty"`
 	ProcessedAt   int64                 `json:"processedAt"`
 	ProcessingMs  int64                 `json:"processingMs"`
 }
@@ -184,6 +210,20 @@ type ScopeMatcher interface {
 	MatchScopes(ctx context.Context, tree *parser.SyntaxTree, filePath string) ([]*ScopeMatch, error)
 }
 
+// PolymorphicMatcher defines specialized interface for Laravel polymorphic relationship detection.
+type PolymorphicMatcher interface {
+	PatternMatcher
+	
+	// MatchPolymorphic finds Laravel polymorphic relationship patterns
+	MatchPolymorphic(ctx context.Context, tree *parser.SyntaxTree, filePath string) ([]*PolymorphicMatch, error)
+	
+	// SetMaxDepth configures the maximum relationship traversal depth
+	SetMaxDepth(maxDepth int)
+	
+	// GetMaxDepth returns the current maximum traversal depth
+	GetMaxDepth() int
+}
+
 // CompositePatternMatcher orchestrates multiple pattern matchers.
 type CompositePatternMatcher interface {
 	// AddMatcher registers a new pattern matcher
@@ -245,6 +285,12 @@ type MatcherConfig struct {
 	EnableAttributeMatching bool `json:"enableAttributeMatching"`
 	EnableScopeMatching     bool `json:"enableScopeMatching"`
 	
+	// Feature flags - T8 patterns
+	EnablePolymorphicMatching bool `json:"enablePolymorphicMatching"`
+	
+	// Polymorphic relationship settings
+	MaxRelationshipDepth int `json:"maxRelationshipDepth"`
+	
 	// Behavior control
 	StrictExplicitOnly       bool `json:"strictExplicitOnly"`
 	ResolveImportedClasses   bool `json:"resolveImportedClasses"`
@@ -254,17 +300,19 @@ type MatcherConfig struct {
 // DefaultMatcherConfig returns sensible defaults for pattern matching.
 func DefaultMatcherConfig() *MatcherConfig {
 	return &MatcherConfig{
-		MaxMatchesPerFile:        100,
-		MinConfidenceThreshold:   0.8,
-		EnableHTTPStatusMatching: true,
-		EnableRequestMatching:    true,
-		EnableResourceMatching:   true,
-		EnablePivotMatching:      true,
-		EnableAttributeMatching:  true,
-		EnableScopeMatching:      true,
-		StrictExplicitOnly:       false,
-		ResolveImportedClasses:   true,
-		DeduplicateMatches:       true,
+		MaxMatchesPerFile:         100,
+		MinConfidenceThreshold:    0.8,
+		EnableHTTPStatusMatching:  true,
+		EnableRequestMatching:     true,
+		EnableResourceMatching:    true,
+		EnablePivotMatching:       true,
+		EnableAttributeMatching:   true,
+		EnableScopeMatching:       true,
+		EnablePolymorphicMatching: true,
+		MaxRelationshipDepth:      5,
+		StrictExplicitOnly:        false,
+		ResolveImportedClasses:    true,
+		DeduplicateMatches:        true,
 	}
 }
 
@@ -326,5 +374,10 @@ func (config *MatcherConfig) ApplyFeatureFlags(features *FeatureConfig) {
 	}
 	if features.ScopesUsed != nil {
 		config.EnableScopeMatching = *features.ScopesUsed
+	}
+	
+	// Apply T8 pattern flags
+	if features.Polymorphic != nil {
+		config.EnablePolymorphicMatching = *features.Polymorphic
 	}
 }

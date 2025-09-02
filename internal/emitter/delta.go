@@ -35,12 +35,13 @@ type MetaStats struct {
 
 // Controller represents a Laravel controller class with its methods and detected patterns.
 type Controller struct {
-	FQCN        string       `json:"fqcn"`
-	Method      string       `json:"method"`
-	HTTP        *HTTPInfo    `json:"http,omitempty"`
-	Request     *RequestInfo `json:"request,omitempty"`
-	Resources   []Resource   `json:"resources,omitempty"`
-	ScopesUsed  []ScopeUsed  `json:"scopesUsed,omitempty"`
+	FQCN        string                  `json:"fqcn"`
+	Method      string                  `json:"method"`
+	HTTP        *HTTPInfo               `json:"http,omitempty"`
+	Request     *RequestInfo            `json:"request,omitempty"`
+	Resources   []Resource              `json:"resources,omitempty"`
+	ScopesUsed  []ScopeUsed             `json:"scopesUsed,omitempty"`
+	Polymorphic []PolymorphicRelation   `json:"polymorphic,omitempty"`
 }
 
 // HTTPInfo captures HTTP-related metadata for controller methods.
@@ -139,9 +140,10 @@ type ScopeUsed struct {
 
 // Model represents an Eloquent model class with its detected features.
 type Model struct {
-	FQCN       string      `json:"fqcn"`
-	WithPivot  []PivotInfo `json:"withPivot,omitempty"`
-	Attributes []Attribute `json:"attributes,omitempty"`
+	FQCN        string                  `json:"fqcn"`
+	WithPivot   []PivotInfo             `json:"withPivot,omitempty"`
+	Attributes  []Attribute             `json:"attributes,omitempty"`
+	Polymorphic []PolymorphicRelation   `json:"polymorphic,omitempty"`
 }
 
 // PivotInfo describes pivot table configurations in many-to-many relationships.
@@ -156,6 +158,28 @@ type PivotInfo struct {
 type Attribute struct {
 	Name string `json:"name"`
 	Via  string `json:"via"`
+}
+
+// PolymorphicRelation represents polymorphic relationship patterns in controllers and models.
+type PolymorphicRelation struct {
+	Relation         string                     `json:"relation"`                   // Relationship method name
+	Type             string                     `json:"type"`                       // Polymorphic type (morphTo, morphOne, morphMany)
+	MorphType        string                     `json:"morphType,omitempty"`        // Morph type column
+	MorphId          string                     `json:"morphId,omitempty"`          // Morph ID column
+	Model            *string                    `json:"model,omitempty"`            // Target model class
+	Discriminator    *PolymorphicDiscriminator  `json:"discriminator,omitempty"`    // Discriminator mapping
+	RelatedModels    []string                   `json:"relatedModels,omitempty"`    // Related model classes
+	DepthTruncated   *bool                      `json:"depthTruncated,omitempty"`   // True if max depth reached
+	MaxDepth         *int                       `json:"maxDepth,omitempty"`         // Maximum traversal depth
+}
+
+// PolymorphicDiscriminator contains discriminator mapping information for polymorphic relationships.
+type PolymorphicDiscriminator struct {
+	PropertyName string            `json:"propertyName"`           // Discriminator property name
+	Mapping      map[string]string `json:"mapping"`                // Type mappings
+	Source       string            `json:"source"`                 // Source of mapping (morphMap, explicit, inferred)
+	IsExplicit   bool              `json:"isExplicit"`             // Whether mapping is explicitly defined
+	DefaultType  *string           `json:"defaultType,omitempty"`  // Default type if no mapping matches
 }
 
 // Polymorphic represents detected polymorphic relationship configurations.

@@ -4,6 +4,7 @@ package matchers
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/garaekz/oxinfer/internal/emitter"
@@ -73,6 +74,7 @@ func (c *DefaultCompositePatternMatcher) MatchAll(ctx context.Context, tree *par
 		Pivots:       make([]*PivotMatch, 0),
 		Attributes:   make([]*AttributeMatch, 0),
 		Scopes:       make([]*ScopeMatch, 0),
+		Polymorphics: make([]*PolymorphicMatch, 0),
 		ProcessedAt:  startTime.Unix(),
 	}
 
@@ -109,7 +111,7 @@ func (c *DefaultCompositePatternMatcher) MatchAll(ctx context.Context, tree *par
 
 	// Update pattern detection count
 	patternCount := int64(len(patterns.HTTPStatus) + len(patterns.RequestUsage) + len(patterns.Resources) + 
-		len(patterns.Pivots) + len(patterns.Attributes) + len(patterns.Scopes))
+		len(patterns.Pivots) + len(patterns.Attributes) + len(patterns.Scopes) + len(patterns.Polymorphics))
 	c.stats.PatternsDetected += patternCount
 
 	return patterns, nil
@@ -164,6 +166,8 @@ func (c *DefaultCompositePatternMatcher) isMatcherEnabled(patternType PatternTyp
 		return c.config.EnableAttributeMatching
 	case PatternTypeScope:
 		return c.config.EnableScopeMatching
+	case PatternTypePolymorphic:
+		return c.config.EnablePolymorphicMatching
 	default:
 		return false // Unknown pattern types are disabled by default
 	}
@@ -196,6 +200,10 @@ func (c *DefaultCompositePatternMatcher) processMatchResults(patternType Pattern
 		case PatternTypeScope:
 			if scopeMatch, ok := result.Data.(*ScopeMatch); ok {
 				patterns.Scopes = append(patterns.Scopes, scopeMatch)
+			}
+		case PatternTypePolymorphic:
+			if polyMatch, ok := result.Data.(*PolymorphicMatch); ok {
+				patterns.Polymorphics = append(patterns.Polymorphics, polyMatch)
 			}
 		}
 	}
@@ -299,6 +307,19 @@ func (p *DefaultPatternMatchingProcessor) initializeMatchers(language *sitter.La
 		}
 	}
 
+	// Initialize T8 pattern matchers if enabled
+	
+	// Polymorphic matcher
+	if config.EnablePolymorphicMatching {
+		polymorphicMatcher, err := NewPolymorphicMatcher(language, config)
+		if err != nil {
+			return fmt.Errorf("failed to create polymorphic matcher: %w", err)
+		}
+		if err := p.composite.AddMatcher(polymorphicMatcher); err != nil {
+			return fmt.Errorf("failed to add polymorphic matcher: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -379,6 +400,60 @@ func (p *DefaultPatternMatchingProcessor) ConvertToEmitterFormat(patterns *Larav
 		}
 	}
 
+	// Convert polymorphic relationship patterns to controller.Polymorphic
+	controller.Polymorphic = make([]emitter.PolymorphicRelation, 0, len(patterns.Polymorphics))
+	for _, polyMatch := range patterns.Polymorphics {
+		// Create polymorphic relation with deterministic ordering
+		polyRelation := emitter.PolymorphicRelation{
+			Relation:  polyMatch.Relation,
+			Type:      polyMatch.Type,
+			MorphType: polyMatch.MorphType,
+			MorphId:   polyMatch.MorphId,
+		}
+		
+		// Add model if specified
+		if polyMatch.Model != "" {
+			polyRelation.Model = &polyMatch.Model
+		}
+		
+		// Add discriminator if present
+		if polyMatch.Discriminator != nil {
+			polyRelation.Discriminator = &emitter.PolymorphicDiscriminator{
+				PropertyName: polyMatch.Discriminator.PropertyName,
+				Mapping:      make(map[string]string),
+				Source:       polyMatch.Discriminator.Source,
+				IsExplicit:   polyMatch.Discriminator.IsExplicit,
+			}
+			
+			// Copy mapping with deterministic ordering
+			for key, value := range polyMatch.Discriminator.Mapping {
+				polyRelation.Discriminator.Mapping[key] = value
+			}
+			
+			if polyMatch.Discriminator.DefaultType != "" {
+				polyRelation.Discriminator.DefaultType = &polyMatch.Discriminator.DefaultType
+			}
+		}
+		
+		// Add related models with sorted order for determinism
+		if len(polyMatch.RelatedModels) > 0 {
+			sortedModels := make([]string, len(polyMatch.RelatedModels))
+			copy(sortedModels, polyMatch.RelatedModels)
+			sort.Strings(sortedModels)
+			polyRelation.RelatedModels = sortedModels
+		}
+		
+		// Add depth information if truncated
+		if polyMatch.DepthTruncated {
+			polyRelation.DepthTruncated = &polyMatch.DepthTruncated
+			if polyMatch.MaxDepth > 0 {
+				polyRelation.MaxDepth = &polyMatch.MaxDepth
+			}
+		}
+		
+		controller.Polymorphic = append(controller.Polymorphic, polyRelation)
+	}
+
 	return controller, nil
 }
 
@@ -389,7 +464,7 @@ func (p *DefaultPatternMatchingProcessor) ConvertToModelFormat(patterns *Laravel
 	}
 
 	// Skip if no model-specific patterns found
-	if len(patterns.Pivots) == 0 && len(patterns.Attributes) == 0 {
+	if len(patterns.Pivots) == 0 && len(patterns.Attributes) == 0 && len(patterns.Polymorphics) == 0 {
 		return nil, nil
 	}
 
@@ -426,6 +501,62 @@ func (p *DefaultPatternMatchingProcessor) ConvertToModelFormat(patterns *Laravel
 				Via:  "Attribute::make",
 			}
 			model.Attributes = append(model.Attributes, attribute)
+		}
+	}
+
+	// Convert polymorphic relationship patterns to model.Polymorphic
+	model.Polymorphic = make([]emitter.PolymorphicRelation, 0, len(patterns.Polymorphics))
+	for _, polyMatch := range patterns.Polymorphics {
+		// Only include polymorphic relationships defined in models
+		if polyMatch.Context == "model" || polyMatch.Context == "relationship" {
+			polyRelation := emitter.PolymorphicRelation{
+				Relation:  polyMatch.Relation,
+				Type:      polyMatch.Type,
+				MorphType: polyMatch.MorphType,
+				MorphId:   polyMatch.MorphId,
+			}
+			
+			// Add model if specified (for morphOne/morphMany)
+			if polyMatch.Model != "" {
+				polyRelation.Model = &polyMatch.Model
+			}
+			
+			// Add discriminator information
+			if polyMatch.Discriminator != nil {
+				polyRelation.Discriminator = &emitter.PolymorphicDiscriminator{
+					PropertyName: polyMatch.Discriminator.PropertyName,
+					Mapping:      make(map[string]string),
+					Source:       polyMatch.Discriminator.Source,
+					IsExplicit:   polyMatch.Discriminator.IsExplicit,
+				}
+				
+				// Copy mapping with deterministic ordering
+				for key, value := range polyMatch.Discriminator.Mapping {
+					polyRelation.Discriminator.Mapping[key] = value
+				}
+				
+				if polyMatch.Discriminator.DefaultType != "" {
+					polyRelation.Discriminator.DefaultType = &polyMatch.Discriminator.DefaultType
+				}
+			}
+			
+			// Add related models with sorted order for determinism
+			if len(polyMatch.RelatedModels) > 0 {
+				sortedModels := make([]string, len(polyMatch.RelatedModels))
+				copy(sortedModels, polyMatch.RelatedModels)
+				sort.Strings(sortedModels)
+				polyRelation.RelatedModels = sortedModels
+			}
+			
+			// Add depth information if truncated
+			if polyMatch.DepthTruncated {
+				polyRelation.DepthTruncated = &polyMatch.DepthTruncated
+				if polyMatch.MaxDepth > 0 {
+					polyRelation.MaxDepth = &polyMatch.MaxDepth
+				}
+			}
+			
+			model.Polymorphic = append(model.Polymorphic, polyRelation)
 		}
 	}
 
@@ -504,7 +635,9 @@ func ValidateMatcherConfiguration(config *MatcherConfig) error {
 	}
 
 	// At least one matcher type must be enabled
-	if !config.EnableHTTPStatusMatching && !config.EnableRequestMatching && !config.EnableResourceMatching {
+	if !config.EnableHTTPStatusMatching && !config.EnableRequestMatching && !config.EnableResourceMatching &&
+		!config.EnablePivotMatching && !config.EnableAttributeMatching && !config.EnableScopeMatching &&
+		!config.EnablePolymorphicMatching {
 		return fmt.Errorf("at least one matcher type must be enabled")
 	}
 
