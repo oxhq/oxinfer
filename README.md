@@ -183,6 +183,46 @@ oxinfer --manifest manifest.json | jq . >/dev/null && echo "Valid JSON"
 oxinfer --manifest manifest.json --print-hash
 ```
 
+## Makefile Commands
+
+The repository includes a Makefile with helpful shortcuts:
+
+```bash
+# List available commands
+make help
+
+# Build the CLI
+make build
+
+# Run the full test suite
+make test
+
+# Format and vet
+make fmt
+make vet
+
+# Run the CLI (provide a manifest path; optionally set OUT)
+make run MANIFEST=path/to/manifest.json [OUT=delta.json]
+
+# Generate a performance validation report (writes to .oxinfer/performance_reports)
+make perf-validate     # alias: make perf-report
+
+# Clean generated performance reports and cache (keeps .oxinfer/README.md)
+make perf-clean
+make cache-clean
+
+# Remove build artifacts and generated files (safe)
+make clean
+```
+
+Generated artifacts live under the hidden `.oxinfer/` directory:
+- `.oxinfer/performance_reports/`: performance validation JSON reports (auto-pruned to the latest)
+- `.oxinfer/cache/v1/`: on-disk indexer cache (per project key)
+
+To override the cache location:
+- CLI flag: `--cache-dir /abs/path` (highest precedence)
+- Env var: `OXINFER_CACHE_DIR=/abs/path`
+
 ## License
 
 MIT License - see LICENSE file for details.
