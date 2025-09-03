@@ -182,22 +182,37 @@ func execute(config *cli.CLIConfig) error {
 			stats.FilesDiscovered, stats.FilesProcessed, stats.PatternsDetected, stats.ShapesInferred, stats.TotalDuration)
 	}
 
-	// Write output: stdout or file; if file, write atomically
-	if config.IsStdoutOutput() || config.OutputPath == "-" {
-		if _, err := os.Stdout.Write(data); err != nil {
-			return cli.WrapInternalError("failed to write JSON to stdout", err)
-		}
-	} else {
-		dir := filepath.Dir(config.OutputPath)
-		base := filepath.Base(config.OutputPath)
-		tmp := filepath.Join(dir, "."+base+".tmp")
-		if err := os.WriteFile(tmp, data, 0644); err != nil {
-			return cli.WrapInternalError("failed to write temp output file", err)
-		}
-		if err := os.Rename(tmp, config.OutputPath); err != nil {
-			return cli.WrapInternalError("failed to atomically rename output file", err)
-		}
-	}
+    // Write output: stdout or file; if file, write atomically.
+    // When a relative file path is provided, write under <projectRoot>/.oxinfer/outputs/<basename>.
+    if config.IsStdoutOutput() || config.OutputPath == "-" {
+        if _, err := os.Stdout.Write(data); err != nil {
+            return cli.WrapInternalError("failed to write JSON to stdout", err)
+        }
+    } else {
+        outPath := config.OutputPath
+        if !filepath.IsAbs(outPath) {
+            // Redirect relative output to project .oxinfer/outputs directory
+            outputsDir := filepath.Join(manifestData.Project.Root, ".oxinfer", "outputs")
+            if err := os.MkdirAll(outputsDir, 0o755); err != nil {
+                return cli.WrapInternalError("failed to create outputs directory", err)
+            }
+            outPath = filepath.Join(outputsDir, filepath.Base(outPath))
+        } else {
+            // Ensure destination directory exists for absolute paths
+            if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+                return cli.WrapInternalError("failed to create output directory", err)
+            }
+        }
+
+        base := filepath.Base(outPath)
+        tmp := filepath.Join(filepath.Dir(outPath), "."+base+".tmp")
+        if err := os.WriteFile(tmp, data, 0644); err != nil {
+            return cli.WrapInternalError("failed to write temp output file", err)
+        }
+        if err := os.Rename(tmp, outPath); err != nil {
+            return cli.WrapInternalError("failed to atomically rename output file", err)
+        }
+    }
 
 	return nil
 }
