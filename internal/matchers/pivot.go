@@ -2,12 +2,13 @@
 package matchers
 
 import (
-	"context"
-	"fmt"
-	"strings"
+    "context"
+    "fmt"
+    "strings"
+    "sort"
 
-	"github.com/garaekz/oxinfer/internal/parser"
-	sitter "github.com/smacker/go-tree-sitter"
+    "github.com/garaekz/oxinfer/internal/parser"
+    sitter "github.com/smacker/go-tree-sitter"
 )
 
 // DefaultPivotMatcher implements PivotMatcher interface.
@@ -118,10 +119,29 @@ func (m *DefaultPivotMatcher) Match(ctx context.Context, tree *parser.SyntaxTree
 	}
 
 	// Apply confidence filtering and deduplication
-	filteredResults := m.filterByConfidence(allResults)
-	finalResults := m.deduplicateResults(filteredResults)
+    filteredResults := m.filterByConfidence(allResults)
+    finalResults := m.deduplicateResults(filteredResults)
 
-	return finalResults, nil
+    // Ensure deterministic order by source position (row, then column)
+    if len(finalResults) > 1 {
+        sort.SliceStable(finalResults, func(i, j int) bool {
+            if finalResults[i].Position.Row != finalResults[j].Position.Row {
+                return finalResults[i].Position.Row < finalResults[j].Position.Row
+            }
+            if finalResults[i].Position.Column != finalResults[j].Position.Column {
+                return finalResults[i].Position.Column < finalResults[j].Position.Column
+            }
+            // Tiebreaker: method name if available
+            im, iok := finalResults[i].Data.(*PivotMatch)
+            jm, jok := finalResults[j].Data.(*PivotMatch)
+            if iok && jok && im.Method != jm.Method {
+                return im.Method < jm.Method
+            }
+            return false
+        })
+    }
+
+    return finalResults, nil
 }
 
 // MatchPivots finds Laravel pivot relationship patterns.
@@ -557,4 +577,3 @@ func ValidatePivotMethodCall(methodName string, args []string) bool {
 		return false
 	}
 }
-

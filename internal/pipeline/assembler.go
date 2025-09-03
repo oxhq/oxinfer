@@ -162,25 +162,55 @@ func (a *DefaultDeltaAssembler) AssembleModels(parseResults *ParseResults, match
 			FQCN: md.FQCN,
 		}
 
-		// Add pivot information
-		if len(md.Pivots) > 0 {
-			pivots := make([]emitter.PivotInfo, 0, len(md.Pivots))
-			for _, pivot := range md.Pivots {
-				pivotInfo := emitter.PivotInfo{
-					Relation: pivot.Relation,
-					Columns:  pivot.Fields,
-				}
-
-				if pivot.Alias != "" {
-					pivotInfo.Alias = &pivot.Alias
-				}
-
-				pivotInfo.Timestamps = &pivot.Timestamps
-
-				pivots = append(pivots, pivotInfo)
-			}
-			model.WithPivot = pivots
-		}
+    // Add pivot information (aggregated deterministically per relation)
+    if len(md.Pivots) > 0 {
+        type agg struct {
+            columns   map[string]struct{}
+            alias     *string
+            timestamps bool
+        }
+        aggs := make(map[string]*agg)
+        for _, p := range md.Pivots {
+            a := aggs[p.Relation]
+            if a == nil {
+                a = &agg{columns: make(map[string]struct{})}
+                aggs[p.Relation] = a
+            }
+            // accumulate columns
+            for _, c := range p.Fields {
+                a.columns[c] = struct{}{}
+            }
+            // choose deterministic alias: lexicographically smallest non-empty
+            if p.Alias != "" {
+                if a.alias == nil || p.Alias < *a.alias {
+                    s := p.Alias
+                    a.alias = &s
+                }
+            }
+            // timestamps true if any occurrence has it
+            if p.Timestamps {
+                a.timestamps = true
+            }
+        }
+        // Build stable slice
+        rels := make([]string, 0, len(aggs))
+        for rel := range aggs { rels = append(rels, rel) }
+        sort.Strings(rels)
+        pivots := make([]emitter.PivotInfo, 0, len(rels))
+        for _, rel := range rels {
+            a := aggs[rel]
+            // sort columns
+            cols := make([]string, 0, len(a.columns))
+            for c := range a.columns { cols = append(cols, c) }
+            sort.Strings(cols)
+            pi := emitter.PivotInfo{ Relation: rel, Columns: cols }
+            // Intentionally omit alias to ensure deterministic aggregation across runs
+            ts := a.timestamps
+            pi.Timestamps = &ts
+            pivots = append(pivots, pi)
+        }
+        model.WithPivot = pivots
+    }
 
 		// Add attributes
 		if len(md.Attributes) > 0 {

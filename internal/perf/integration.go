@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"runtime"
 	"time"
 
@@ -106,7 +108,7 @@ func NewPerformanceIntegration(config *IntegrationConfig) (*PerformanceIntegrati
 
 // DefaultIntegrationConfig returns default configuration for performance integration.
 func DefaultIntegrationConfig() *IntegrationConfig {
-	return &IntegrationConfig{
+    return &IntegrationConfig{
 		EnableContinuousAnalysis: false, // Disabled by default for MVP
 		AnalysisInterval:        5 * time.Minute,
 		AutoApplyOptimizations:  false, // Conservative by default
@@ -115,9 +117,9 @@ func DefaultIntegrationConfig() *IntegrationConfig {
 		BenchmarkInterval:       0, // No continuous benchmarking by default
 		ValidateTargets:         true,
 		FailOnRegressions:      true,
-		GenerateReports:        true,
-		ReportDirectory:        "performance_reports",
-	}
+        GenerateReports:        true,
+        ReportDirectory:        filepath.Join(".oxinfer", "performance_reports"),
+    }
 }
 
 // Initialize prepares the performance integration system.
@@ -699,9 +701,9 @@ func (pi *PerformanceIntegration) loadBaseline() error {
 
 // generateValidationReport generates a comprehensive validation report.
 func (pi *PerformanceIntegration) generateValidationReport(results *ValidationResults) error {
-	if pi.config.ReportDirectory == "" {
-		return nil
-	}
+    if pi.config.ReportDirectory == "" {
+        return nil
+    }
 	
 	// Ensure report directory exists
 	if err := os.MkdirAll(pi.config.ReportDirectory, 0755); err != nil {
@@ -719,12 +721,40 @@ func (pi *PerformanceIntegration) generateValidationReport(results *ValidationRe
 		return fmt.Errorf("failed to marshal results: %w", err)
 	}
 	
-	// Write report file
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write report: %w", err)
-	}
-	
-	return nil
+    // Write report file
+    if err := os.WriteFile(filePath, data, 0644); err != nil {
+        return fmt.Errorf("failed to write report: %w", err)
+    }
+
+    // Prune old reports, keep only most recent one to avoid clutter
+    _ = pruneOldReports(pi.config.ReportDirectory, 1)
+
+    return nil
+}
+
+// pruneOldReports deletes older performance report JSONs, keeping the newest 'keep' files.
+func pruneOldReports(dir string, keep int) error {
+    entries, err := os.ReadDir(dir)
+    if err != nil {
+        return err
+    }
+    var files []string
+    for _, e := range entries {
+        if e.IsDir() { continue }
+        name := e.Name()
+        if len(name) >= len("performance_validation_.json") &&
+            strings.HasPrefix(name, "performance_validation_") &&
+            strings.HasSuffix(name, ".json") {
+            files = append(files, name)
+        }
+    }
+    if len(files) <= keep { return nil }
+    sort.Strings(files)
+    toDelete := files[:len(files)-keep]
+    for _, f := range toDelete {
+        _ = os.Remove(filepath.Join(dir, f))
+    }
+    return nil
 }
 
 // GetOptimizationStatus returns the current optimization status.
@@ -761,4 +791,3 @@ func contains(slice []string, item string) bool {
 	}
 	return false
 }
-

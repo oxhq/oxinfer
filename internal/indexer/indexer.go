@@ -10,6 +10,10 @@ import (
     "github.com/garaekz/oxinfer/internal/manifest"
     "path/filepath"
     "strings"
+    "os"
+    "runtime"
+    "crypto/sha256"
+    "encoding/hex"
 )
 
 // DefaultFileIndexer implements the FileIndexer interface
@@ -146,10 +150,43 @@ dfi.config = IndexConfig{
 	// Initialize limits enforcer
 	dfi.limitsEnforcer = NewLimitsEnforcer(maxFiles, maxWorkers, maxDepth)
 	
-	// Initialize cache if enabled
-	if dfi.config.CacheEnabled {
-		dfi.cacher = NewFileCache(manifest.Cache)
-	}
+    // Initialize cache if enabled (persisted on disk with project key)
+    if dfi.config.CacheEnabled {
+        // Resolve cache directory precedence: env OXINFER_CACHE_DIR then default <project.root>/.oxinfer/cache/v1
+        cacheDir := os.Getenv("OXINFER_CACHE_DIR")
+        if cacheDir == "" {
+            cacheDir = filepath.Join(manifest.Project.Root, ".oxinfer", "cache", "v1")
+        } else {
+            if abs, err := filepath.Abs(cacheDir); err == nil {
+                cacheDir = abs
+            }
+        }
+
+        // Compute project key based on project root and composer path
+        composerPath := manifest.Project.Composer
+        if composerPath == "" {
+            composerPath = "composer.json"
+        }
+        projectKey, err := ComputeProjectKey(manifest.Project.Root, composerPath)
+        if err != nil {
+            // Fallback to hashing project root only when composer.json is unavailable in tests/fixtures
+            hasher := sha256.New()
+            absRoot, _ := filepath.Abs(manifest.Project.Root)
+            hasher.Write([]byte(absRoot))
+            h := hex.EncodeToString(hasher.Sum(nil))
+            if len(h) > 16 {
+                projectKey = h[:16]
+            } else {
+                projectKey = h
+            }
+        }
+
+        cacher, err := NewFileCacheWithDir(manifest.Cache, cacheDir, projectKey)
+        if err != nil {
+            return fmt.Errorf("init file cache: %w", err)
+        }
+        dfi.cacher = cacher
+    }
 	
 	// Initialize worker pool
 	dfi.workerPool = NewWorkerPoolManager()
@@ -294,9 +331,23 @@ func (dfi *DefaultFileIndexer) filterVendorFiles(files []FileInfo) []FileInfo {
         if strings.Contains(rel, "/vendor/") || strings.HasPrefix(rel, "vendor/") {
             // Allow only if AbsPath has whitelisted prefix
             abs := filepath.ToSlash(f.AbsPath)
+            if resolved, err := filepath.EvalSymlinks(abs); err == nil && resolved != "" {
+                abs = filepath.ToSlash(resolved)
+            }
+            // Use case-insensitive check on Windows
             allowed := false
             for _, pref := range prefixes {
-                if strings.HasPrefix(abs, pref) {
+                // Normalize both sides
+                a := abs
+                p := pref
+                if runtime.GOOS == "windows" {
+                    if strings.HasPrefix(strings.ToLower(a), strings.ToLower(p)) {
+                        allowed = true
+                        break
+                    }
+                    continue
+                }
+                if strings.HasPrefix(a, p) {
                     allowed = true
                     break
                 }

@@ -111,21 +111,28 @@ func execute(config *cli.CLIConfig) error {
 		return err
 	}
 
-	// Create pipeline configuration from defaults and CLI config
-	pipelineConfig := pipeline.DefaultPipelineConfig()
-	pipelineConfig.EnableStamp = config.Stamp
+    // Create pipeline configuration from defaults and CLI config
+    pipelineConfig := pipeline.DefaultPipelineConfig()
+    pipelineConfig.EnableStamp = config.Stamp
 
 	// Configure pipeline from manifest
 	if err := pipelineConfig.ConfigureFromManifest(manifestData); err != nil {
 		return cli.WrapInternalError("failed to configure pipeline from manifest", err)
 	}
 
-	// Create and configure the pipeline orchestrator
-	orchestrator, err := pipeline.NewOrchestrator(pipelineConfig)
-	if err != nil {
-		return cli.WrapInternalError("failed to create pipeline orchestrator", err)
-	}
-	defer orchestrator.Close()
+    // Create and configure the pipeline orchestrator
+    orchestrator, err := pipeline.NewOrchestrator(pipelineConfig)
+    if err != nil {
+        return cli.WrapInternalError("failed to create pipeline orchestrator", err)
+    }
+    defer orchestrator.Close()
+
+    // Honor cache directory precedence: if --cache-dir provided, export to env for downstream cache initialization
+    if config.CacheDir != "" {
+        // Resolve final cache directory using CLI precedence rules
+        cacheDir := config.GetCacheDir(manifestData.Project.Root)
+        _ = os.Setenv("OXINFER_CACHE_DIR", cacheDir)
+    }
 
 	// Set up progress callback if verbose mode is enabled
 	if config.ShouldLogInfo() {

@@ -71,3 +71,9 @@ composer.json
 .*/
 !.gitignore
 !.go-version
+
+# Allow tracking .oxinfer/README.md but ignore other .oxinfer contents
+!.oxinfer/
+!.oxinfer/README.md
+.oxinfer/*
+!.oxinfer/README.md

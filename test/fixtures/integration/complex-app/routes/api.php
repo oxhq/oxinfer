@@ -1,4 +1,5 @@
 <?php
+namespace App;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;

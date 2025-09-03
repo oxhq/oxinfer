@@ -223,17 +223,17 @@ type WorkerPoolConfig struct {
 
 // DefaultWorkerPoolConfig returns optimized default configuration for the worker pool.
 func DefaultWorkerPoolConfig() *WorkerPoolConfig {
-	return &WorkerPoolConfig{
-		MinWorkers:         1,
-		MaxWorkers:         runtime.NumCPU() * 2, // Start with 2x CPU cores
-		ScaleUpThreshold:   0.8,  // Scale up when 80% queue utilization
-		ScaleDownThreshold: 0.2,  // Scale down when 20% queue utilization
-		ScaleUpDelay:       100 * time.Millisecond,
-		ScaleDownDelay:     2 * time.Second,
-		QueueCapacity:      1000,
-		ResultCapacity:     1000,
-		StealThreshold:     10,   // Steal work when >10 items in queue
-		MemoryLimitMB:      400,  // 400MB limit per pool
+    return &WorkerPoolConfig{
+        MinWorkers:         1,
+        MaxWorkers:         runtime.NumCPU() * 2, // Start with 2x CPU cores
+        ScaleUpThreshold:   0.6,  // Scale up when 60% queue utilization
+        ScaleDownThreshold: 0.2,  // Scale down when 20% queue utilization
+        ScaleUpDelay:       10 * time.Millisecond,
+        ScaleDownDelay:     2 * time.Second,
+        QueueCapacity:      1000,
+        ResultCapacity:     1000,
+        StealThreshold:     10,   // Steal work when >10 items in queue
+        MemoryLimitMB:      400,  // 400MB limit per pool
 		CPUThrottle:        0.9,  // Use up to 90% CPU
 		WorkerIdleTimeout:  5 * time.Minute,
 		ShutdownTimeout:    10 * time.Second,
@@ -300,53 +300,73 @@ func (pool *OptimizedWorkerPool) addWorker(ctx context.Context, id int) error {
 
 // SubmitWork submits a work item to the pool with priority handling.
 func (pool *OptimizedWorkerPool) SubmitWork(item WorkItem) error {
-	if atomic.LoadInt32(&pool.shutdown) == 1 {
-		return fmt.Errorf("worker pool is shut down")
-	}
-	
-	// Route to appropriate priority queue
-	priority := item.Priority()
-	switch {
-	case priority >= 80:
-		return pool.submitToPriorityQueue(pool.priorityQueue.high, item)
-	case priority >= 40:
-		return pool.submitToPriorityQueue(pool.priorityQueue.medium, item)
-	default:
-		return pool.submitToPriorityQueue(pool.priorityQueue.low, item)
-	}
+    if atomic.LoadInt32(&pool.shutdown) == 1 {
+        return fmt.Errorf("worker pool is shut down")
+    }
+
+    // Route to an active worker using least-loaded selection
+    // Note: priority queues are currently not consumed by workers; use
+    // priority for future extension but ensure work gets processed now.
+    return pool.submitToActiveWorker(item)
 }
 
-// submitToPriorityQueue submits work to a specific priority queue with load balancing.
-func (pool *OptimizedWorkerPool) submitToPriorityQueue(queue chan WorkItem, item WorkItem) error {
-	// Find least loaded worker
-	pool.loadBalancer.mu.RLock()
-	leastLoadedWorker := 0
-	minLoad := pool.loadBalancer.workerLoads[0]
-	
-	for i := 1; i < len(pool.loadBalancer.workerLoads); i++ {
-		if pool.loadBalancer.workerLoads[i] < minLoad {
-			minLoad = pool.loadBalancer.workerLoads[i]
-			leastLoadedWorker = i
-		}
-	}
-	pool.loadBalancer.mu.RUnlock()
-	
-	// Try to submit to least loaded worker
-	workerQueue := pool.loadBalancer.workQueues[leastLoadedWorker]
-	select {
-	case workerQueue <- item:
-		atomic.AddInt64(&pool.loadBalancer.workerLoads[leastLoadedWorker], 1)
-		// Note: TotalProcessed is incremented on completion, not submission
-		return nil
-	case <-time.After(10 * time.Millisecond):
-		// Worker queue full, try global queue
-		select {
-		case pool.workQueue <- item:
-			return nil
-		default:
-			return fmt.Errorf("all queues full, cannot submit work")
-		}
-	}
+// submitToActiveWorker submits work to an active worker queue with load balancing.
+func (pool *OptimizedWorkerPool) submitToActiveWorker(item WorkItem) error {
+    // Determine least-loaded ACTIVE worker
+    pool.mu.RLock()
+    activeWorkers := make([]*PerformantWorker, 0, len(pool.workers))
+    for _, w := range pool.workers {
+        if w != nil && w.active {
+            activeWorkers = append(activeWorkers, w)
+        }
+    }
+    pool.mu.RUnlock()
+
+    // If no active workers yet, enqueue to global queue
+    if len(activeWorkers) == 0 {
+        select {
+        case pool.workQueue <- item:
+            return nil
+        default:
+            // As a last resort, block briefly to allow scaler/workers to start
+            select {
+            case pool.workQueue <- item:
+                return nil
+            case <-time.After(10 * time.Millisecond):
+                return fmt.Errorf("no active workers and global queue full")
+            }
+        }
+    }
+
+    // Choose least loaded among active workers
+    pool.loadBalancer.mu.RLock()
+    chosen := activeWorkers[0].id
+    minLoad := pool.loadBalancer.workerLoads[chosen]
+    for i := 1; i < len(activeWorkers); i++ {
+        id := activeWorkers[i].id
+        if id >= 0 && id < len(pool.loadBalancer.workerLoads) {
+            if pool.loadBalancer.workerLoads[id] < minLoad {
+                minLoad = pool.loadBalancer.workerLoads[id]
+                chosen = id
+            }
+        }
+    }
+    pool.loadBalancer.mu.RUnlock()
+
+    // Try to submit to chosen worker; if blocked, fallback to global queue
+    workerQueue := pool.loadBalancer.workQueues[chosen]
+    select {
+    case workerQueue <- item:
+        atomic.AddInt64(&pool.loadBalancer.workerLoads[chosen], 1)
+        return nil
+    case <-time.After(10 * time.Millisecond):
+        select {
+        case pool.workQueue <- item:
+            return nil
+        default:
+            return fmt.Errorf("all queues full, cannot submit work")
+        }
+    }
 }
 
 // run executes the worker's main processing loop with work stealing.
@@ -474,32 +494,48 @@ func (scaler *WorkerScaler) run(ctx context.Context) {
 
 // evaluateScaling determines if the pool should scale up or down.
 func (scaler *WorkerScaler) evaluateScaling() {
-	scaler.mu.Lock()
-	defer scaler.mu.Unlock()
+    scaler.mu.Lock()
+    defer scaler.mu.Unlock()
+
+    now := time.Now()
+    if now.Sub(scaler.lastScaleEvent) < scaler.scaleUpDelay {
+        return // Too soon since last scale event
+    }
+
+    // Calculate queue utilization
+    // Include global queue depth and per-worker pending loads
+    totalQueueDepth := int64(len(scaler.pool.workQueue))
+    scaler.pool.loadBalancer.mu.RLock()
+    for i := range scaler.pool.loadBalancer.workerLoads {
+        totalQueueDepth += scaler.pool.loadBalancer.workerLoads[i]
+    }
+    scaler.pool.loadBalancer.mu.RUnlock()
+
+    // Capacity includes global queue and active workers' local queues
+    totalCapacity := int64(cap(scaler.pool.workQueue))
+    scaler.pool.mu.RLock()
+    for _, w := range scaler.pool.workers {
+        if w != nil && w.active {
+            // Sum the capacity of this worker's queue
+            totalCapacity += int64(cap(scaler.pool.loadBalancer.workQueues[w.id]))
+        }
+    }
+    scaler.pool.mu.RUnlock()
+    if totalCapacity == 0 {
+        totalCapacity = 1
+    }
+    utilization := float64(totalQueueDepth) / float64(totalCapacity)
+
+    activeWorkers := atomic.LoadInt32(&scaler.pool.activeWorkers)
 	
-	now := time.Now()
-	if now.Sub(scaler.lastScaleEvent) < scaler.scaleUpDelay {
-		return // Too soon since last scale event
-	}
-	
-	// Calculate queue utilization
-	totalQueueDepth := int64(len(scaler.pool.workQueue))
-	totalQueueDepth += atomic.LoadInt64(&scaler.pool.priorityQueue.enqueuedHigh)
-	totalQueueDepth += atomic.LoadInt64(&scaler.pool.priorityQueue.enqueuedMedium)
-	totalQueueDepth += atomic.LoadInt64(&scaler.pool.priorityQueue.enqueuedLow)
-	
-	totalCapacity := int64(cap(scaler.pool.workQueue))
-	utilization := float64(totalQueueDepth) / float64(totalCapacity)
-	
-	activeWorkers := atomic.LoadInt32(&scaler.pool.activeWorkers)
-	
-	// Scale up decision
-	if utilization > scaler.scaleUpThreshold && int(activeWorkers) < scaler.pool.maxWorkers {
-		if scaler.pool.canScaleUp() {
-			scaler.scaleUp()
-			scaler.lastScaleEvent = now
-		}
-	}
+    // Scale up decision (aggressive when backlog exceeds current workers)
+    if int(activeWorkers) < scaler.pool.maxWorkers {
+        shouldScaleUp := utilization > scaler.scaleUpThreshold || totalQueueDepth > int64(activeWorkers)
+        if shouldScaleUp && scaler.pool.canScaleUp() && now.Sub(scaler.lastScaleEvent) >= scaler.scaleUpDelay {
+            scaler.scaleUp()
+            scaler.lastScaleEvent = now
+        }
+    }
 	
 	// Scale down decision
 	if utilization < scaler.scaleDownThreshold && int(activeWorkers) > scaler.pool.minWorkers {
