@@ -1,10 +1,11 @@
 // Package emitter provides deterministic JSON marshaling for oxinfer deltas.
 // It ensures byte-for-byte identical output for the same input data.
+//go:build goexperiment.jsonv2
+
 package emitter
 
 import (
-	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"sort"
@@ -74,17 +75,11 @@ func (e *JSONEmitter) MarshalDeterministic(delta *Delta) ([]byte, error) {
 	// Ensure deterministic ordering of all collections
 	sortedDelta := e.normalizeDelta(delta)
 
-	var buf bytes.Buffer
-	encoder := json.NewEncoder(&buf)
-	encoder.SetEscapeHTML(false)
-	encoder.SetIndent("", "")
-
-	if err := encoder.Encode(sortedDelta); err != nil {
+	result, err := json.Marshal(sortedDelta, json.Deterministic(true))
+	if err != nil {
 		return nil, fmt.Errorf("failed to encode JSON: %w", err)
 	}
 
-	// Remove the trailing newline that encoder.Encode adds
-	result := bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
 	return result, nil
 }
 

@@ -1,7 +1,9 @@
+//go:build goexperiment.jsonv2
+
 package stats
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"strings"
 	"sync"
 	"testing"
@@ -378,7 +380,7 @@ func TestJSONMarshalingDeterministic(t *testing.T) {
 	// Marshal multiple times and verify consistent output
 	var results [][]byte
 	for i := 0; i < 5; i++ {
-		data, err := json.Marshal(stats)
+		data, err := json.Marshal(stats, json.Deterministic(true))
 		if err != nil {
 			t.Fatalf("JSON marshaling failed: %v", err)
 		}
@@ -583,7 +585,7 @@ func BenchmarkJSONMarshaling(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := json.Marshal(stats)
+		_, err := json.Marshal(stats, json.Deterministic(true))
 		if err != nil {
 			b.Fatal(err)
 		}

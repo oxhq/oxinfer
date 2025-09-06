@@ -670,7 +670,7 @@ func BenchmarkIndexing_Determinism(b *testing.B) {
 // COMPONENT PERFORMANCE BENCHMARKS
 // ==============================================================================
 
-// BenchmarkComponent_FileDiscoverer measures T3.1 FileDiscoverer performance
+// BenchmarkComponent_FileDiscoverer measures FileDiscoverer performance
 func BenchmarkComponent_FileDiscoverer(b *testing.B) {
 	suite := NewBenchmarkSuite(b)
 	projectDir := suite.createTestProject("discoverer", 500, ComplexityMedium)
@@ -693,7 +693,7 @@ func BenchmarkComponent_FileDiscoverer(b *testing.B) {
 	}
 }
 
-// BenchmarkComponent_FileCacher measures T3.2 FileCacher performance under concurrent load
+// BenchmarkComponent_FileCacher measures FileCacher performance under concurrent load
 func BenchmarkComponent_FileCacher(b *testing.B) {
 	cacheConfig := &manifest.CacheConfig{
 		Enabled: &[]bool{true}[0],
@@ -727,7 +727,7 @@ func BenchmarkComponent_FileCacher(b *testing.B) {
 	})
 }
 
-// BenchmarkComponent_WorkerPool measures T3.3 WorkerPool throughput
+// BenchmarkComponent_WorkerPool measures WorkerPool throughput
 func BenchmarkComponent_WorkerPool(b *testing.B) {
 	suite := NewBenchmarkSuite(b)
 	projectDir := suite.createTestProject("workers", 1000, ComplexitySmall)

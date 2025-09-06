@@ -1,12 +1,14 @@
 // Package determinism provides utilities for validating deterministic behavior
 // in oxinfer's output generation. This ensures the core promise that
 // "same repository → same delta.json, byte-for-byte".
+//go:build goexperiment.jsonv2
+
 package determinism
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"sort"
 

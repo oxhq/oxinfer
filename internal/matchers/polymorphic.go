@@ -340,7 +340,7 @@ func (m *DefaultPolymorphicMatcher) buildPolymorphicMatch(methodName, modelArg, 
 		Type:     methodName,
 		Pattern:  queryDef.Name,
 		Method:   methodName,
-		Context:  "relationship",
+		Context:  "",
 	}
 
 	switch methodName {

@@ -1,8 +1,11 @@
+//go:build goexperiment.jsonv2
+
 package psr4
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
+	"encoding/json/jsontext"
 	"errors"
 	"os"
 	"path/filepath"
@@ -19,7 +22,7 @@ func createTestComposer(dir string, composerContent map[string]any) error {
 	composerPath := filepath.Join(dir, "composer.json")
 
 	// Marshal the content to JSON
-	data, err := json.MarshalIndent(composerContent, "", "  ")
+	data, err := json.Marshal(composerContent, json.Deterministic(true), jsontext.WithIndent("  "))
 	if err != nil {
 		return err
 	}

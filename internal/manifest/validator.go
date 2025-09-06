@@ -1,7 +1,9 @@
+//go:build goexperiment.jsonv2
+
 package manifest
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -122,7 +124,6 @@ func (v *manifestValidator) ValidateSchema(data []byte) error {
 		return cli.WrapSchemaError("failed to compile manifest schema", err)
 	}
 
-	// Parse the JSON data for validation
 	var jsonData any
 	if err := json.Unmarshal(data, &jsonData); err != nil {
 		return cli.WrapInputError("invalid JSON structure", err)

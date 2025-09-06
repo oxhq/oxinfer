@@ -1,8 +1,10 @@
 // Package emitter provides polymorphic pattern emission tests.
+//go:build goexperiment.jsonv2
+
 package emitter
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 )
 
@@ -141,8 +143,8 @@ func TestPolymorphicEmitterIntegration(t *testing.T) {
 				}
 
 				// Pretty print for better comparison
-				gotPretty, _ := json.MarshalIndent(gotStruct, "", "  ")
-				wantPretty, _ := json.MarshalIndent(wantStruct, "", "  ")
+				gotPretty, _ := json.Marshal(gotStruct, json.Deterministic(true), json.Indent("", "  "))
+				wantPretty, _ := json.Marshal(wantStruct, json.Deterministic(true), json.Indent("", "  "))
 				t.Logf("Got (pretty):\n%s", string(gotPretty))
 				t.Logf("Want (pretty):\n%s", string(wantPretty))
 			}

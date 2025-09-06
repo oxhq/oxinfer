@@ -1,8 +1,11 @@
+//go:build goexperiment.jsonv2
+
 package perf
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
+	"encoding/json/jsontext"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -715,7 +718,7 @@ func (pi *PerformanceIntegration) generateValidationReport(results *ValidationRe
 	filePath := filepath.Join(pi.config.ReportDirectory, filename)
 
 	// Marshal results to JSON
-	data, err := json.Marshal(results)
+	data, err := json.Marshal(results, json.Deterministic(true), jsontext.WithIndent("  "))
 	if err != nil {
 		return fmt.Errorf("failed to marshal results: %w", err)
 	}

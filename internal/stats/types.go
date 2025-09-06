@@ -1,9 +1,11 @@
+//go:build goexperiment.jsonv2
+
 // Package stats provides thread-safe statistics collection for the Oxinfer pipeline.
 // It tracks processing metrics across all phases including indexing, parsing, matching, and inference.
 package stats
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -129,7 +131,7 @@ func (p *ProcessingStats) MarshalJSON() ([]byte, error) {
 		}
 	}
 
-	return json.Marshal(js)
+	return json.Marshal(js, json.Deterministic(true))
 }
 
 // PhaseType represents the different phases of the processing pipeline.

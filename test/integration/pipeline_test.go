@@ -1,8 +1,10 @@
+//go:build goexperiment.jsonv2
+
 package integration
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"os"
 	"os/exec"
 	"path/filepath"

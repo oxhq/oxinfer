@@ -1,7 +1,10 @@
+//go:build goexperiment.jsonv2
+
 package manifest
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
+	"encoding/json/jsontext"
 )
 
 // Manifest represents the structure of the manifest configuration file
@@ -54,7 +57,7 @@ type FeatureConfig struct {
 
 // ToJSON serializes the manifest to JSON bytes.
 func (m *Manifest) ToJSON() ([]byte, error) {
-	return json.MarshalIndent(m, "", "  ")
+	return json.Marshal(m, json.Deterministic(true), jsontext.WithIndent("  "))
 }
 
 // Backward compatibility type alias for legacy code

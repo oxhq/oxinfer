@@ -1,9 +1,11 @@
 // Package production provides a simplified production readiness test that works with the current system.
+//go:build goexperiment.jsonv2
+
 package production
 
 import (
 	"crypto/sha256"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	"os/exec"

@@ -217,9 +217,10 @@ func (c *DefaultCompositePatternMatcher) processMatchResults(patternType Pattern
 
 // DefaultPatternMatchingProcessor integrates pattern matching with parser and emitter.
 type DefaultPatternMatchingProcessor struct {
-	composite *DefaultCompositePatternMatcher
-	config    *MatcherConfig
-	stats     *ProcessingStats
+	composite     *DefaultCompositePatternMatcher
+	config        *MatcherConfig
+	stats         *ProcessingStats
+	scopeRegistry *ScopeRegistry
 }
 
 // NewPatternMatchingProcessor creates a new pattern matching processor.
@@ -231,9 +232,10 @@ func NewPatternMatchingProcessor(language *sitter.Language, config *MatcherConfi
 
 	// Initialize enabled matchers
 	processor := &DefaultPatternMatchingProcessor{
-		composite: composite,
-		config:    config,
-		stats:     &ProcessingStats{},
+		composite:     composite,
+		config:        config,
+		stats:         &ProcessingStats{},
+		scopeRegistry: nil, // Will be set via SetScopeRegistry
 	}
 
 	if err := processor.initializeMatchers(language, config); err != nil {
@@ -241,6 +243,19 @@ func NewPatternMatchingProcessor(language *sitter.Language, config *MatcherConfi
 	}
 
 	return processor, nil
+}
+
+// SetScopeRegistry sets the scope registry for scope matching.
+func (p *DefaultPatternMatchingProcessor) SetScopeRegistry(registry *ScopeRegistry) {
+	p.scopeRegistry = registry
+	// Update the scope matcher if it exists
+	if matchers := p.composite.GetMatchers(); matchers != nil {
+		if scopeMatcher, ok := matchers[PatternTypeScope]; ok {
+			if sm, ok := scopeMatcher.(*DefaultScopeMatcher); ok {
+				sm.SetScopeRegistry(registry)
+			}
+		}
+	}
 }
 
 // initializeMatchers creates and registers enabled matchers.
@@ -278,7 +293,7 @@ func (p *DefaultPatternMatchingProcessor) initializeMatchers(language *sitter.La
 		}
 	}
 
-	// Initialize T7 pattern matchers if enabled
+	// Initialize pivot relationship pattern matchers if enabled
 
 	// Pivot matcher
 	if config.EnablePivotMatching {
@@ -313,7 +328,7 @@ func (p *DefaultPatternMatchingProcessor) initializeMatchers(language *sitter.La
 		}
 	}
 
-	// Initialize T8 pattern matchers if enabled
+	// Initialize scope pattern matchers if enabled
 
 	// Polymorphic matcher
 	if config.EnablePolymorphicMatching {
@@ -326,7 +341,7 @@ func (p *DefaultPatternMatchingProcessor) initializeMatchers(language *sitter.La
 		}
 	}
 
-	// Initialize T10 pattern matchers if enabled
+	// Initialize broadcast channel pattern matchers if enabled
 
 	// Broadcast matcher
 	if config.EnableBroadcastMatching {

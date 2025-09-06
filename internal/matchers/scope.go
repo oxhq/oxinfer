@@ -12,122 +12,116 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
-// ScopeRegistry tracks custom scope methods declared in model classes for T3 compliance.
+// ScopeRegistry tracks custom scope methods declared in model classes for Laravel compliance.
 type ScopeRegistry struct {
 	// modelScopes maps model FQCN to set of declared custom scope names
-	modelScopes map[string]map[string]bool
+	modelScopes map[string]map[string]struct{}
 	// builderMethods contains Laravel Query Builder methods that should be excluded
-	builderMethods map[string]bool
+	builderMethods map[string]struct{}
 }
 
-// NewScopeRegistry creates a new scope registry with T3-compliant builder exclusions.
+// NewScopeRegistry creates a new scope registry with Laravel-compliant builder exclusions.
 func NewScopeRegistry() *ScopeRegistry {
-	// Comprehensive list of Laravel Query Builder methods to exclude (T3 requirement)
-	builderMethods := map[string]bool{
-		// Basic query methods
-		"where": true, "whereIn": true, "whereNull": true, "whereBetween": true,
-		"whereNotIn": true, "whereNotNull": true, "whereNotBetween": true,
-		"whereHas": true, "whereDoesntHave": true, "whereExists": true,
-		"whereColumn": true, "whereRaw": true, "whereDate": true,
-		"whereMonth": true, "whereDay": true, "whereYear": true, "whereTime": true,
-		"orWhere": true, "orWhereIn": true, "orWhereNull": true,
-		"orWhereBetween": true, "orWhereNotIn": true, "orWhereNotNull": true,
-		
-		// Retrieval methods
-		"get": true, "first": true, "firstOrFail": true, "firstOrCreate": true,
-		"firstOrNew": true, "find": true, "findOrFail": true, "findOrNew": true,
-		"findMany": true, "all": true, "pluck": true, "value": true,
-		"chunk": true, "chunkById": true, "cursor": true, "lazy": true,
-		"lazyById": true, "sole": true,
-		
-		// Aggregate methods
-		"count": true, "sum": true, "avg": true, "average": true,
-		"min": true, "max": true, "exists": true, "doesntExist": true,
-		
-		// Ordering and grouping
-		"orderBy": true, "orderByDesc": true, "orderByRaw": true,
-		"latest": true, "oldest": true, "inRandomOrder": true,
-		"groupBy": true, "groupByRaw": true, "having": true, "havingRaw": true,
-		
-		// Limiting and offsetting
-		"limit": true, "take": true, "skip": true, "offset": true,
-		"forPage": true,
-		
-		// Joins
-		"join": true, "leftJoin": true, "rightJoin": true, "crossJoin": true,
-		"joinSub": true, "leftJoinSub": true, "rightJoinSub": true,
-		
-		// Selection
-		"select": true, "selectRaw": true, "selectSub": true,
-		"addSelect": true, "distinct": true,
-		
-		// Relationships
-		"with": true, "withCount": true, "withSum": true, "withAvg": true,
-		"withMin": true, "withMax": true, "withExists": true,
-		"load": true, "loadCount": true, "loadSum": true,
-		"without": true, "withOnly": true,
-		
-		// Modification methods  
-		"update": true, "updateOrCreate": true, "increment": true,
-		"decrement": true, "delete": true, "forceDelete": true,
-		"restore": true, "truncate": true,
-		
-		// Locking
-		"lockForUpdate": true, "sharedLock": true,
-		
-		// Union
-		"union": true, "unionAll": true,
-		
-		// Other common methods that aren't scopes
-		"toSql": true, "toRawSql": true, "dd": true, "dump": true,
-		"paginate": true, "simplePaginate": true, "cursorPaginate": true,
-		"getBindings": true, "toBase": true, "explain": true,
-		
-		// Common helper methods
-		"when": true, "unless": true, "tap": true, "pipe": true,
-		"clone": true, "copy": true,
-		
-		// Collection methods that might appear
-		"each": true, "map": true, "filter": true, "reject": true,
-		"reduce": true, "every": true, "some": true, "contains": true,
-		
-		// Response/transformation methods
-		"toArray": true, "toJson": true, "toResponse": true,
-		"resolve": true, "only": true, "except": true,
-		
-		// Middleware and other framework methods
-		"middleware": true, "withoutMiddleware": true,
-		
-		// Date manipulation methods
-		"subDays": true, "addDays": true, "subHours": true, "addHours": true,
-		"toDateString": true, "toDateTimeString": true,
+	builderMethods := map[string]struct{}{
+		"where": {}, "wherein": {}, "wherenull": {}, "wherebetween": {},
+		"wherenotin": {}, "wherenotnull": {}, "wherenotbetween": {},
+		"wherehas": {}, "wheredoesnthave": {}, "whereexists": {},
+		"wherecolumn": {}, "whereraw": {}, "wheredate": {},
+		"wheremonth": {}, "whereday": {}, "whereyear": {}, "wheretime": {},
+		"orwhere": {}, "orwherein": {}, "orwherenull": {},
+		"orwherebetween": {}, "orwherenotin": {}, "orwherenotnull": {},
+		"get": {}, "first": {}, "firstorfail": {}, "firstorcreate": {},
+		"firstornew": {}, "find": {}, "findorfail": {}, "findornew": {},
+		"findmany": {}, "all": {}, "pluck": {}, "value": {},
+		"chunk": {}, "chunkbyid": {}, "cursor": {}, "lazy": {},
+		"lazybyid": {}, "sole": {},
+		"count": {}, "sum": {}, "avg": {}, "average": {},
+		"min": {}, "max": {}, "exists": {}, "doesntexist": {},
+		"orderby": {}, "orderbydesc": {}, "orderbyraw": {},
+		"latest": {}, "oldest": {}, "inrandomorder": {},
+		"groupby": {}, "groupbyraw": {}, "having": {}, "havingraw": {},
+		"limit": {}, "take": {}, "skip": {}, "offset": {}, "forpage": {},
+		"join": {}, "leftjoin": {}, "rightjoin": {}, "crossjoin": {},
+		"joinsub": {}, "leftjoinsub": {}, "rightjoinsub": {},
+		"select": {}, "selectraw": {}, "selectsub": {},
+		"addselect": {}, "distinct": {},
+		"with": {}, "withcount": {}, "withsum": {}, "withavg": {},
+		"withmin": {}, "withmax": {}, "withexists": {},
+		"load": {}, "loadcount": {}, "loadsum": {},
+		"without": {}, "withonly": {},
+		"update": {}, "updateorcreate": {}, "increment": {},
+		"decrement": {}, "delete": {}, "forcedelete": {},
+		"restore": {}, "truncate": {},
+		"lockforupdate": {}, "sharedlock": {},
+		"union": {}, "unionall": {},
+		"tosql": {}, "torawsql": {}, "dd": {}, "dump": {},
+		"paginate": {}, "simplepaginate": {}, "cursorpaginate": {},
+		"getbindings": {}, "tobase": {}, "explain": {},
+		"when": {}, "unless": {}, "tap": {}, "pipe": {},
+		"clone": {}, "copy": {},
+		"each": {}, "map": {}, "filter": {}, "reject": {},
+		"reduce": {}, "every": {}, "some": {}, "contains": {},
+		"toarray": {}, "tojson": {}, "toresponse": {},
+		"resolve": {}, "only": {}, "except": {},
+		"middleware": {}, "withoutmiddleware": {},
+		"subdays": {}, "adddays": {}, "subhours": {}, "addhours": {},
+		"todatestring": {}, "todatetimestring": {},
 	}
 
 	return &ScopeRegistry{
-		modelScopes:    make(map[string]map[string]bool),
+		modelScopes:    make(map[string]map[string]struct{}),
 		builderMethods: builderMethods,
 	}
 }
 
 // RegisterScope adds a custom scope for a model FQCN.
 func (sr *ScopeRegistry) RegisterScope(modelFQCN, scopeName string) {
-	if sr.modelScopes[modelFQCN] == nil {
-		sr.modelScopes[modelFQCN] = make(map[string]bool)
+	sr.AddModelScope(modelFQCN, scopeName)
+}
+
+// AddModelScope adds a custom scope for a model FQCN (lowercase normalized).
+func (sr *ScopeRegistry) AddModelScope(modelFQCN, scopeName string) {
+	modelKey := strings.ToLower(modelFQCN)
+	scopeKey := strings.ToLower(scopeName)
+	
+	if sr.modelScopes[modelKey] == nil {
+		sr.modelScopes[modelKey] = make(map[string]struct{})
 	}
-	sr.modelScopes[modelFQCN][scopeName] = true
+	sr.modelScopes[modelKey][scopeKey] = struct{}{}
 }
 
 // IsCustomScope returns true if the method is a registered custom scope for the model.
 func (sr *ScopeRegistry) IsCustomScope(modelFQCN, methodName string) bool {
-	if scopes, exists := sr.modelScopes[modelFQCN]; exists {
-		return scopes[methodName]
+	return sr.HasScope(modelFQCN, methodName)
+}
+
+// HasScope returns true if the method is a registered custom scope for the model.
+func (sr *ScopeRegistry) HasScope(modelFQCN, scopeName string) bool {
+	modelKey := strings.ToLower(modelFQCN)
+	scopeKey := strings.ToLower(scopeName)
+	
+	if scopes, exists := sr.modelScopes[modelKey]; exists {
+		_, ok := scopes[scopeKey]
+		return ok
 	}
 	return false
 }
 
 // IsBuilderMethod returns true if the method is a Laravel Query Builder method (should be excluded).
 func (sr *ScopeRegistry) IsBuilderMethod(methodName string) bool {
-	return sr.builderMethods[methodName]
+	_, ok := sr.builderMethods[strings.ToLower(methodName)]
+	return ok
+}
+
+// ExistsInAnyModel returns true if the scope exists in any model.
+func (sr *ScopeRegistry) ExistsInAnyModel(scopeName string) bool {
+	scopeKey := strings.ToLower(scopeName)
+	for _, scopes := range sr.modelScopes {
+		if _, ok := scopes[scopeKey]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // DefaultScopeMatcher implements ScopeMatcher interface.
@@ -194,6 +188,13 @@ func (m *DefaultScopeMatcher) initialize() error {
 	m.queries = queries
 	m.initialized = true
 	return nil
+}
+
+// SetScopeRegistry sets the scope registry for the matcher.
+func (m *DefaultScopeMatcher) SetScopeRegistry(registry *ScopeRegistry) {
+	if registry != nil {
+		m.scopeRegistry = registry
+	}
 }
 
 // GetType returns the pattern type this matcher detects.
@@ -348,7 +349,7 @@ func (m *DefaultScopeMatcher) processMatch(match *sitter.QueryMatch, queryDef Qu
 	}
 
 	// Extract class context if available
-	className := m.extractClassName(tree, filePath)
+	className, _ := m.extractClassName(tree, filePath)
 
 	return &MatchResult{
 		Type:       PatternTypeScope,
@@ -380,13 +381,13 @@ func (m *DefaultScopeMatcher) processLocalScopeDefinition(match *sitter.QueryMat
 		return nil
 	}
 
-	// Get model FQCN - skip if we can't resolve it properly (T3 requirement)
-	modelFQCN := m.extractClassName(tree, "")
-	if modelFQCN == "" || modelFQCN == "UnknownClass" {
+	// Get model FQCN - skip if we can't resolve it properly (Laravel requirement)
+	modelFQCN, ok := m.extractClassName(tree, "")
+	if !ok || modelFQCN == "" {
 		return nil // Skip emitting if FQCN can't be resolved
 	}
 
-	// Register this scope in the registry for T3 compliance
+	// Register this scope in the registry for Laravel compliance
 	m.scopeRegistry.RegisterScope(modelFQCN, scopeName)
 
 	// Extract parameters if available
@@ -426,7 +427,7 @@ func (m *DefaultScopeMatcher) processScopeMethodCall(match *sitter.QueryMatch, t
 		args = m.extractScopeArguments(argsCapture, tree)
 	}
 
-	// T3 compliance: Exclude builder methods
+	// Laravel compliance: Exclude builder methods
 	if m.scopeRegistry.IsBuilderMethod(methodName) {
 		return nil
 	}
@@ -438,16 +439,21 @@ func (m *DefaultScopeMatcher) processScopeMethodCall(match *sitter.QueryMatch, t
 
 	onClass := modelClass
 	if onClass == "" {
-		onClass = m.extractClassName(tree, "")
+		var ok bool
+		onClass, ok = m.extractClassName(tree, "")
+		if !ok {
+			// Cannot resolve model, apply strict filtering
+			if !m.scopeRegistry.ExistsInAnyModel(scopeName) {
+				return nil
+			}
+			// Scope exists in some model but we don't know which one
+			// Per recommendations: do not emit unknown-model scopes
+			return nil
+		}
 	}
 
-	// T3 compliance: Skip if FQCN can't be resolved or if scope isn't registered
-	if onClass == "" || onClass == "UnknownClass" {
-		return nil
-	}
-
-	// Only emit if this is a registered custom scope for the model
-	if !m.scopeRegistry.IsCustomScope(onClass, scopeName) {
+	// Model resolved: only accept if it's a registered custom scope for this model
+	if !m.scopeRegistry.HasScope(onClass, scopeName) {
 		return nil
 	}
 
@@ -474,9 +480,8 @@ func (m *DefaultScopeMatcher) processScopeWithoutPrefix(match *sitter.QueryMatch
 		scopeName = scopeCapture.Content(tree.Source)
 	}
 
-	// T3 CRITICAL: Filter out Laravel Query Builder methods
 	if m.scopeRegistry.IsBuilderMethod(scopeName) {
-		return nil // Skip builder methods like where, get, first, etc.
+		return nil
 	}
 
 	if modelCapture, ok := captures["model_class"]; ok {
@@ -492,11 +497,15 @@ func (m *DefaultScopeMatcher) processScopeWithoutPrefix(match *sitter.QueryMatch
 
 	onClass := modelClass
 	if onClass == "" {
-		onClass = m.extractClassName(tree, "")
+		var ok bool
+		onClass, ok = m.extractClassName(tree, "")
+		if !ok {
+			return nil
+		}
 	}
 
-	// T3: Additional validation - skip if we can't determine the model
-	if onClass == "" || onClass == "UnknownClass" {
+	// Additional validation - skip if we can't determine the model
+	if onClass == "" {
 		return nil
 	}
 
@@ -546,7 +555,10 @@ func (m *DefaultScopeMatcher) processGlobalScopeApply(match *sitter.QueryMatch, 
 		args = m.extractScopeArguments(bodyCapture, tree)
 	}
 
-	className := m.extractClassName(tree, "")
+	className, ok := m.extractClassName(tree, "")
+	if !ok {
+		return nil
+	}
 	scopeName := strings.TrimSuffix(className, "Scope")
 	scopeName = strings.ToLower(scopeName)
 
@@ -579,9 +591,10 @@ func (m *DefaultScopeMatcher) processScopeRegistration(match *sitter.QueryMatch,
 		}
 	}
 
+	onClass, _ := m.extractClassName(tree, "")
 	return &ScopeMatch{
 		Name:     scopeName,
-		On:       m.extractClassName(tree, ""),
+		On:       onClass,
 		Args:     args,
 		IsGlobal: true,
 		IsLocal:  false,
@@ -615,9 +628,10 @@ func (m *DefaultScopeMatcher) processRelationshipScope(match *sitter.QueryMatch,
 		scopeName = scopeMethod
 	}
 
+	onClass, _ := m.extractClassName(tree, "")
 	return &ScopeMatch{
 		Name:     scopeName,
-		On:       m.extractClassName(tree, ""),
+		On:       onClass,
 		Args:     args,
 		IsGlobal: false,
 		IsLocal:  true,
@@ -651,9 +665,10 @@ func (m *DefaultScopeMatcher) processWhereableScope(match *sitter.QueryMatch, tr
 		args = m.extractScopeArguments(argsCapture, tree)
 	}
 
+	onClass, _ := m.extractClassName(tree, "")
 	return &ScopeMatch{
 		Name:     scopeName,
-		On:       m.extractClassName(tree, ""),
+		On:       onClass,
 		Args:     args,
 		IsGlobal: false,
 		IsLocal:  true,
@@ -690,23 +705,26 @@ func (m *DefaultScopeMatcher) extractScopeArguments(node *sitter.Node, tree *par
 }
 
 // extractClassName extracts the class name from the syntax tree.
-func (m *DefaultScopeMatcher) extractClassName(tree *parser.SyntaxTree, filePath string) string {
+func (m *DefaultScopeMatcher) extractClassName(tree *parser.SyntaxTree, filePath string) (string, bool) {
 	if tree == nil || tree.Root == nil {
-		return "UnknownClass"
+		return "", false
 	}
 
 	// Try to find class declaration using simple tree traversal
 	className := m.findClassNameInTree(tree)
 	if className != "" {
-		return className
+		return className, true
 	}
 
 	// If no classes found in tree, try to extract from file path as fallback
 	if filePath != "" {
-		return m.inferClassNameFromFilePath(filePath)
+		inferredName := m.inferClassNameFromFilePath(filePath)
+		if inferredName != "" && inferredName != "UnknownClass" {
+			return inferredName, true
+		}
 	}
 
-	return "UnknownClass"
+	return "", false
 }
 
 // findClassNameInTree performs a simple traversal to find class declarations.
@@ -733,7 +751,7 @@ func (m *DefaultScopeMatcher) findClassNameInTree(tree *parser.SyntaxTree) strin
 // inferClassNameFromFilePath attempts to infer a class name from the file path.
 func (m *DefaultScopeMatcher) inferClassNameFromFilePath(filePath string) string {
 	if filePath == "" {
-		return "UnknownClass"
+		return ""
 	}
 
 	// Extract filename without extension
@@ -747,7 +765,7 @@ func (m *DefaultScopeMatcher) inferClassNameFromFilePath(filePath string) string
 		return strings.ToUpper(fileName[:1]) + fileName[1:]
 	}
 
-	return "UnknownClass"
+	return ""
 }
 
 // inferModelFromVariable tries to infer model class from variable context.

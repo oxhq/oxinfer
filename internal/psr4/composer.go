@@ -1,7 +1,9 @@
+//go:build goexperiment.jsonv2
+
 package psr4
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"os"
@@ -46,7 +48,6 @@ func (d *DefaultComposerLoader) loadComposerFromReader(r io.Reader, path string)
 		return nil, NewComposerMalformedError(path, err)
 	}
 
-	// Parse the complete composer.json structure first
 	var composerData ComposerData
 	if err := json.Unmarshal(data, &composerData); err != nil {
 		return nil, NewComposerMalformedError(path, err)

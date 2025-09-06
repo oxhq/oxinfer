@@ -1,9 +1,11 @@
 // Package matchers provides integration tests for composite matcher and processor integration.
+//go:build goexperiment.jsonv2
+
 package matchers
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 	"time"
 
@@ -872,7 +874,7 @@ class UserController extends Controller
 		t.Fatal("Expected emitter.Controller result")
 	}
 
-	controllerJSON, _ := json.MarshalIndent(controller, "", "  ")
+	controllerJSON, _ := json.Marshal(controller, json.Deterministic(true), json.Indent("", "  "))
 	t.Logf("Converted controller format:\n%s", string(controllerJSON))
 
 	// Get final stats

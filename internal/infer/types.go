@@ -1,10 +1,12 @@
+//go:build goexperiment.jsonv2
+
 // Package infer provides shape inference functionality for Laravel request patterns.
 // It analyzes request usage patterns and consolidates them into OpenAPI-compatible shapes.
 package infer
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"sort"
 
@@ -67,7 +69,7 @@ func (o *OrderedObject) MarshalJSON() ([]byte, error) {
 			}
 
 			// Encode property key
-			keyBytes, err := json.Marshal(k)
+			keyBytes, err := json.Marshal(k, json.Deterministic(true))
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal property key %q: %w", k, err)
 			}
@@ -75,7 +77,7 @@ func (o *OrderedObject) MarshalJSON() ([]byte, error) {
 			buf.WriteByte(':')
 
 			// Encode property value
-			propBytes, err := json.Marshal(prop)
+			propBytes, err := json.Marshal(prop, json.Deterministic(true))
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal property %q: %w", k, err)
 			}
@@ -90,7 +92,7 @@ func (o *OrderedObject) MarshalJSON() ([]byte, error) {
 			buf.WriteByte(',')
 		}
 		buf.WriteString(`"required":`)
-		reqBytes, err := json.Marshal(o.Required)
+		reqBytes, err := json.Marshal(o.Required, json.Deterministic(true))
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal required array: %w", err)
 		}
@@ -103,7 +105,7 @@ func (o *OrderedObject) MarshalJSON() ([]byte, error) {
 		buf.WriteByte(',')
 	}
 	buf.WriteString(`"order":`)
-	orderBytes, err := json.Marshal(o.Order)
+	orderBytes, err := json.Marshal(o.Order, json.Deterministic(true))
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal order array: %w", err)
 	}

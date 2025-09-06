@@ -1,7 +1,9 @@
+//go:build goexperiment.jsonv2
+
 package infer
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 )
 
@@ -406,7 +408,7 @@ func TestConsolidatedRequest_JSON(t *testing.T) {
 		},
 	}
 
-	data, err := json.Marshal(req)
+	data, err := json.Marshal(req, json.Deterministic(true))
 	if err != nil {
 		t.Errorf("Failed to marshal ConsolidatedRequest: %v", err)
 	}
@@ -441,7 +443,7 @@ func TestRequestInfo_JSON(t *testing.T) {
 		Body:         *body,
 	}
 
-	data, err := json.Marshal(info)
+	data, err := json.Marshal(info, json.Deterministic(true))
 	if err != nil {
 		t.Errorf("Failed to marshal RequestInfo: %v", err)
 	}

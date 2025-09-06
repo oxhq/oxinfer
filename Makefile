@@ -10,12 +10,12 @@ help:
 ## build: Build the oxinfer CLI
 build:
 	@echo "Building oxinfer..."
-	go build -o oxinfer ./cmd/oxinfer
+	GOEXPERIMENT=jsonv2 go build -o oxinfer ./cmd/oxinfer
 
 ## test: Run the full test suite
 test:
 	@echo "Running tests..."
-	go test ./...
+	GOEXPERIMENT=jsonv2 go test ./...
 
 ## fmt: Format Go files
 fmt:
@@ -39,7 +39,7 @@ run:
 
 ## perf-validate: Run end-to-end performance validation (generates .oxinfer/performance_reports/*)
 perf-validate:
-	go test ./internal/perf -run TestPerformanceValidationEnd2End -count=1 -v
+	GOEXPERIMENT=jsonv2 go test ./internal/perf -run TestPerformanceValidationEnd2End -count=1 -v
 
 ## perf-report: Alias for perf-validate
 perf-report: perf-validate

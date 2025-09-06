@@ -1,10 +1,12 @@
 // Command bench is a standalone CLI tool for running Oxinfer performance benchmarks.
 // It provides comprehensive performance testing capabilities including profiling and regression detection.
+//go:build goexperiment.jsonv2
+
 package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"flag"
 	"fmt"
 	"log"

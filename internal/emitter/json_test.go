@@ -1,9 +1,11 @@
+//go:build goexperiment.jsonv2
+
 package emitter
 
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"strings"
 	"testing"

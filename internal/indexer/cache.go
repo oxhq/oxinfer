@@ -1,9 +1,12 @@
+//go:build goexperiment.jsonv2
+
 package indexer
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"hash"
@@ -406,7 +409,7 @@ func (c *FileCacheImpl) loadFromDisk() error {
 
 		var diskEntry DiskCacheEntry
 		if err := json.Unmarshal(entryData, &diskEntry); err != nil {
-			continue // Skip corrupted entries
+			continue
 		}
 
 		// Convert to in-memory cache entry
@@ -485,10 +488,9 @@ func (c *FileCacheImpl) saveToDisk() error {
 			Valid:       node.entry.Valid,
 		}
 
-		// Serialize and write entry
-		entryData, err := json.MarshalIndent(diskEntry, "", "  ")
+		entryData, err := json.Marshal(diskEntry, json.Deterministic(true), jsontext.WithIndent("  "))
 		if err != nil {
-			continue // Skip entries that can't be serialized
+			continue
 		}
 
 		entryPath := filepath.Join(filesDir, filename)
@@ -499,8 +501,7 @@ func (c *FileCacheImpl) saveToDisk() error {
 		index.Entries[path] = filename
 	}
 
-	// Write index file
-	indexData, err := json.MarshalIndent(index, "", "  ")
+	indexData, err := json.Marshal(index, json.Deterministic(true), jsontext.WithIndent("  "))
 	if err != nil {
 		return NewCacheError("saveToDisk", c.cacheDir, fmt.Errorf("marshal index: %w", err))
 	}

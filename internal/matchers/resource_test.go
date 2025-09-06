@@ -1,9 +1,11 @@
 // Package matchers provides tests for Laravel Resource pattern matching.
+//go:build goexperiment.jsonv2
+
 package matchers
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"strings"
 	"testing"
 
@@ -723,7 +725,7 @@ func TestResourceMatcher_GoldenFiles(t *testing.T) {
 
 			// For now, just verify we got some results
 			if len(results) > 0 {
-				actualJSON, _ := json.MarshalIndent(actual, "", "  ")
+				actualJSON, _ := json.Marshal(actual, json.Deterministic(true), json.Indent("", "  "))
 				t.Logf("Resource usage results: %s", string(actualJSON))
 			}
 		})

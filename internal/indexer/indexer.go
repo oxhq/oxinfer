@@ -18,9 +18,9 @@ import (
 
 // DefaultFileIndexer implements the FileIndexer interface
 type DefaultFileIndexer struct {
-	discoverer     FileDiscoverer      // T3.1 component
-	cacher         FileCacher          // T3.2 component
-	workerPool     WorkerPoolManager   // T3.3 component
+	discoverer     FileDiscoverer      // File discovery component
+	cacher         FileCacher          // File caching component
+	workerPool     WorkerPoolManager   // Worker pool management component
 	limitsEnforcer *LimitsEnforcer     // Limits logic
 	config         IndexConfig         // Current configuration
 	progress       IndexProgress       // Progress tracking

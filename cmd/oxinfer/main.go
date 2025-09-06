@@ -1,15 +1,18 @@
+//go:build goexperiment.jsonv2
+
 package main
 
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/garaekz/oxinfer/internal/cli"
+	"github.com/garaekz/oxinfer/internal/config"
 	"github.com/garaekz/oxinfer/internal/emitter"
 	"github.com/garaekz/oxinfer/internal/manifest"
 	"github.com/garaekz/oxinfer/internal/pipeline"
@@ -28,6 +31,13 @@ type DeltaEmitter = emitter.DeltaEmitter
 func main() {
 	exitCode := run(os.Args[1:])
 	os.Exit(int(exitCode))
+}
+
+func getConfigLoader() *config.ConfigLoader {
+	if pwd, err := os.Getwd(); err == nil {
+		return config.NewConfigLoader(pwd)
+	}
+	return nil
 }
 
 // run executes the main CLI logic and returns the appropriate exit code
@@ -190,18 +200,41 @@ func execute(config *cli.CLIConfig) error {
 		}
 	} else {
 		outPath := config.OutputPath
+		
+		// Load config to determine output path resolution strategy
+		var relativeToProject bool
+		var defaultOutputDir string
+		
+		if cfgLoader := getConfigLoader(); cfgLoader != nil {
+			if cfg, err := cfgLoader.Load(""); err == nil {
+				relativeToProject = cfg.Output.RelativeToProject
+				defaultOutputDir = cfg.Output.DefaultOutputDir
+			}
+		}
+		
 		if !filepath.IsAbs(outPath) {
-			// Redirect relative output to project .oxinfer/outputs directory
-			outputsDir := filepath.Join(manifestData.Project.Root, ".oxinfer", "outputs")
-			if err := os.MkdirAll(outputsDir, 0o755); err != nil {
-				return cli.WrapInternalError("failed to create outputs directory", err)
+			if relativeToProject {
+				// Production behavior: relative to project
+				outputsDir := filepath.Join(manifestData.Project.Root, ".oxinfer", "outputs")
+				if err := os.MkdirAll(outputsDir, 0o755); err != nil {
+					return cli.WrapInternalError("failed to create outputs directory", err)
+				}
+				outPath = filepath.Join(outputsDir, filepath.Base(outPath))
+			} else {
+				// Development behavior: relative to binary/PWD
+				if defaultOutputDir == "." {
+					// Current working directory (where binary runs)
+					pwd, _ := os.Getwd()
+					outPath = filepath.Join(pwd, outPath)
+				} else {
+					outPath = filepath.Join(defaultOutputDir, outPath)
+				}
 			}
-			outPath = filepath.Join(outputsDir, filepath.Base(outPath))
-		} else {
-			// Ensure destination directory exists for absolute paths
-			if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
-				return cli.WrapInternalError("failed to create output directory", err)
-			}
+		}
+		
+		// Ensure destination directory exists
+		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+			return cli.WrapInternalError("failed to create output directory", err)
 		}
 
 		base := filepath.Base(outPath)
@@ -221,7 +254,7 @@ func execute(config *cli.CLIConfig) error {
 func printError(err error, noColor bool) {
 	if cliErr, ok := err.(*cli.CLIError); ok {
 		// Print structured CLI errors as JSON to stderr
-		jsonBytes, jsonErr := json.Marshal(cliErr)
+		jsonBytes, jsonErr := json.Marshal(cliErr, json.Deterministic(true))
 		if jsonErr != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err.Error())
 			return

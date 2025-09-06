@@ -1,9 +1,11 @@
 // Package bench provides performance benchmarking infrastructure for the Oxinfer pipeline.
 // It integrates with existing stats system to collect and export performance metrics.
+//go:build goexperiment.jsonv2
+
 package bench
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"runtime"
 	"sort"
@@ -275,7 +277,7 @@ func (mc *MetricsCollector) ExportMetrics(metrics *PerformanceMetrics) ([]byte, 
 		ExportedAt:         time.Now(),
 	}
 
-	return json.MarshalIndent(export, "", "  ")
+	return json.Marshal(export, json.Deterministic(true), json.Indent("", "  "))
 }
 
 // Helper methods

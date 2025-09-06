@@ -1,7 +1,9 @@
+//go:build goexperiment.jsonv2
+
 package emitter
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 )
 
@@ -205,13 +207,13 @@ func TestComplexDeltaDeterministicValidation(t *testing.T) {
 
 // deepEqual compares two interface{} values for deep equality
 func deepEqual(t *testing.T, expected, actual any) bool {
-	expectedJSON, err := json.Marshal(expected)
+	expectedJSON, err := json.Marshal(expected, json.Deterministic(true))
 	if err != nil {
 		t.Errorf("failed to marshal expected: %v", err)
 		return false
 	}
 
-	actualJSON, err := json.Marshal(actual)
+	actualJSON, err := json.Marshal(actual, json.Deterministic(true))
 	if err != nil {
 		t.Errorf("failed to marshal actual: %v", err)
 		return false

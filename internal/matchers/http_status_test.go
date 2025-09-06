@@ -1,9 +1,11 @@
 // Package matchers provides tests for HTTP status pattern matching.
+//go:build goexperiment.jsonv2
+
 package matchers
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"os"
 	"path/filepath"
 	"strings"
@@ -283,8 +285,8 @@ func TestHTTPStatusMatcher_GoldenFiles(t *testing.T) {
 			actual := convertHTTPStatusResults(results)
 
 			// Compare results (simplified comparison for now)
-			actualJSON, _ := json.MarshalIndent(actual, "", "  ")
-			expectedJSON, _ := json.MarshalIndent(expected, "", "  ")
+			actualJSON, _ := json.Marshal(actual, json.Deterministic(true), json.Indent("", "  "))
+			expectedJSON, _ := json.Marshal(expected, json.Deterministic(true), json.Indent("", "  "))
 
 			if !strings.Contains(string(actualJSON), "status") && len(expected) > 0 {
 				t.Errorf("Golden file test failed for %s", tc.name)

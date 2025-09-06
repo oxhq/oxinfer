@@ -1,10 +1,12 @@
 // Package determinism provides triple-run validation for deterministic output
 // ensuring that oxinfer produces identical delta.json files across multiple runs.
+//go:build goexperiment.jsonv2
+
 package determinism
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	"os/exec"
@@ -489,7 +491,7 @@ func writeTempManifest(manifest *manifest.Manifest) (string, func(), error) {
 	tmpPath := tmpFile.Name()
 
 	// Marshal manifest to JSON
-	data, err := json.MarshalIndent(manifest, "", "  ")
+	data, err := json.Marshal(manifest, json.Deterministic(true), json.Indent("", "  "))
 	if err != nil {
 		tmpFile.Close()
 		os.Remove(tmpPath)

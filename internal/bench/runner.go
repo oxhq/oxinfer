@@ -1,10 +1,12 @@
 // Package bench provides performance benchmarking infrastructure for the Oxinfer pipeline.
 // The runner orchestrates benchmark execution with proper cache management and metrics collection.
+//go:build goexperiment.jsonv2
+
 package bench
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -720,7 +722,7 @@ func (br *BenchmarkRunner) saveBaseline(summary *RunSummary) error {
 	}
 
 	// Serialize to JSON
-	data, err := json.MarshalIndent(baselineData, "", "  ")
+	data, err := json.Marshal(baselineData, json.Deterministic(true), json.Indent("", "  "))
 	if err != nil {
 		return fmt.Errorf("failed to serialize baseline data: %w", err)
 	}
@@ -767,7 +769,7 @@ func (br *BenchmarkRunner) generateReports(summary *RunSummary) error {
 }
 
 func (br *BenchmarkRunner) generateJSONReport(summary *RunSummary) error {
-	data, err := json.MarshalIndent(summary, "", "  ")
+	data, err := json.Marshal(summary, json.Deterministic(true), json.Indent("", "  "))
 	if err != nil {
 		return fmt.Errorf("failed to serialize summary: %w", err)
 	}

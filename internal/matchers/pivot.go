@@ -227,7 +227,7 @@ func (m *DefaultPivotMatcher) processPivotMatch(
 		return nil
 	}
 
-	// T5: Validate that withPivot is used in correct context (many-to-many relationships)
+	// Validate that withPivot is used in correct context (many-to-many relationships)
 	if methodName == "withPivot" {
 		// Check if it's in a belongsToMany context
 		if !m.isInManyToManyContext(tree, position) {
@@ -361,10 +361,10 @@ func (m *DefaultPivotMatcher) extractAliasFromArgs(argsNode *sitter.Node, tree *
 }
 
 // extractPivotFields extracts field names from withPivot method arguments.
-// T5: Improved extraction with better handling of array syntax and multiple arguments
+// Improved extraction with better handling of array syntax and multiple arguments
 func (m *DefaultPivotMatcher) extractPivotFields(argsNode *sitter.Node, tree *parser.SyntaxTree) []string {
 	var fields []string
-	seenFields := make(map[string]bool) // T5: Prevent duplicates
+	seenFields := make(map[string]bool) // Prevent duplicates
 
 	// Walk through arguments to find string literals
 	for i := uint32(0); i < argsNode.ChildCount(); i++ {
@@ -400,7 +400,7 @@ func (m *DefaultPivotMatcher) extractPivotFields(argsNode *sitter.Node, tree *pa
 				seenFields[fieldName] = true
 			}
 		}
-		// T5: Handle array syntax like ['field1', 'field2']
+		// Handle array syntax like ['field1', 'field2']
 		if child.Type() == "array_creation_expression" {
 			arrayFields := m.extractArrayFields(child, tree)
 			for _, field := range arrayFields {
@@ -412,7 +412,7 @@ func (m *DefaultPivotMatcher) extractPivotFields(argsNode *sitter.Node, tree *pa
 		}
 	}
 
-	// T5: Sort fields for deterministic output
+	// Sort fields for deterministic output
 	sort.Strings(fields)
 	return fields
 }
@@ -522,7 +522,7 @@ func (m *DefaultPivotMatcher) inferRelationshipName(tree *parser.SyntaxTree, pos
 		}
 	}
 
-	return "unknown"
+	return ""
 }
 
 // getMethodArgsDisplay creates a display string for method arguments.
@@ -673,7 +673,7 @@ func ValidatePivotMethodCall(methodName string, args []string) bool {
 }
 
 // extractArrayArgument extracts fields from an array passed as argument
-// T5: Handle ['field1', 'field2'] syntax in withPivot
+// Handle ['field1', 'field2'] syntax in withPivot
 func (m *DefaultPivotMatcher) extractArrayArgument(argNode *sitter.Node, tree *parser.SyntaxTree) []string {
 	var fields []string
 	
@@ -693,7 +693,7 @@ func (m *DefaultPivotMatcher) extractArrayArgument(argNode *sitter.Node, tree *p
 }
 
 // extractArrayFields extracts string fields from an array creation expression
-// T5: Parse ['field1', 'field2', 'field3'] syntax
+// Parse ['field1', 'field2', 'field3'] syntax
 func (m *DefaultPivotMatcher) extractArrayFields(arrayNode *sitter.Node, tree *parser.SyntaxTree) []string {
 	var fields []string
 	
@@ -729,7 +729,7 @@ func (m *DefaultPivotMatcher) extractArrayFields(arrayNode *sitter.Node, tree *p
 	return fields
 }
 // isInManyToManyContext checks if the pivot method is used in a belongsToMany relationship
-// T5: Validate that pivot methods are only detected in correct context
+// Validate that pivot methods are only detected in correct context
 func (m *DefaultPivotMatcher) isInManyToManyContext(tree *parser.SyntaxTree, position parser.Point) bool {
 	sourceLines := strings.Split(string(tree.Source), "\n")
 	

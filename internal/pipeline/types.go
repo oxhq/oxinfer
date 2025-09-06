@@ -1,5 +1,5 @@
 // Package pipeline provides orchestration for the complete oxinfer analysis pipeline.
-// It coordinates all components from T1-T11 to produce the final delta.json output.
+// It coordinates all components from CLI foundation through shape inference to produce the final delta.json output.
 package pipeline
 
 import (
@@ -114,6 +114,9 @@ type ParseResults struct {
 	Namespaces []parser.PHPNamespace
 	Traits     []parser.PHPTrait
 	Interfaces []parser.PHPInterface
+
+	// Model scopes
+	ModelScopes map[string][]string // Model FQCN -> scope names
 
 	// Statistics
 	FilesProcessed int
@@ -315,10 +318,11 @@ type ComponentRegistry struct {
 	// Core components
 	PSR4Resolver    psr4.PSR4Resolver
 	FileIndexer     indexer.FileIndexer
-	PHPParser       parser.PHPParser
+	LaravelParser   *parser.LaravelParser // Direct Laravel parser, no abstractions
 	PatternMatcher  matchers.CompositePatternMatcher
 	ShapeInferencer infer.ShapeInferencer
 	DeltaEmitter    emitter.DeltaEmitter
+	ScopeRegistry   *matchers.ScopeRegistry
 
 	// Component configurations
 	IndexerConfig   *indexer.IndexConfig
@@ -352,7 +356,7 @@ func (r *ComponentRegistry) ClearCaches() {
 	// This is a safe approach that ensures clean state
 	r.PSR4Resolver = nil
 	r.FileIndexer = nil
-	r.PHPParser = nil
+	r.LaravelParser = nil
 	r.PatternMatcher = nil
 	r.ShapeInferencer = nil
 	r.DeltaEmitter = nil
@@ -369,10 +373,8 @@ func (r *ComponentRegistry) Close() error {
 	//     }
 	// }
 
-	if r.PHPParser != nil {
-		if err := r.PHPParser.Close(); err != nil {
-			lastErr = err
-		}
+	if r.LaravelParser != nil {
+		// LaravelParser doesn't need Close currently
 	}
 
 	if r.PatternMatcher != nil {

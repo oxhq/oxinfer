@@ -1,10 +1,12 @@
 // Package emitter provides delta emission functionality for oxinfer.
 // It defines the structured output format that matches delta.schema.json.
+//go:build goexperiment.jsonv2
+
 package emitter
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"sort"
 )
@@ -144,7 +146,7 @@ func (m MetaStats) MarshalJSON() ([]byte, error) {
 			if i > 0 {
 				buf.WriteByte(',')
 			}
-			keyBytes, _ := json.Marshal(k)
+			keyBytes, _ := json.Marshal(k, json.Deterministic(true))
 			buf.Write(keyBytes)
 			buf.WriteByte(':')
 			buf.WriteString(intToString(m.PhaseStats[k]))
@@ -160,7 +162,7 @@ func (m MetaStats) MarshalJSON() ([]byte, error) {
 			if i > 0 {
 				buf.WriteByte(',')
 			}
-			keyBytes, _ := json.Marshal(k)
+			keyBytes, _ := json.Marshal(k, json.Deterministic(true))
 			buf.Write(keyBytes)
 			buf.WriteByte(':')
 			buf.WriteString(intToString(int64(m.MatchStats[k])))
@@ -390,7 +392,7 @@ func (o OrderedObject) MarshalJSON() ([]byte, error) {
 	buf.WriteByte('{')
 	for i, k := range keys {
 		// Encode key
-		keyBytes, err := json.Marshal(k)
+		keyBytes, err := json.Marshal(k, json.Deterministic(true))
 		if err != nil {
 			return nil, err
 		}
@@ -510,7 +512,7 @@ func (pd PolymorphicDiscriminator) MarshalJSON() ([]byte, error) {
 	buf.WriteByte('{')
 	// propertyName
 	buf.WriteString("\"propertyName\":")
-	nameBytes, _ := json.Marshal(pd.PropertyName)
+	nameBytes, _ := json.Marshal(pd.PropertyName, json.Deterministic(true))
 	buf.Write(nameBytes)
 	// mapping
 	buf.WriteByte(',')
@@ -519,17 +521,17 @@ func (pd PolymorphicDiscriminator) MarshalJSON() ([]byte, error) {
 		if i > 0 {
 			buf.WriteByte(',')
 		}
-		keyBytes, _ := json.Marshal(k)
+		keyBytes, _ := json.Marshal(k, json.Deterministic(true))
 		buf.Write(keyBytes)
 		buf.WriteByte(':')
-		valBytes, _ := json.Marshal(pd.Mapping[k])
+		valBytes, _ := json.Marshal(pd.Mapping[k], json.Deterministic(true))
 		buf.Write(valBytes)
 	}
 	buf.WriteByte('}')
 	// source
 	buf.WriteByte(',')
 	buf.WriteString("\"source\":")
-	srcBytes, _ := json.Marshal(pd.Source)
+	srcBytes, _ := json.Marshal(pd.Source, json.Deterministic(true))
 	buf.Write(srcBytes)
 	// isExplicit
 	buf.WriteByte(',')
@@ -543,7 +545,7 @@ func (pd PolymorphicDiscriminator) MarshalJSON() ([]byte, error) {
 	if pd.DefaultType != nil {
 		buf.WriteByte(',')
 		buf.WriteString("\"defaultType\":")
-		defBytes, _ := json.Marshal(*pd.DefaultType)
+		defBytes, _ := json.Marshal(*pd.DefaultType, json.Deterministic(true))
 		buf.Write(defBytes)
 	}
 	buf.WriteByte('}')
@@ -584,7 +586,7 @@ func (d Discriminator) MarshalJSON() ([]byte, error) {
 	buf.WriteByte('{')
 	// propertyName first
 	buf.WriteString("\"propertyName\":")
-	nameBytes, _ := json.Marshal(d.PropertyName)
+	nameBytes, _ := json.Marshal(d.PropertyName, json.Deterministic(true))
 	buf.Write(nameBytes)
 	// mapping
 	buf.WriteByte(',')
@@ -593,10 +595,10 @@ func (d Discriminator) MarshalJSON() ([]byte, error) {
 		if i > 0 {
 			buf.WriteByte(',')
 		}
-		keyBytes, _ := json.Marshal(k)
+		keyBytes, _ := json.Marshal(k, json.Deterministic(true))
 		buf.Write(keyBytes)
 		buf.WriteByte(':')
-		valBytes, _ := json.Marshal(d.Mapping[k])
+		valBytes, _ := json.Marshal(d.Mapping[k], json.Deterministic(true))
 		buf.Write(valBytes)
 	}
 	buf.WriteByte('}')

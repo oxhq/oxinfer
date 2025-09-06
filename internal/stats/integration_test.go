@@ -1,7 +1,9 @@
+//go:build goexperiment.jsonv2
+
 package stats
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 	"time"
 
@@ -157,7 +159,7 @@ func TestStatsJSONMarshaling(t *testing.T) {
 	// Marshal multiple times to ensure deterministic output
 	var results []string
 	for i := 0; i < 3; i++ {
-		data, err := json.Marshal(stats)
+		data, err := json.Marshal(stats, json.Deterministic(true))
 		if err != nil {
 			t.Fatalf("JSON marshaling failed: %v", err)
 		}
@@ -226,7 +228,7 @@ func TestEmitterDeltaWithStats(t *testing.T) {
 	}
 
 	// Marshal to JSON
-	data, err := json.Marshal(delta)
+	data, err := json.Marshal(delta, json.Deterministic(true))
 	if err != nil {
 		t.Fatalf("Failed to marshal Delta to JSON: %v", err)
 	}

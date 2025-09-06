@@ -234,8 +234,8 @@ func (m *DefaultAttributeMatcher) processModernAttributeMethod(
 	}
 
 	// Extract attribute name from method name
-	attributeName := m.extractAttributeNameFromMethod(methodName)
-	if attributeName == "" {
+	attributeName, ok := m.extractAttributeNameFromMethod(methodName)
+	if !ok || attributeName == "" {
 		return nil
 	}
 
@@ -272,15 +272,18 @@ func (m *DefaultAttributeMatcher) processAttributeMakeCall(
 	tree *parser.SyntaxTree,
 	filePath string,
 ) *MatchResult {
-	// T4: Extract the actual attribute name from the method name
+	// Extract the actual attribute name from the method name
 	// When we have a method like: public function fullName(): Attribute { return Attribute::make(...) }
 	// methodName should contain "fullName"
-	attributeName := m.extractAttributeNameFromMethod(methodName)
+	attributeName, _ := m.extractAttributeNameFromMethod(methodName)
 	
 	// If we couldn't extract from method name, try to extract from the context
 	if attributeName == "" || attributeName == "unknown" {
 		// Try to find the containing method name by looking at parent nodes
-		attributeName = m.extractAttributeNameFromContext(position, tree)
+		name, ok := m.extractAttributeNameFromContext(position, tree)
+		if ok {
+			attributeName = name
+		}
 	}
 	
 	// If still unknown, use the method name as-is if it's not empty
@@ -288,16 +291,16 @@ func (m *DefaultAttributeMatcher) processAttributeMakeCall(
 		attributeName = methodName
 	}
 	
-	// Final fallback
-	if attributeName == "" {
-		attributeName = "unknown"
+	// Final check - skip if we can't determine the attribute name
+	if attributeName == "" || attributeName == "unknown" {
+		return nil // Skip this attribute if we can't determine its name
 	}
 
 	// Extract arguments from Attribute::make() call
 	castType := m.extractCastTypeFromArgs(argsNode, tree)
 
 	attributeMatch := &AttributeMatch{
-		Name:     attributeName, // T4: Now properly extracted
+		Name:     attributeName, // Now properly extracted
 		CastType: castType,
 		Accessor: true,
 		Mutator:  true, // Modern attributes support both by default
@@ -488,10 +491,13 @@ func (m *DefaultAttributeMatcher) processAttributeWithCast(
 }
 
 // extractAttributeNameFromMethod extracts attribute name from modern method names.
-func (m *DefaultAttributeMatcher) extractAttributeNameFromMethod(methodName string) string {
+func (m *DefaultAttributeMatcher) extractAttributeNameFromMethod(methodName string) (string, bool) {
+	if methodName == "" {
+		return "", false
+	}
 	// Modern attribute methods can have any name that makes sense
 	// The attribute name is typically the snake_case version of the method name
-	return m.camelToSnake(methodName)
+	return m.camelToSnake(methodName), true
 }
 
 // extractAttributeNameFromLegacyMethod extracts attribute name from legacy method names.
@@ -731,10 +737,10 @@ func ValidateAttributeMethodCall(methodName string, isModern bool) bool {
 }
 
 // extractAttributeNameFromContext tries to extract the attribute name from surrounding context.
-// T4: This method looks for the containing method name when Attribute::make() is used.
-func (m *DefaultAttributeMatcher) extractAttributeNameFromContext(position parser.Point, tree *parser.SyntaxTree) string {
+// This method looks for the containing method name when Attribute::make() is used.
+func (m *DefaultAttributeMatcher) extractAttributeNameFromContext(position parser.Point, tree *parser.SyntaxTree) (string, bool) {
 	if tree == nil || tree.Source == nil {
-		return "unknown"
+		return "", false
 	}
 
 	// Get the source code as lines
@@ -756,7 +762,10 @@ func (m *DefaultAttributeMatcher) extractAttributeNameFromContext(position parse
 		if len(matches) > 1 {
 			methodName := matches[1]
 			// Extract attribute name from method name
-			return m.extractAttributeNameFromMethod(methodName)
+			name, ok := m.extractAttributeNameFromMethod(methodName)
+			if ok {
+				return name, true
+			}
 		}
 	}
 	
@@ -771,9 +780,12 @@ func (m *DefaultAttributeMatcher) extractAttributeNameFromContext(position parse
 		if len(matches) > 1 {
 			methodName := matches[1]
 			// Extract attribute name from method name
-			return m.extractAttributeNameFromMethod(methodName)
+			name, ok := m.extractAttributeNameFromMethod(methodName)
+			if ok {
+				return name, true
+			}
 		}
 	}
 	
-	return "unknown"
+	return "", false
 }

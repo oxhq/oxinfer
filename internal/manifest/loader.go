@@ -1,7 +1,9 @@
+//go:build goexperiment.jsonv2
+
 package manifest
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"os"
@@ -40,27 +42,22 @@ func (l *manifestLoader) LoadFromFile(path string) (*Manifest, error) {
 
 // LoadFromReader loads and validates a manifest from an io.Reader
 func (l *manifestLoader) LoadFromReader(r io.Reader) (*Manifest, error) {
-	// Read all data from the reader
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, cli.WrapInputError("failed to read manifest data", err)
 	}
 
-	// Validate against JSON schema first
 	if err := l.validator.ValidateSchema(data); err != nil {
 		return nil, err
 	}
 
-	// Parse JSON into manifest struct
 	var manifest Manifest
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return nil, cli.WrapInputError("invalid JSON in manifest", err)
 	}
 
-	// Apply schema defaults
 	applyDefaults(&manifest)
 
-	// Validate paths and business logic
 	if err := l.validator.ValidatePaths(&manifest); err != nil {
 		return nil, err
 	}

@@ -1,8 +1,10 @@
 // Package emitter provides integration tests for polymorphic pattern emission.
+//go:build goexperiment.jsonv2
+
 package emitter
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 )
 
@@ -156,7 +158,7 @@ func TestPolymorphicSchemaValidation(t *testing.T) {
 	}
 
 	// Marshal to JSON and verify structure
-	jsonBytes, err := json.Marshal(relation)
+	jsonBytes, err := json.Marshal(relation, json.Deterministic(true))
 	if err != nil {
 		t.Fatalf("Failed to marshal PolymorphicRelation: %v", err)
 	}

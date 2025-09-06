@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// BenchmarkTreeSitterParsing tests T4.1 tree-sitter foundation performance
+// BenchmarkTreeSitterParsing tests tree-sitter foundation performance
 func BenchmarkTreeSitterParsing(b *testing.B) {
 	testCases := []struct {
 		name        string
@@ -94,7 +94,7 @@ class UserController extends Controller
 	}
 }
 
-// BenchmarkASTExtraction tests T4.2 AST query system performance
+// BenchmarkASTExtraction tests AST query system performance
 func BenchmarkASTExtraction(b *testing.B) {
 	testCases := []struct {
 		name        string
@@ -157,7 +157,7 @@ func BenchmarkASTExtraction(b *testing.B) {
 	}
 }
 
-// BenchmarkConcurrentParsingPerformance tests T4.3 concurrent parsing performance
+// BenchmarkConcurrentParsingPerformance tests concurrent parsing performance
 func BenchmarkConcurrentParsingPerformance(b *testing.B) {
 	testCases := []struct {
 		name             string

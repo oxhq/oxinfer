@@ -364,7 +364,7 @@ func (s *DefaultShapeInferencer) InferRequestShape(patterns []matchers.RequestUs
 }
 
 // processLaravelPatterns processes Laravel-specific patterns like only() calls to create nested structures.
-// This method handles the T11 acceptance criteria for interpreting dot notation paths.
+// This method handles the acceptance criteria for interpreting dot notation paths.
 func (s *DefaultShapeInferencer) processLaravelPatterns(patterns []matchers.RequestUsageMatch, target *OrderedObject) error {
 	// Extract Laravel method patterns that indicate nested structures
 	laravelPaths := make([]string, 0)
@@ -616,65 +616,52 @@ func BuildNestedObject(segments []PathSegment) *OrderedObject {
 	root := CreateEmptyOrderedObject()
 	current := root
 
-	// Process all segments except the last one
-	for i := 0; i < len(segments)-1; i++ {
-		segment := segments[i]
-		nextSegment := segments[i+1]
+	// Process each segment
+	for i, segment := range segments {
+		// Check if this is the last segment
+		isLast := (i == len(segments)-1)
 
-		var prop *PropertyInfo
-
-		// Check if the NEXT segment is a wildcard - if so, current segment should be an array
-		if nextSegment.IsWildcard {
-			// Create array property - the next segment is a wildcard, so this should be an array
-			nestedObj := CreateEmptyOrderedObject()
-			itemProp := CreateObjectProperty(nestedObj, "")
-			prop = CreateArrayProperty(itemProp, "")
-
-			// Add the property with the current segment key
-			current.AddProperty(segment.Key, prop)
-			// Move to the array item properties for next iteration
-			current = prop.Items.Properties
-
-			// Skip the wildcard segment since we've handled it
-			i++ // This will skip the next iteration which would be the wildcard
+		if segment.IsWildcard {
+			// Wildcard segment - treat "*" as a literal key
+			if isLast {
+				// Terminal wildcard - create a string property
+				current.AddProperty("*", CreateStringProperty("", ""))
+			} else {
+				// Non-terminal wildcard - create nested object
+				nestedObj := CreateEmptyOrderedObject()
+				prop := CreateObjectProperty(nestedObj, "")
+				current.AddProperty("*", prop)
+				current = prop.Properties
+			}
 		} else if segment.IsArray {
-			// Current segment itself is an array notation like [0]
-			nestedObj := CreateEmptyOrderedObject()
-			itemProp := CreateObjectProperty(nestedObj, "")
-			prop = CreateArrayProperty(itemProp, "")
-
-			current.AddProperty(segment.Key, prop)
-			current = prop.Items.Properties
+			// Array notation segment
+			if isLast {
+				// Terminal array - assume string items
+				stringProp := CreateStringProperty("", "")
+				prop := CreateArrayProperty(stringProp, "")
+				current.AddProperty(segment.Key, prop)
+			} else {
+				// Non-terminal array
+				nestedObj := CreateEmptyOrderedObject()
+				itemProp := CreateObjectProperty(nestedObj, "")
+				prop := CreateArrayProperty(itemProp, "")
+				current.AddProperty(segment.Key, prop)
+				current = prop.Items.Properties
+			}
 		} else {
-			// Regular object property
-			nestedObj := CreateEmptyOrderedObject()
-			prop = CreateObjectProperty(nestedObj, "")
-
-			current.AddProperty(segment.Key, prop)
-			current = prop.Properties
+			// Regular property
+			if isLast {
+				// Terminal property - create string property
+				current.AddProperty(segment.Key, CreateStringProperty("", ""))
+			} else {
+				// Non-terminal property - create nested object
+				nestedObj := CreateEmptyOrderedObject()
+				prop := CreateObjectProperty(nestedObj, "")
+				current.AddProperty(segment.Key, prop)
+				current = prop.Properties
+			}
 		}
 	}
-
-	// Handle the final segment - this becomes a terminal property
-	finalSegment := segments[len(segments)-1]
-
-	// Skip if the final segment is a wildcard (it was already handled)
-	if finalSegment.IsWildcard {
-		return root
-	}
-
-	var finalProp *PropertyInfo
-
-	if finalSegment.IsArray {
-		// Terminal array - assume string items for now
-		stringProp := CreateStringProperty("", "")
-		finalProp = CreateArrayProperty(stringProp, "")
-	} else {
-		// Terminal string property
-		finalProp = CreateStringProperty("", "")
-	}
-
-	current.AddProperty(finalSegment.Key, finalProp)
 
 	return root
 }

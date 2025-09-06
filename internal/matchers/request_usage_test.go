@@ -1,9 +1,11 @@
 // Package matchers provides tests for request usage pattern matching.
+//go:build goexperiment.jsonv2
+
 package matchers
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/garaekz/oxinfer/internal/parser"
@@ -562,7 +564,7 @@ func TestRequestUsageMatcher_GoldenFiles(t *testing.T) {
 
 			// For now, just verify we got some results
 			if len(results) > 0 {
-				actualJSON, _ := json.MarshalIndent(actual, "", "  ")
+				actualJSON, _ := json.Marshal(actual, json.Deterministic(true), json.Indent("", "  "))
 				t.Logf("Request usage results: %s", string(actualJSON))
 			}
 		})

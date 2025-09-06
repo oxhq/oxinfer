@@ -1,11 +1,13 @@
 // validate-determinism is a standalone CLI tool for validating deterministic
 // behavior of oxinfer across multiple runs. This tool is designed for CI/CD
 // integration and automated testing pipelines.
+//go:build goexperiment.jsonv2
+
 package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"flag"
 	"fmt"
 	"log"

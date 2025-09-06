@@ -174,15 +174,16 @@ func (o *DefaultOrchestrator) RunIndexingPhase(ctx context.Context, manifest *ma
 func (o *DefaultOrchestrator) RunParsingPhase(ctx context.Context, files []indexer.FileInfo) (*ParseResults, error) {
 	startTime := time.Now()
 
-	// Initialize PHP parser if not already done
-	if o.registry.PHPParser == nil {
-		config := o.config.ParserConfig
-		phpParser, err := parser.NewPHPParser(&config)
+	// Initialize Laravel parser if not already done
+	if o.registry.LaravelParser == nil {
+		laravelParser, err := parser.NewLaravelParser(false)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create PHP parser: %w", err)
+			return nil, fmt.Errorf("failed to create Laravel parser: %w", err)
 		}
-		o.registry.PHPParser = phpParser
+		o.registry.LaravelParser = laravelParser
 	}
+
+	laravelParser := o.registry.LaravelParser
 
 	// The PHPParser.ProcessFile method handles construct extraction internally
 
@@ -194,9 +195,10 @@ func (o *DefaultOrchestrator) RunParsingPhase(ctx context.Context, files []index
 		Namespaces:  make([]parser.PHPNamespace, 0),
 		Traits:      make([]parser.PHPTrait, 0),
 		Interfaces:  make([]parser.PHPInterface, 0),
+		ModelScopes: make(map[string][]string),
 	}
 
-	// Process each file using the PHPParser.ProcessFile method
+	// Process each file using the LaravelParser
 	for _, file := range files {
 		select {
 		case <-ctx.Done():
@@ -204,10 +206,9 @@ func (o *DefaultOrchestrator) RunParsingPhase(ctx context.Context, files []index
 		default:
 		}
 
-		// Use the ProcessFile method which integrates with the file indexer properly
-		parseResult, err := o.registry.PHPParser.ProcessFile(ctx, file)
+		// Parse Laravel patterns
+		err := laravelParser.ParseFile(ctx, file.Path)
 		if err != nil {
-			// Log error and continue with other files
 			failedFile := FailedFile{
 				FilePath: file.Path,
 				Error:    err,
@@ -217,38 +218,23 @@ func (o *DefaultOrchestrator) RunParsingPhase(ctx context.Context, files []index
 			continue
 		}
 
-		// Process successful result
-		if parseResult != nil {
-			// Extract file path from result
-			if resultMap, ok := parseResult.(*map[string]any); ok {
-				if filePath, ok := (*resultMap)["filePath"].(string); ok {
-					// Compute relative path from project root
-					relativePath, err := filepath.Rel(o.config.ProjectRoot, filePath)
-					if err != nil {
-						relativePath = filePath // Fallback to absolute path
-					}
-
-					// Extract namespace from result if available
-					namespace := ""
-					if ns, ok := (*resultMap)["namespace"].(string); ok {
-						namespace = ns
-					}
-
-					parsedFile := ParsedFile{
-						FilePath:     filePath,
-						RelativePath: relativePath,
-						Namespace:    namespace,
-					}
-					results.ParsedFiles = append(results.ParsedFiles, parsedFile)
-				}
-			}
-		}
-
+		// Track as processed
 		results.FilesProcessed++
+		
+		parsedFile := ParsedFile{
+			FilePath:     file.Path,
+			RelativePath: file.Path, // Can compute relative if needed
+		}
+		results.ParsedFiles = append(results.ParsedFiles, parsedFile)
 	}
 
 	// Finalize results
 	results.ParseDuration = time.Since(startTime)
+
+	// Extract model scopes if using Laravel-aware parser
+	if laravelParser != nil {
+		results.ModelScopes = laravelParser.GetModelScopes()
+	}
 
 	// Sort all constructs for deterministic output
 	o.sortParseResults(results)
@@ -260,13 +246,27 @@ func (o *DefaultOrchestrator) RunParsingPhase(ctx context.Context, files []index
 func (o *DefaultOrchestrator) RunMatchingPhase(ctx context.Context, parseResults *ParseResults) (*MatchResults, error) {
 	startTime := time.Now()
 
-	// Initialize pattern matcher if not already done
+	// Inject config into context for component access
+	if o.config != nil {
+		ctx = context.WithValue(ctx, "oxinfer.config", o.config)
+	}
+
+	// Initialize pattern matcher FIRST to ensure ScopeRegistry exists
 	if o.registry.PatternMatcher == nil {
 		matcher, err := o.createPatternMatcher()
 		if err != nil {
 			return nil, fmt.Errorf("failed to create pattern matcher: %w", err)
 		}
 		o.registry.PatternMatcher = matcher
+	}
+
+	// THEN populate ScopeRegistry from ParseResults
+	if parseResults.ModelScopes != nil && o.registry.ScopeRegistry != nil {
+		for modelFQCN, scopes := range parseResults.ModelScopes {
+			for _, scopeName := range scopes {
+				o.registry.ScopeRegistry.AddModelScope(modelFQCN, scopeName)
+			}
+		}
 	}
 
 	results := &MatchResults{
@@ -472,6 +472,11 @@ func (o *DefaultOrchestrator) Close() error {
 
 // initializeComponents initializes all pipeline components.
 func (o *DefaultOrchestrator) initializeComponents() error {
+	// Initialize ScopeRegistry first (shared between parser and matcher)
+	if o.registry.ScopeRegistry == nil {
+		o.registry.ScopeRegistry = matchers.NewScopeRegistry()
+	}
+
 	// Initialize PSR-4 resolver
 	if o.registry.PSR4Resolver == nil {
 		composerPath := filepath.Join(o.config.ProjectRoot, "composer.json")
@@ -536,6 +541,11 @@ func (o *DefaultOrchestrator) createPatternMatcher() (matchers.CompositePatternM
 		return nil, fmt.Errorf("failed to create pattern matching processor: %w", err)
 	}
 
+	// Set the shared scope registry
+	if o.registry.ScopeRegistry != nil {
+		processor.SetScopeRegistry(o.registry.ScopeRegistry)
+	}
+
 	// Extract the composite matcher from the processor
 	// The processor contains a composite matcher that has all individual matchers registered
 	composite := processor.GetComposite()
@@ -545,24 +555,17 @@ func (o *DefaultOrchestrator) createPatternMatcher() (matchers.CompositePatternM
 
 // parseSyntaxTree parses a file to get its syntax tree for pattern matching.
 func (o *DefaultOrchestrator) parseSyntaxTree(ctx context.Context, filePath string) (*parser.SyntaxTree, error) {
-	// Initialize PHP parser if not already done
-	if o.registry.PHPParser == nil {
-		config := parser.DefaultParserConfig()
-		phpParser, err := parser.NewPHPParser(config)
+	// Use LaravelParser to get syntax tree
+	if o.registry.LaravelParser == nil {
+		laravelParser, err := parser.NewLaravelParser(false)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create PHP parser: %w", err)
+			return nil, fmt.Errorf("failed to create Laravel parser: %w", err)
 		}
-		o.registry.PHPParser = phpParser
+		o.registry.LaravelParser = laravelParser
 	}
 
-	// Cast to TreeSitterParser for syntax tree access
-	treeSitterParser, ok := o.registry.PHPParser.(parser.TreeSitterParser)
-	if !ok {
-		return nil, fmt.Errorf("PHPParser does not support syntax tree parsing: %T", o.registry.PHPParser)
-	}
-
-	// Parse the file to get syntax tree
-	tree, err := treeSitterParser.ParseFile(ctx, filePath)
+	// Get syntax tree for matchers
+	tree, err := o.registry.LaravelParser.GetSyntaxTree(ctx, filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse file %s: %w", filePath, err)
 	}
@@ -638,7 +641,7 @@ func (o *DefaultOrchestrator) extractMethodKeyFromPattern(pattern *matchers.Requ
 	// Without proper AST context, we cannot generate valid Controller::method keys.
 	// Rather than inventing placeholder keys, skip these patterns cleanly.
 	
-	// TODO: T1.3 - Enhance RequestUsageMatch to include controller context from tree-sitter analysis
+	// TODO: Enhance RequestUsageMatch to include controller context from tree-sitter analysis
 	// The matchers should extract and provide:
 	// - Controller FQCN from class declaration AST node
 	// - Method name from method declaration AST node  
