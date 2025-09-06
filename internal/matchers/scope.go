@@ -22,16 +22,85 @@ type ScopeRegistry struct {
 
 // NewScopeRegistry creates a new scope registry with T3-compliant builder exclusions.
 func NewScopeRegistry() *ScopeRegistry {
+	// Comprehensive list of Laravel Query Builder methods to exclude (T3 requirement)
 	builderMethods := map[string]bool{
+		// Basic query methods
 		"where": true, "whereIn": true, "whereNull": true, "whereBetween": true,
-		"whereHas": true, "get": true, "first": true, "firstOrFail": true,
-		"pluck": true, "count": true, "groupBy": true, "orderBy": true,
-		"orderByDesc": true, "toResponse": true, "resolve": true, "only": true,
-		"middleware": true, "subDays": true, "toDateString": true,
-		// Additional common builder methods
-		"select": true, "join": true, "leftJoin": true, "having": true,
-		"limit": true, "offset": true, "skip": true, "take": true,
-		"distinct": true, "exists": true, "doesntExist": true,
+		"whereNotIn": true, "whereNotNull": true, "whereNotBetween": true,
+		"whereHas": true, "whereDoesntHave": true, "whereExists": true,
+		"whereColumn": true, "whereRaw": true, "whereDate": true,
+		"whereMonth": true, "whereDay": true, "whereYear": true, "whereTime": true,
+		"orWhere": true, "orWhereIn": true, "orWhereNull": true,
+		"orWhereBetween": true, "orWhereNotIn": true, "orWhereNotNull": true,
+		
+		// Retrieval methods
+		"get": true, "first": true, "firstOrFail": true, "firstOrCreate": true,
+		"firstOrNew": true, "find": true, "findOrFail": true, "findOrNew": true,
+		"findMany": true, "all": true, "pluck": true, "value": true,
+		"chunk": true, "chunkById": true, "cursor": true, "lazy": true,
+		"lazyById": true, "sole": true,
+		
+		// Aggregate methods
+		"count": true, "sum": true, "avg": true, "average": true,
+		"min": true, "max": true, "exists": true, "doesntExist": true,
+		
+		// Ordering and grouping
+		"orderBy": true, "orderByDesc": true, "orderByRaw": true,
+		"latest": true, "oldest": true, "inRandomOrder": true,
+		"groupBy": true, "groupByRaw": true, "having": true, "havingRaw": true,
+		
+		// Limiting and offsetting
+		"limit": true, "take": true, "skip": true, "offset": true,
+		"forPage": true,
+		
+		// Joins
+		"join": true, "leftJoin": true, "rightJoin": true, "crossJoin": true,
+		"joinSub": true, "leftJoinSub": true, "rightJoinSub": true,
+		
+		// Selection
+		"select": true, "selectRaw": true, "selectSub": true,
+		"addSelect": true, "distinct": true,
+		
+		// Relationships
+		"with": true, "withCount": true, "withSum": true, "withAvg": true,
+		"withMin": true, "withMax": true, "withExists": true,
+		"load": true, "loadCount": true, "loadSum": true,
+		"without": true, "withOnly": true,
+		
+		// Modification methods  
+		"update": true, "updateOrCreate": true, "increment": true,
+		"decrement": true, "delete": true, "forceDelete": true,
+		"restore": true, "truncate": true,
+		
+		// Locking
+		"lockForUpdate": true, "sharedLock": true,
+		
+		// Union
+		"union": true, "unionAll": true,
+		
+		// Other common methods that aren't scopes
+		"toSql": true, "toRawSql": true, "dd": true, "dump": true,
+		"paginate": true, "simplePaginate": true, "cursorPaginate": true,
+		"getBindings": true, "toBase": true, "explain": true,
+		
+		// Common helper methods
+		"when": true, "unless": true, "tap": true, "pipe": true,
+		"clone": true, "copy": true,
+		
+		// Collection methods that might appear
+		"each": true, "map": true, "filter": true, "reject": true,
+		"reduce": true, "every": true, "some": true, "contains": true,
+		
+		// Response/transformation methods
+		"toArray": true, "toJson": true, "toResponse": true,
+		"resolve": true, "only": true, "except": true,
+		
+		// Middleware and other framework methods
+		"middleware": true, "withoutMiddleware": true,
+		
+		// Date manipulation methods
+		"subDays": true, "addDays": true, "subHours": true, "addHours": true,
+		"toDateString": true, "toDateTimeString": true,
 	}
 
 	return &ScopeRegistry{
@@ -405,6 +474,11 @@ func (m *DefaultScopeMatcher) processScopeWithoutPrefix(match *sitter.QueryMatch
 		scopeName = scopeCapture.Content(tree.Source)
 	}
 
+	// T3 CRITICAL: Filter out Laravel Query Builder methods
+	if m.scopeRegistry.IsBuilderMethod(scopeName) {
+		return nil // Skip builder methods like where, get, first, etc.
+	}
+
 	if modelCapture, ok := captures["model_class"]; ok {
 		modelClass = modelCapture.Content(tree.Source)
 	} else if varCapture, ok := captures["model_var"]; ok {
@@ -419,6 +493,11 @@ func (m *DefaultScopeMatcher) processScopeWithoutPrefix(match *sitter.QueryMatch
 	onClass := modelClass
 	if onClass == "" {
 		onClass = m.extractClassName(tree, "")
+	}
+
+	// T3: Additional validation - skip if we can't determine the model
+	if onClass == "" || onClass == "UnknownClass" {
+		return nil
 	}
 
 	return &ScopeMatch{

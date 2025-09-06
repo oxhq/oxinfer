@@ -327,6 +327,21 @@ var AttributeUsageQueries = []QueryDefinition{
 		Confidence: 0.95,
 	},
 	{
+		Name:        "attribute_make_call",
+		Description: "Detect Attribute::make() calls within method bodies",
+		Pattern: `
+(method_declaration
+  name: (name) @method_name
+  body: (compound_statement
+    (return_statement
+      (scoped_call_expression
+        scope: (name) @class (#eq? @class "Attribute")
+        name: (name) @make (#eq? @make "make")
+        arguments: (arguments) @args))))
+`,
+		Confidence: 0.95,
+	},
+	{
 		Name:        "legacy_get_attribute",
 		Description: "Detect legacy get{Name}Attribute() accessor method patterns",
 		Pattern: `

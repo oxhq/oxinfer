@@ -272,17 +272,38 @@ func (m *DefaultAttributeMatcher) processAttributeMakeCall(
 	tree *parser.SyntaxTree,
 	filePath string,
 ) *MatchResult {
+	// T4: Extract the actual attribute name from the method name
+	// When we have a method like: public function fullName(): Attribute { return Attribute::make(...) }
+	// methodName should contain "fullName"
+	attributeName := m.extractAttributeNameFromMethod(methodName)
+	
+	// If we couldn't extract from method name, try to extract from the context
+	if attributeName == "" || attributeName == "unknown" {
+		// Try to find the containing method name by looking at parent nodes
+		attributeName = m.extractAttributeNameFromContext(position, tree)
+	}
+	
+	// If still unknown, use the method name as-is if it's not empty
+	if (attributeName == "" || attributeName == "unknown") && methodName != "" && methodName != "make" {
+		attributeName = methodName
+	}
+	
+	// Final fallback
+	if attributeName == "" {
+		attributeName = "unknown"
+	}
+
 	// Extract arguments from Attribute::make() call
 	castType := m.extractCastTypeFromArgs(argsNode, tree)
 
 	attributeMatch := &AttributeMatch{
-		Name:     "unknown", // Will be inferred from context if possible
+		Name:     attributeName, // T4: Now properly extracted
 		CastType: castType,
 		Accessor: true,
 		Mutator:  true, // Modern attributes support both by default
 		IsModern: true,
 		Pattern:  queryDef.Name,
-		Method:   "make",
+		Method:   methodName,
 	}
 
 	return &MatchResult{
@@ -707,4 +728,52 @@ func ValidateAttributeMethodCall(methodName string, isModern bool) bool {
 	legacySetPattern := regexp.MustCompile(`^set[A-Z][a-zA-Z0-9]*Attribute$`)
 
 	return legacyGetPattern.MatchString(methodName) || legacySetPattern.MatchString(methodName)
+}
+
+// extractAttributeNameFromContext tries to extract the attribute name from surrounding context.
+// T4: This method looks for the containing method name when Attribute::make() is used.
+func (m *DefaultAttributeMatcher) extractAttributeNameFromContext(position parser.Point, tree *parser.SyntaxTree) string {
+	if tree == nil || tree.Source == nil {
+		return "unknown"
+	}
+
+	// Get the source code as lines
+	lines := strings.Split(string(tree.Source), "\n")
+	
+	// Search backwards from the position to find the method declaration
+	for lineNum := position.Row; lineNum >= 0 && lineNum > position.Row-10; lineNum-- {
+		if lineNum >= len(lines) {
+			continue
+		}
+		
+		line := lines[lineNum]
+		
+		// Look for method declaration pattern
+		// Example: public function fullName(): Attribute
+		methodPattern := regexp.MustCompile(`(?:public|protected|private)?\s*function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(`)
+		matches := methodPattern.FindStringSubmatch(line)
+		
+		if len(matches) > 1 {
+			methodName := matches[1]
+			// Extract attribute name from method name
+			return m.extractAttributeNameFromMethod(methodName)
+		}
+	}
+	
+	// Try forward search as well (in case the Attribute::make is before the function name in formatting)
+	for lineNum := position.Row; lineNum < len(lines) && lineNum < position.Row+5; lineNum++ {
+		line := lines[lineNum]
+		
+		// Look for method declaration pattern
+		methodPattern := regexp.MustCompile(`(?:public|protected|private)?\s*function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(`)
+		matches := methodPattern.FindStringSubmatch(line)
+		
+		if len(matches) > 1 {
+			methodName := matches[1]
+			// Extract attribute name from method name
+			return m.extractAttributeNameFromMethod(methodName)
+		}
+	}
+	
+	return "unknown"
 }
