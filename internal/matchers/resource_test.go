@@ -39,11 +39,11 @@ class TestController extends Controller {
         return UserResource::collection($users);
     }
 }`,
-        expectedMatches:    1,
-        expectedClass:      "UserResource",
-        expectedCollection: true,
-        expectedPattern:    "",
-        expectedConfidence: 1.0,
+			expectedMatches:    1,
+			expectedClass:      "UserResource",
+			expectedCollection: true,
+			expectedPattern:    "",
+			expectedConfidence: 1.0,
 		},
 		{
 			name: "resource_make_static",
@@ -57,11 +57,11 @@ class TestController extends Controller {
         return UserResource::make($user);
     }
 }`,
-        expectedMatches:    1,
-        expectedClass:      "UserResource",
-        expectedCollection: false,
-        expectedPattern:    "",
-        expectedConfidence: 0.95,
+			expectedMatches:    1,
+			expectedClass:      "UserResource",
+			expectedCollection: false,
+			expectedPattern:    "",
+			expectedConfidence: 0.95,
 		},
 		{
 			name: "new_resource_instantiation",
@@ -75,11 +75,11 @@ class TestController extends Controller {
         return new UserResource($user);
     }
 }`,
-        expectedMatches:    1,
-        expectedClass:      "UserResource",
-        expectedCollection: false,
-        expectedPattern:    "",
-        expectedConfidence: 0.98,
+			expectedMatches:    1,
+			expectedClass:      "UserResource",
+			expectedCollection: false,
+			expectedPattern:    "",
+			expectedConfidence: 0.98,
 		},
 		{
 			name: "return_new_resource",
@@ -93,11 +93,11 @@ class TestController extends Controller {
         return new UserResource($user);
     }
 }`,
-        expectedMatches:    1,
-        expectedClass:      "UserResource",
-        expectedCollection: false,
-        expectedPattern:    "",
-        expectedConfidence: 0.98,
+			expectedMatches:    1,
+			expectedClass:      "UserResource",
+			expectedCollection: false,
+			expectedPattern:    "",
+			expectedConfidence: 0.98,
 		},
 		{
 			name: "return_resource_collection",
@@ -111,11 +111,11 @@ class TestController extends Controller {
         return UserResource::collection($users);
     }
 }`,
-        expectedMatches:    1,
-        expectedClass:      "UserResource",
-        expectedCollection: true,
-        expectedPattern:    "",
-        expectedConfidence: 1.0,
+			expectedMatches:    1,
+			expectedClass:      "UserResource",
+			expectedCollection: true,
+			expectedPattern:    "",
+			expectedConfidence: 1.0,
 		},
 		{
 			name: "variable_resource_assignment",
@@ -130,11 +130,11 @@ class TestController extends Controller {
         return $resource->additional(['meta' => 'data']);
     }
 }`,
-        expectedMatches:    1,
-        expectedClass:      "UserResource",
-        expectedCollection: false,
-        expectedPattern:    "",
-        expectedConfidence: 0.95,
+			expectedMatches:    1,
+			expectedClass:      "UserResource",
+			expectedCollection: false,
+			expectedPattern:    "",
+			expectedConfidence: 0.95,
 		},
 		{
 			name: "multiple_resource_patterns",
@@ -168,11 +168,11 @@ class TestController extends Controller {
         return new \App\Http\Resources\UserResource($user);
     }
 }`,
-        expectedMatches:    1,
-        expectedClass:      "UserResource",
-        expectedCollection: false,
-        expectedPattern:    "",
-        expectedConfidence: 0.98,
+			expectedMatches:    1,
+			expectedClass:      "UserResource",
+			expectedCollection: false,
+			expectedPattern:    "",
+			expectedConfidence: 0.98,
 		},
 		{
 			name: "no_resource_usage",
@@ -198,11 +198,11 @@ class TestController extends Controller {
         return CustomDataResource::collection($data);
     }
 }`,
-        expectedMatches:    1,
-        expectedClass:      "CustomDataResource",
-        expectedCollection: true,
-        expectedPattern:    "",
-        expectedConfidence: 1.0,
+			expectedMatches:    1,
+			expectedClass:      "CustomDataResource",
+			expectedCollection: true,
+			expectedPattern:    "",
+			expectedConfidence: 1.0,
 		},
 	}
 
@@ -275,11 +275,11 @@ class TestController extends Controller {
 				}
 			}
 
-            if tc.expectedMatches == 1 {
-                if resourceData.Collection != tc.expectedCollection {
-                    t.Errorf("Expected collection=%t, got %t", tc.expectedCollection, resourceData.Collection)
-                }
-            }
+			if tc.expectedMatches == 1 {
+				if resourceData.Collection != tc.expectedCollection {
+					t.Errorf("Expected collection=%t, got %t", tc.expectedCollection, resourceData.Collection)
+				}
+			}
 
 			if tc.expectedPattern != "" {
 				found := false
@@ -402,8 +402,8 @@ func TestResourceMatcher_ImportResolution(t *testing.T) {
 		expectedClass string
 		expectedFQCN  string // Fully Qualified Class Name after resolution
 	}{
-        {
-            name: "imported_class",
+		{
+			name: "imported_class",
 			phpContent: `<?php
 namespace App\Http\Controllers;
 use App\Http\Resources\UserResource;
@@ -413,11 +413,11 @@ class TestController extends Controller {
         return UserResource::collection($users);
     }
 }`,
-            expectedClass: "UserResource",
-            expectedFQCN:  "App\\Http\\Resources\\UserResource",
-        },
-        {
-            name: "aliased_import",
+			expectedClass: "UserResource",
+			expectedFQCN:  "App\\Http\\Resources\\UserResource",
+		},
+		{
+			name: "aliased_import",
 			phpContent: `<?php
 namespace App\Http\Controllers;
 use App\Http\Resources\UserResource as Users;
@@ -429,9 +429,9 @@ class TestController extends Controller {
 }`,
 			expectedClass: "Users", // Should detect the alias
 			expectedFQCN:  "App\\Http\\Resources\\UserResource",
-        },
-        {
-            name: "fully_qualified_class",
+		},
+		{
+			name: "fully_qualified_class",
 			phpContent: `<?php
 namespace App\Http\Controllers;
 use Illuminate\Http\Request;
@@ -440,9 +440,9 @@ class TestController extends Controller {
         return \App\Http\Resources\UserResource::collection($users);
     }
 }`,
-            expectedClass: "UserResource",
-            expectedFQCN:  "\\App\\Http\\Resources\\UserResource",
-        },
+			expectedClass: "UserResource",
+			expectedFQCN:  "\\App\\Http\\Resources\\UserResource",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -795,15 +795,15 @@ class TestController extends Controller {
 // Helper functions
 
 // convertResourceResults converts MatchResult array to comparable format
-func convertResourceResults(results []*MatchResult) []map[string]interface{} {
-	converted := make([]map[string]interface{}, len(results))
+func convertResourceResults(results []*MatchResult) []map[string]any {
+	converted := make([]map[string]any, len(results))
 	for i, result := range results {
 		resourceData, ok := result.Data.(*ResourceMatch)
 		if !ok {
 			continue
 		}
 
-		converted[i] = map[string]interface{}{
+		converted[i] = map[string]any{
 			"type":       result.Type,
 			"position":   result.Position,
 			"confidence": result.Confidence,

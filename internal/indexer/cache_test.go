@@ -368,7 +368,7 @@ func TestConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func(goroutineID int) {
 			defer wg.Done()
-			
+
 			for j := 0; j < numOperations; j++ {
 				key := fmt.Sprintf("file_%d_%d.php", goroutineID, j)
 				entry := &CacheEntry{
@@ -387,9 +387,9 @@ func TestConcurrency(t *testing.T) {
 
 				// Read operation
 				_, err = cache.GetCacheEntry(key)
-				if err != nil && !strings.Contains(err.Error(), "validation failed") && 
-				   !strings.Contains(err.Error(), "cache entry is invalid") && 
-				   !strings.Contains(err.Error(), "cache entry not found") {
+				if err != nil && !strings.Contains(err.Error(), "validation failed") &&
+					!strings.Contains(err.Error(), "cache entry is invalid") &&
+					!strings.Contains(err.Error(), "cache entry not found") {
 					// Validation failure and invalid cache are expected since files don't actually exist
 					t.Errorf("Goroutine %d: Get error: %v", goroutineID, err)
 					return
@@ -642,9 +642,9 @@ func TestMemoryBehavior(t *testing.T) {
 	}
 
 	// Memory usage should be reasonable
-	expectedMinMemory := int64(numEntries * 100) // At least 100 bytes per entry
+	expectedMinMemory := int64(numEntries * 100)  // At least 100 bytes per entry
 	expectedMaxMemory := int64(numEntries * 1000) // At most 1KB per entry
-	
+
 	if stats.MemoryUsage < expectedMinMemory {
 		t.Errorf("Memory usage seems too low: %d bytes", stats.MemoryUsage)
 	}
@@ -658,12 +658,12 @@ func TestMemoryBehavior(t *testing.T) {
 func createTempFile(t *testing.T, name, content string) string {
 	tempDir := t.TempDir()
 	tempFile := filepath.Join(tempDir, name)
-	
+
 	err := os.WriteFile(tempFile, []byte(content), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	
+
 	return tempFile
 }
 
@@ -702,7 +702,7 @@ func BenchmarkCacheSet(b *testing.B) {
 
 func BenchmarkCacheGet(b *testing.B) {
 	cache := NewFileCache(&manifest.CacheConfig{})
-	
+
 	// Pre-populate cache
 	for i := 0; i < 1000; i++ {
 		entry := &CacheEntry{

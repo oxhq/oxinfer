@@ -19,10 +19,10 @@ var (
 
 // DiscoveryError wraps discovery-related errors with additional context
 type DiscoveryError struct {
-	Op       string                 // Operation that failed (e.g., "DiscoverFiles", "ValidateTargets")
-	Path     string                 // File or directory path involved
-	Err      error                  // Underlying error
-	Metadata map[string]interface{} // Additional error context
+	Op       string         // Operation that failed (e.g., "DiscoverFiles", "ValidateTargets")
+	Path     string         // File or directory path involved
+	Err      error          // Underlying error
+	Metadata map[string]any // Additional error context
 }
 
 func (e *DiscoveryError) Error() string {
@@ -59,14 +59,14 @@ func NewDiscoveryError(op, path string, err error) *DiscoveryError {
 		Op:       op,
 		Path:     path,
 		Err:      err,
-		Metadata: make(map[string]interface{}),
+		Metadata: make(map[string]any),
 	}
 }
 
 // WithMetadata adds metadata to the discovery error
-func (e *DiscoveryError) WithMetadata(key string, value interface{}) *DiscoveryError {
+func (e *DiscoveryError) WithMetadata(key string, value any) *DiscoveryError {
 	if e.Metadata == nil {
-		e.Metadata = make(map[string]interface{})
+		e.Metadata = make(map[string]any)
 	}
 	e.Metadata[key] = value
 	return e

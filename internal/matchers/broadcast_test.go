@@ -13,7 +13,7 @@ import (
 
 func TestNewBroadcastMatcher(t *testing.T) {
 	language := php.GetLanguage()
-	
+
 	tests := []struct {
 		name        string
 		language    *sitter.Language
@@ -47,7 +47,7 @@ func TestNewBroadcastMatcher(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			matcher, err := NewBroadcastMatcher(tt.language, tt.config)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("Expected error but got none")
@@ -76,7 +76,6 @@ func TestNewBroadcastMatcher(t *testing.T) {
 		})
 	}
 }
-
 
 func TestBroadcastMatcherErrorCases(t *testing.T) {
 	language := php.GetLanguage()
@@ -115,7 +114,7 @@ func TestBroadcastMatcherErrorCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			matches, err := matcher.Match(ctx, tt.tree, "test.php")
+			matches, err := matcher.Match(ctx, tt.tree, "routes/channels.php")
 
 			if tt.expectError {
 				if err == nil {
@@ -156,7 +155,7 @@ func TestBroadcastMatcherContextCancellation(t *testing.T) {
 		ParsedAt: time.Now(),
 	}
 
-	matches, err := matcher.Match(ctx, tree, "test.php")
+	matches, err := matcher.Match(ctx, tree, "routes/channels.php")
 
 	// Should handle cancelled context gracefully
 	if err != context.Canceled {
@@ -166,7 +165,6 @@ func TestBroadcastMatcherContextCancellation(t *testing.T) {
 		t.Errorf("Expected nil matches when context is cancelled")
 	}
 }
-
 
 func TestExtractChannelParameters(t *testing.T) {
 	language := php.GetLanguage()
@@ -223,11 +221,11 @@ func TestExtractChannelParameters(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := matcher.extractChannelParameters(tt.channelName)
-			
+
 			if len(result) != len(tt.expected) {
 				t.Errorf("Expected %d parameters, got %d", len(tt.expected), len(result))
 			}
-			
+
 			for i, expected := range tt.expected {
 				if i >= len(result) || result[i] != expected {
 					t.Errorf("Expected param[%d] = %q, got %q", i, expected, result[i])
@@ -305,17 +303,13 @@ func TestBroadcastMatcherInterface(t *testing.T) {
 	t.Run("interface_compliance", func(t *testing.T) {
 		// Verify it implements PatternMatcher interface
 		var pm PatternMatcher = matcher
-		if pm == nil {
-			t.Errorf("Matcher should implement PatternMatcher interface")
-		}
+		_ = pm // Verify interface compliance
 	})
 
 	t.Run("specialized_interface_compliance", func(t *testing.T) {
 		// Verify it implements BroadcastMatcher interface
 		var bm BroadcastMatcher = matcher
-		if bm == nil {
-			t.Errorf("Matcher should implement BroadcastMatcher interface")
-		}
+		_ = bm // Verify interface compliance
 
 		// Test specialized method
 		tree := &parser.SyntaxTree{
@@ -346,11 +340,11 @@ func TestBuildDisplayContent(t *testing.T) {
 	defer matcher.Close()
 
 	tests := []struct {
-		name         string
-		methodName   string
-		channelName  string
-		expected     string
-		description  string
+		name        string
+		methodName  string
+		channelName string
+		expected    string
+		description string
 	}{
 		{
 			name:        "public_channel",
@@ -432,12 +426,12 @@ func TestIsExplicitBroadcastUsage(t *testing.T) {
 
 func TestValidateBroadcastChannelCall(t *testing.T) {
 	tests := []struct {
-		name           string
-		methodName     string
-		channelName    string
-		hasCallback    bool
-		expected       bool
-		description    string
+		name        string
+		methodName  string
+		channelName string
+		hasCallback bool
+		expected    bool
+		description string
 	}{
 		{
 			name:        "valid_public_channel",
@@ -501,16 +495,16 @@ func TestValidateBroadcastChannelCall(t *testing.T) {
 
 func TestGetSupportedBroadcastPatterns(t *testing.T) {
 	patterns := GetSupportedBroadcastPatterns()
-	
+
 	if len(patterns) == 0 {
 		t.Errorf("Expected at least one supported pattern")
 	}
-	
+
 	// Check that patterns contain expected broadcast method calls
 	foundChannel := false
 	foundPrivate := false
 	foundPresence := false
-	
+
 	for _, pattern := range patterns {
 		if strings.Contains(pattern, "Broadcast::channel") {
 			foundChannel = true
@@ -522,7 +516,7 @@ func TestGetSupportedBroadcastPatterns(t *testing.T) {
 			foundPresence = true
 		}
 	}
-	
+
 	if !foundChannel {
 		t.Errorf("Expected to find channel pattern")
 	}
@@ -536,9 +530,9 @@ func TestGetSupportedBroadcastPatterns(t *testing.T) {
 
 func TestGetBroadcastMethodConventions(t *testing.T) {
 	conventions := GetBroadcastMethodConventions()
-	
+
 	expectedMethods := []string{"channel", "private", "presence"}
-	
+
 	for _, method := range expectedMethods {
 		if _, exists := conventions[method]; !exists {
 			t.Errorf("Expected convention for method %q", method)
@@ -578,7 +572,7 @@ Broadcast::presence('chat.{room}', function ($user, $room) {
 	}
 
 	ctx := context.Background()
-	
+
 	// Run multiple times to check determinism
 	var allResults [][]*MatchResult
 	for i := 0; i < 5; i++ {
@@ -596,18 +590,18 @@ Broadcast::presence('chat.{room}', function ($user, $room) {
 			t.Errorf("Iteration %d: expected %d matches, got %d", i, len(firstResult), len(allResults[i]))
 			continue
 		}
-		
+
 		for j, match := range allResults[i] {
 			if j >= len(firstResult) {
 				t.Errorf("Iteration %d: unexpected extra match at index %d", i, j)
 				continue
 			}
-			
+
 			expectedMatch := firstResult[j]
 			if match.Content != expectedMatch.Content {
 				t.Errorf("Iteration %d, match %d: content differs. Expected %q, got %q", i, j, expectedMatch.Content, match.Content)
 			}
-			
+
 			if match.Confidence != expectedMatch.Confidence {
 				t.Errorf("Iteration %d, match %d: confidence differs. Expected %f, got %f", i, j, expectedMatch.Confidence, match.Confidence)
 			}

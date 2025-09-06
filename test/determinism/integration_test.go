@@ -10,8 +10,6 @@ import (
 	"github.com/garaekz/oxinfer/internal/manifest"
 )
 
-
-
 // TestDeterminismIntegration_ErrorHandling tests determinism validation
 // behavior when the pipeline encounters errors.
 func TestDeterminismIntegration_ErrorHandling(t *testing.T) {
@@ -31,11 +29,11 @@ func TestDeterminismIntegration_ErrorHandling(t *testing.T) {
 
 	config := determinism.DefaultValidationConfig()
 	config.Verbose = false // Reduce noise for error testing
-	
+
 	validator := determinism.NewTripleRunValidator(config)
 
 	report, err := validator.ValidateTripleRun(ctx, invalidManifest)
-	
+
 	// Validation should complete even with errors, but report failures
 	if err != nil {
 		t.Fatalf("Validation should handle errors gracefully: %v", err)
@@ -59,11 +57,9 @@ func TestDeterminismIntegration_ErrorHandling(t *testing.T) {
 		t.Error("Expected execution_failure error for invalid manifest")
 	}
 
-	t.Logf("Error handling test: %d validation errors reported", 
+	t.Logf("Error handling test: %d validation errors reported",
 		len(report.ValidationErrors))
 }
-
-
 
 // TestDeterminismValidation_RegressionPrevention tests that changes to
 // the codebase don't accidentally introduce non-determinism.
@@ -91,7 +87,7 @@ func TestDeterminismValidation_RegressionPrevention(t *testing.T) {
 				},
 				Request: &emitter.RequestInfo{
 					ContentTypes: []string{"application/json"},
-					Body:         emitter.NewOrderedObjectFromMap(map[string]interface{}{"test": map[string]interface{}{}}),
+					Body:         emitter.NewOrderedObjectFromMap(map[string]any{"test": map[string]any{}}),
 				},
 				Resources: []emitter.Resource{
 					{Class: "TestResource", Collection: false},
@@ -135,7 +131,7 @@ func TestDeterminismValidation_RegressionPrevention(t *testing.T) {
 	// If this test fails after code changes, it indicates either:
 	// 1. A regression in determinism (bad)
 	// 2. An intentional change to Delta structure (expected, update expected hash)
-	
+
 	hash, err := hasher.HashDelta(referenceDelta)
 	if err != nil {
 		t.Fatalf("Failed to hash reference delta: %v", err)
@@ -160,12 +156,12 @@ func TestDeterminismValidation_RegressionPrevention(t *testing.T) {
 		}
 
 		if currentHash.SHA256 != hash.SHA256 {
-			t.Errorf("Reference hash changed on iteration %d: %s != %s", 
+			t.Errorf("Reference hash changed on iteration %d: %s != %s",
 				i, currentHash.SHA256, hash.SHA256)
 		}
 	}
 
-	t.Logf("Regression prevention: reference hash %s (stable across %d iterations)", 
+	t.Logf("Regression prevention: reference hash %s (stable across %d iterations)",
 		hash.SHA256[:16]+"...", iterations)
 
 	// Log the full hash for manual verification during development

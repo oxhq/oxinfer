@@ -8,10 +8,10 @@ import (
 
 func TestGetPHPLanguage(t *testing.T) {
 	tests := []struct {
-		name           string
-		resetBefore    bool
-		expectNil      bool
-		expectNonNil   bool
+		name         string
+		resetBefore  bool
+		expectNil    bool
+		expectNonNil bool
 	}{
 		{
 			name:         "first call should initialize language",
@@ -19,7 +19,7 @@ func TestGetPHPLanguage(t *testing.T) {
 			expectNonNil: true,
 		},
 		{
-			name:         "subsequent calls should return cached language", 
+			name:         "subsequent calls should return cached language",
 			resetBefore:  false,
 			expectNonNil: true,
 		},
@@ -253,12 +253,12 @@ func TestGetLanguageInfo(t *testing.T) {
 func TestLanguageConcurrency(t *testing.T) {
 	// Test that concurrent access to GetPHPLanguage is safe
 	ResetLanguage()
-	
+
 	const numGoroutines = 10
 	const callsPerGoroutine = 100
-	
+
 	results := make(chan *sitter.Language, numGoroutines*callsPerGoroutine)
-	
+
 	// Launch multiple goroutines calling GetPHPLanguage concurrently
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
@@ -268,24 +268,24 @@ func TestLanguageConcurrency(t *testing.T) {
 			}
 		}()
 	}
-	
+
 	// Collect all results
 	var languages []*sitter.Language
 	for i := 0; i < numGoroutines*callsPerGoroutine; i++ {
 		language := <-results
 		languages = append(languages, language)
 	}
-	
+
 	// Verify all results are consistent (same pointer)
 	if len(languages) == 0 {
 		t.Fatal("no results received")
 	}
-	
+
 	firstLanguage := languages[0]
 	if firstLanguage == nil {
 		t.Fatal("first language result is nil")
 	}
-	
+
 	for i, language := range languages {
 		if language != firstLanguage {
 			t.Errorf("language result %d differs from first result", i)
@@ -299,21 +299,21 @@ func TestResetLanguage(t *testing.T) {
 	if lang1 == nil {
 		t.Fatal("failed to initialize language")
 	}
-	
+
 	// Verify it's initialized
 	if !IsLanguageInitialized() {
 		t.Error("language should be initialized")
 	}
-	
+
 	// Reset language
 	ResetLanguage()
-	
+
 	// Verify it's reset (this will actually reinitialize it)
 	lang2 := GetPHPLanguage()
 	if lang2 == nil {
 		t.Fatal("failed to initialize language after reset")
 	}
-	
+
 	// Both should be valid PHP languages with same properties
 	if lang1.SymbolCount() != lang2.SymbolCount() {
 		t.Errorf("symbol count mismatch after reset: %d vs %d", lang1.SymbolCount(), lang2.SymbolCount())
@@ -323,7 +323,7 @@ func TestResetLanguage(t *testing.T) {
 // Benchmark tests for performance monitoring
 func BenchmarkGetPHPLanguage(b *testing.B) {
 	ResetLanguage()
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		GetPHPLanguage()
@@ -332,7 +332,7 @@ func BenchmarkGetPHPLanguage(b *testing.B) {
 
 func BenchmarkGetPHPLanguageParallel(b *testing.B) {
 	ResetLanguage()
-	
+
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {

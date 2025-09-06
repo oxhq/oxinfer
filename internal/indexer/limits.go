@@ -51,12 +51,12 @@ func (e *LimitsEnforcer) EnforceFileLimit(files []FileInfo) ([]FileInfo, bool) {
 
 	// Truncate to maxFiles
 	truncated := sortedFiles[:e.maxFiles]
-	
+
 	// Record truncation details
 	e.enforced = true
 	e.partial = true
-	e.truncated = append(e.truncated, 
-		fmt.Sprintf("maxFiles: %d files processed, %d files skipped", 
+	e.truncated = append(e.truncated,
+		fmt.Sprintf("maxFiles: %d files processed, %d files skipped",
 			e.maxFiles, len(files)-e.maxFiles))
 
 	return truncated, true
@@ -89,13 +89,13 @@ func (e *LimitsEnforcer) ValidateDepthLimit() error {
 	if e.maxDepth < 0 {
 		return fmt.Errorf("maxDepth cannot be negative: %d", e.maxDepth)
 	}
-	
+
 	if e.maxDepth > 100 {
 		// Very deep traversals can cause performance issues
 		e.truncated = append(e.truncated,
 			fmt.Sprintf("maxDepth: %d is very deep, may impact performance", e.maxDepth))
 	}
-	
+
 	return nil
 }
 
@@ -173,26 +173,26 @@ func ValidateLimits(maxFiles, maxWorkers, maxDepth int) error {
 	if maxFiles < 0 {
 		return fmt.Errorf("maxFiles cannot be negative: %d", maxFiles)
 	}
-	
+
 	if maxFiles > 100000 {
 		return fmt.Errorf("maxFiles too large: %d (max: 100,000)", maxFiles)
 	}
-	
+
 	if maxWorkers < 1 {
 		return fmt.Errorf("maxWorkers must be at least 1: %d", maxWorkers)
 	}
-	
+
 	if maxWorkers > 100 {
 		return fmt.Errorf("maxWorkers too large: %d (max: 100)", maxWorkers)
 	}
-	
+
 	if maxDepth < 0 {
 		return fmt.Errorf("maxDepth cannot be negative: %d", maxDepth)
 	}
-	
+
 	if maxDepth > 100 {
 		return fmt.Errorf("maxDepth too large: %d (max: 100)", maxDepth)
 	}
-	
+
 	return nil
 }

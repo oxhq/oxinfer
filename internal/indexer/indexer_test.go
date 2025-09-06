@@ -18,11 +18,11 @@ func TestDefaultFileIndexer_EndToEndIndexing(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	tests := []struct {
-		name           string
-		manifest       *manifest.Manifest
-		expectedFiles  int
+		name            string
+		manifest        *manifest.Manifest
+		expectedFiles   int
 		expectedPartial bool
-		expectError    bool
+		expectError     bool
 	}{
 		{
 			name: "basic Laravel project structure",
@@ -101,7 +101,7 @@ func TestDefaultFileIndexer_EndToEndIndexing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			indexer := NewDefaultFileIndexer()
-			
+
 			// Load configuration from manifest
 			err := indexer.LoadFromManifest(tt.manifest)
 			if tt.expectError {
@@ -113,11 +113,11 @@ func TestDefaultFileIndexer_EndToEndIndexing(t *testing.T) {
 			if err != nil {
 				t.Fatalf("LoadFromManifest failed: %v", err)
 			}
-			
+
 			// Perform indexing
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			
+
 			result, err := indexer.IndexFiles(ctx, IndexConfig{})
 			if tt.expectError {
 				if err == nil {
@@ -128,20 +128,20 @@ func TestDefaultFileIndexer_EndToEndIndexing(t *testing.T) {
 			if err != nil {
 				t.Fatalf("IndexFiles failed: %v", err)
 			}
-			
+
 			// Verify results
 			if len(result.Files) != tt.expectedFiles {
 				t.Errorf("expected %d files, got %d", tt.expectedFiles, len(result.Files))
 			}
-			
+
 			if result.Partial != tt.expectedPartial {
 				t.Errorf("expected partial=%t, got %t", tt.expectedPartial, result.Partial)
 			}
-			
+
 			if result.DurationMs < 0 {
 				t.Error("expected non-negative duration")
 			}
-			
+
 			// Verify files are sorted deterministically
 			for i := 1; i < len(result.Files); i++ {
 				if result.Files[i-1].Path >= result.Files[i].Path {
@@ -158,17 +158,17 @@ func TestDefaultFileIndexer_LimitsEnforcement(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	tests := []struct {
-		name        string
-		maxFiles    int
-		maxWorkers  int
-		maxDepth    int
-		expectFiles int
+		name          string
+		maxFiles      int
+		maxWorkers    int
+		maxDepth      int
+		expectFiles   int
 		expectPartial bool
 	}{
 		{
 			name:          "no limits",
 			maxFiles:      0,
-			maxWorkers:    0, 
+			maxWorkers:    0,
 			maxDepth:      0,
 			expectFiles:   6,
 			expectPartial: false,
@@ -459,7 +459,7 @@ func setupTestDirectory(t *testing.T) string {
 	appDir := filepath.Join(tempDir, "app")
 	os.MkdirAll(filepath.Join(appDir, "Http", "Controllers"), 0755)
 	os.MkdirAll(filepath.Join(appDir, "Models"), 0755)
-	
+
 	// Create test PHP files
 	files := map[string]string{
 		"app/Http/Controllers/UserController.php": "<?php class UserController {}",

@@ -12,37 +12,37 @@ import (
 // ParseResult represents the complete result of parsing PHP content.
 // Wraps tree-sitter tree with metadata and error information for analysis.
 type ParseResult struct {
-	Tree       *sitter.Tree // Raw tree-sitter AST tree
-	RootNode   *sitter.Node // Root AST node for traversal
-	FilePath   string       // Source file path (if from file)
-	Content    []byte       // Original PHP source content
-	Stats      ParseStats   // Parsing performance statistics
-	HasErrors  bool         // True if syntax errors were detected
-	Errors     []ParseError // List of syntax errors found
-	ParsedAt   time.Time    // When parsing was completed
+	Tree      *sitter.Tree // Raw tree-sitter AST tree
+	RootNode  *sitter.Node // Root AST node for traversal
+	FilePath  string       // Source file path (if from file)
+	Content   []byte       // Original PHP source content
+	Stats     ParseStats   // Parsing performance statistics
+	HasErrors bool         // True if syntax errors were detected
+	Errors    []ParseError // List of syntax errors found
+	ParsedAt  time.Time    // When parsing was completed
 }
 
 // ParseStats contains performance metrics for parsing operations.
 // Used for monitoring parser performance and resource usage.
 type ParseStats struct {
-	ParseTime    time.Duration // Time spent parsing content
-	TreeSize     int           // Number of nodes in AST tree
-	ContentSize  int64         // Size of source content in bytes
-	ErrorCount   int           // Number of syntax errors detected
-	MaxDepth     int           // Maximum tree depth reached
-	NodeTypes    map[string]int // Count of each node type found
+	ParseTime   time.Duration  // Time spent parsing content
+	TreeSize    int            // Number of nodes in AST tree
+	ContentSize int64          // Size of source content in bytes
+	ErrorCount  int            // Number of syntax errors detected
+	MaxDepth    int            // Maximum tree depth reached
+	NodeTypes   map[string]int // Count of each node type found
 }
 
 // ParseError represents a single PHP syntax error detected by tree-sitter.
 // Contains position information and error context for debugging.
 type ParseError struct {
-	Type        string // Error type classification
-	Message     string // Human-readable error description
-	Line        int    // Error line number (1-indexed)
-	Column      int    // Error column number (1-indexed)
-	StartByte   uint32 // Start position in source bytes
-	EndByte     uint32 // End position in source bytes
-	NodeType    string // Tree-sitter node type where error occurred
+	Type         string // Error type classification
+	Message      string // Human-readable error description
+	Line         int    // Error line number (1-indexed)
+	Column       int    // Error column number (1-indexed)
+	StartByte    uint32 // Start position in source bytes
+	EndByte      uint32 // End position in source bytes
+	NodeType     string // Tree-sitter node type where error occurred
 	ExpectedText string // Expected syntax (if available)
 	ActualText   string // Actual text that caused error
 }
@@ -68,51 +68,51 @@ type NodeVisitor func(node *sitter.Node, depth int) (continueTraversal bool, err
 // TreeStatistics contains detailed information about parsed AST trees.
 // Used for analyzing PHP code structure and complexity metrics.
 type TreeStatistics struct {
-	TotalNodes        int            // Total number of nodes in tree
-	MaxDepth          int            // Maximum depth reached
-	NodeTypeCounts    map[string]int // Count of each node type
-	PHPConstructs     PHPConstructCounts // Count of PHP language constructs
-	ComplexityScore   float64        // Estimated code complexity
-	AnalysisTime      time.Duration  // Time spent analyzing tree
+	TotalNodes      int                // Total number of nodes in tree
+	MaxDepth        int                // Maximum depth reached
+	NodeTypeCounts  map[string]int     // Count of each node type
+	PHPConstructs   PHPConstructCounts // Count of PHP language constructs
+	ComplexityScore float64            // Estimated code complexity
+	AnalysisTime    time.Duration      // Time spent analyzing tree
 }
 
 // PHPConstructCounts tracks counts of PHP language constructs found in code.
 // Provides insights into code composition and Laravel usage patterns.
 type PHPConstructCounts struct {
-	Namespaces  int // Number of namespace declarations
-	Classes     int // Number of class definitions
-	Interfaces  int // Number of interface definitions
-	Traits      int // Number of trait definitions
-	Functions   int // Number of function definitions
-	Methods     int // Number of method definitions
-	Properties  int // Number of property definitions
+	Namespaces    int // Number of namespace declarations
+	Classes       int // Number of class definitions
+	Interfaces    int // Number of interface definitions
+	Traits        int // Number of trait definitions
+	Functions     int // Number of function definitions
+	Methods       int // Number of method definitions
+	Properties    int // Number of property definitions
 	UseStatements int // Number of use/import statements
-	Constants   int // Number of constant definitions
-	Comments    int // Number of comment blocks
+	Constants     int // Number of constant definitions
+	Comments      int // Number of comment blocks
 }
 
 // ParseJob represents a single PHP parsing task for concurrent processing.
 // Contains all information needed to parse a file independently.
 type ParseJob struct {
-	ID          string    // Unique job identifier
-	FilePath    string    // Path to PHP file to parse
-	Content     []byte    // File content (if already loaded)
-	Priority    int       // Job priority (higher = more urgent)
+	ID          string        // Unique job identifier
+	FilePath    string        // Path to PHP file to parse
+	Content     []byte        // File content (if already loaded)
+	Priority    int           // Job priority (higher = more urgent)
 	Config      *ParserConfig // Parser configuration for this job
-	SubmittedAt time.Time // When job was created
-	StartedAt   time.Time // When parsing began
-	Deadline    time.Time // Latest acceptable completion time
+	SubmittedAt time.Time     // When job was created
+	StartedAt   time.Time     // When parsing began
+	Deadline    time.Time     // Latest acceptable completion time
 }
 
 // ParseJobResult contains the result of a completed parsing job.
 // Used by concurrent parser pool to return results to callers.
 type ParseJobResult struct {
-	JobID     string       // Original job identifier
-	Result    *ParseResult // Parse result (nil if error)
-	Error     error        // Error that occurred during parsing
-	Duration  time.Duration // Time spent processing job
-	WorkerID  string       // Identifier of worker that processed job
-	CacheHit  bool         // Whether result came from cache
+	JobID    string        // Original job identifier
+	Result   *ParseResult  // Parse result (nil if error)
+	Error    error         // Error that occurred during parsing
+	Duration time.Duration // Time spent processing job
+	WorkerID string        // Identifier of worker that processed job
+	CacheHit bool          // Whether result came from cache
 }
 
 // ParserMetrics tracks runtime performance and resource usage statistics.
@@ -134,59 +134,59 @@ type ParserMetrics struct {
 // TreeWalkResult contains results from tree traversal operations.
 // Used when walking AST trees to collect specific information.
 type TreeWalkResult struct {
-	NodesVisited   int                     // Total nodes visited during walk
-	NodesMatched   int                     // Nodes that matched criteria
-	MatchedNodes   []*sitter.Node          // Nodes that matched (if collected)
-	NodeData       map[*sitter.Node]interface{} // Additional data collected per node
-	TraversalTime  time.Duration           // Time spent traversing tree
-	EarlyTermination bool                  // Whether traversal was terminated early
-	Error          error                   // Error that stopped traversal
+	NodesVisited     int                  // Total nodes visited during walk
+	NodesMatched     int                  // Nodes that matched criteria
+	MatchedNodes     []*sitter.Node       // Nodes that matched (if collected)
+	NodeData         map[*sitter.Node]any // Additional data collected per node
+	TraversalTime    time.Duration        // Time spent traversing tree
+	EarlyTermination bool                 // Whether traversal was terminated early
+	Error            error                // Error that stopped traversal
 }
 
 // QueryPattern represents a tree-sitter query pattern for matching PHP constructs.
 // Used to find specific language patterns in parsed AST trees.
 type QueryPattern struct {
-	Name        string // Human-readable pattern name
-	Query       string // S-expression query pattern
-	Description string // What this pattern matches
+	Name        string   // Human-readable pattern name
+	Query       string   // S-expression query pattern
+	Description string   // What this pattern matches
 	Examples    []string // Example PHP code that matches
 }
 
 // Common PHP construct query patterns for tree-sitter matching.
 var (
 	ClassDeclarationPattern = &QueryPattern{
-		Name:  "class_declaration",
-		Query: "(class_declaration name: (name) @class.name)",
+		Name:        "class_declaration",
+		Query:       "(class_declaration name: (name) @class.name)",
 		Description: "Matches PHP class declarations",
-		Examples: []string{"class MyClass {}", "abstract class BaseClass {}"},
+		Examples:    []string{"class MyClass {}", "abstract class BaseClass {}"},
 	}
 
 	FunctionDeclarationPattern = &QueryPattern{
-		Name:  "function_declaration", 
-		Query: "(function_definition name: (name) @function.name)",
+		Name:        "function_declaration",
+		Query:       "(function_definition name: (name) @function.name)",
 		Description: "Matches PHP function declarations",
-		Examples: []string{"function myFunction() {}", "public function test() {}"},
+		Examples:    []string{"function myFunction() {}", "public function test() {}"},
 	}
 
 	NamespaceDeclarationPattern = &QueryPattern{
-		Name:  "namespace_declaration",
-		Query: "(namespace_definition name: (namespace_name) @namespace.name)",
-		Description: "Matches PHP namespace declarations", 
-		Examples: []string{"namespace App\\Http\\Controllers;", "namespace MyVendor\\Package;"},
+		Name:        "namespace_declaration",
+		Query:       "(namespace_definition name: (namespace_name) @namespace.name)",
+		Description: "Matches PHP namespace declarations",
+		Examples:    []string{"namespace App\\Http\\Controllers;", "namespace MyVendor\\Package;"},
 	}
 
 	UseStatementPattern = &QueryPattern{
-		Name:  "use_statement",
-		Query: "(namespace_use_declaration (namespace_use_clause name: (qualified_name) @use.name))",
+		Name:        "use_statement",
+		Query:       "(namespace_use_declaration (namespace_use_clause name: (qualified_name) @use.name))",
 		Description: "Matches PHP use/import statements",
-		Examples: []string{"use Illuminate\\Http\\Request;", "use App\\Models\\User as UserModel;"},
+		Examples:    []string{"use Illuminate\\Http\\Request;", "use App\\Models\\User as UserModel;"},
 	}
 
 	MethodDeclarationPattern = &QueryPattern{
-		Name:  "method_declaration",
-		Query: "(method_declaration name: (name) @method.name)",
+		Name:        "method_declaration",
+		Query:       "(method_declaration name: (name) @method.name)",
 		Description: "Matches PHP method declarations within classes",
-		Examples: []string{"public function index() {}", "private static function helper() {}"},
+		Examples:    []string{"public function index() {}", "private static function helper() {}"},
 	}
 )
 
@@ -222,7 +222,7 @@ func PHPNodeClassifier() *NodeTypeClassifier {
 			"integer", "float", "string", "boolean", "null", "array", "heredoc",
 		},
 		OperatorTypes: []string{
-			"=", "+", "-", "*", "/", "%", "==", "!=", "===", "!==", "<", ">", 
+			"=", "+", "-", "*", "/", "%", "==", "!=", "===", "!==", "<", ">",
 			"<=", ">=", "&&", "||", "!", "&", "|", "^", "<<", ">>", "??",
 		},
 	}
@@ -261,31 +261,31 @@ func (c *NodeTypeClassifier) IsStatement(nodeType string) bool {
 // ValidationResult contains the result of validating a parsed PHP file.
 // Used to check for common PHP syntax and semantic issues.
 type ValidationResult struct {
-	IsValid        bool              // Whether PHP code is valid
-	SyntaxErrors   []ParseError      // Syntax errors found
-	SemanticIssues []SemanticIssue   // Semantic problems detected
+	IsValid        bool                // Whether PHP code is valid
+	SyntaxErrors   []ParseError        // Syntax errors found
+	SemanticIssues []SemanticIssue     // Semantic problems detected
 	Warnings       []ValidationWarning // Non-fatal issues found
-	ValidatedAt    time.Time         // When validation was performed
+	ValidatedAt    time.Time           // When validation was performed
 }
 
 // SemanticIssue represents a semantic problem in PHP code.
 // Detected issues that are syntactically valid but potentially problematic.
 type SemanticIssue struct {
-	Type        string // Issue type (undefined_variable, unused_import, etc.)
-	Message     string // Description of the issue
-	Severity    string // Issue severity (error, warning, info)
-	Line        int    // Line where issue occurs
-	Column      int    // Column where issue occurs
-	Suggestion  string // Suggested fix (if available)
+	Type       string // Issue type (undefined_variable, unused_import, etc.)
+	Message    string // Description of the issue
+	Severity   string // Issue severity (error, warning, info)
+	Line       int    // Line where issue occurs
+	Column     int    // Column where issue occurs
+	Suggestion string // Suggested fix (if available)
 }
 
 // ValidationWarning represents a non-fatal issue in PHP code.
 // Includes style violations and potential improvements.
 type ValidationWarning struct {
-	Type       string // Warning type
-	Message    string // Warning description  
-	Line       int    // Warning line number
-	Column     int    // Warning column number
-	Rule       string // Validation rule that triggered warning
+	Type       string  // Warning type
+	Message    string  // Warning description
+	Line       int     // Warning line number
+	Column     int     // Warning column number
+	Rule       string  // Validation rule that triggered warning
 	Confidence float64 // Confidence in warning (0.0-1.0)
 }

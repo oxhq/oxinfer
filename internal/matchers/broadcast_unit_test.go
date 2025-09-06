@@ -77,12 +77,12 @@ func TestBroadcastMatcher_ExtractChannelParameters(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := matcher.extractChannelParameters(tt.channelName)
-			
+
 			if len(result) != len(tt.expected) {
 				t.Errorf("Expected %d parameters, got %d", len(tt.expected), len(result))
 				t.Logf("Expected: %v, Got: %v", tt.expected, result)
 			}
-			
+
 			for i, expected := range tt.expected {
 				if i >= len(result) || result[i] != expected {
 					t.Errorf("Expected param[%d] = %q, got %q", i, expected, result[i])
@@ -178,63 +178,63 @@ func TestBroadcastMatcher_BuildBroadcastMatch(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		methodName     string
-		channelName    string
+		name               string
+		methodName         string
+		channelName        string
 		expectedVisibility string
-		expectedParams []string
-		description    string
+		expectedParams     []string
+		description        string
 	}{
 		{
-			name:           "public_channel",
-			methodName:     "channel",
-			channelName:    "notifications",
+			name:               "public_channel",
+			methodName:         "channel",
+			channelName:        "notifications",
 			expectedVisibility: "public",
-			expectedParams: []string{},
-			description:    "Public channel should have public visibility",
+			expectedParams:     []string{},
+			description:        "Public channel should have public visibility",
 		},
 		{
-			name:           "private_channel",
-			methodName:     "private",
-			channelName:    "user.{id}",
+			name:               "private_channel",
+			methodName:         "private",
+			channelName:        "user.{id}",
 			expectedVisibility: "private",
-			expectedParams: []string{"id"},
-			description:    "Private channel should have private visibility and extract parameters",
+			expectedParams:     []string{"id"},
+			description:        "Private channel should have private visibility and extract parameters",
 		},
 		{
-			name:           "presence_channel",
-			methodName:     "presence",
-			channelName:    "chat.{room}",
+			name:               "presence_channel",
+			methodName:         "presence",
+			channelName:        "chat.{room}",
 			expectedVisibility: "presence",
-			expectedParams: []string{"room"},
-			description:    "Presence channel should have presence visibility and extract parameters",
+			expectedParams:     []string{"room"},
+			description:        "Presence channel should have presence visibility and extract parameters",
 		},
 		{
-			name:           "unknown_method_defaults_public",
-			methodName:     "unknown",
-			channelName:    "test",
+			name:               "unknown_method_defaults_public",
+			methodName:         "unknown",
+			channelName:        "test",
 			expectedVisibility: "public",
-			expectedParams: []string{},
-			description:    "Unknown method should default to public visibility",
+			expectedParams:     []string{},
+			description:        "Unknown method should default to public visibility",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			match := matcher.buildBroadcastMatch(tt.methodName, tt.channelName, queryDef, "test.php")
-			
+
 			if match.Channel != tt.channelName {
 				t.Errorf("Expected channel %q, got %q", tt.channelName, match.Channel)
 			}
-			
+
 			if match.Method != tt.methodName {
 				t.Errorf("Expected method %q, got %q", tt.methodName, match.Method)
 			}
-			
+
 			if match.Visibility != tt.expectedVisibility {
 				t.Errorf("Expected visibility %q, got %q", tt.expectedVisibility, match.Visibility)
 			}
-			
+
 			if len(match.Params) != len(tt.expectedParams) {
 				t.Errorf("Expected %d params, got %d", len(tt.expectedParams), len(match.Params))
 			} else {
@@ -244,11 +244,11 @@ func TestBroadcastMatcher_BuildBroadcastMatch(t *testing.T) {
 					}
 				}
 			}
-			
+
 			if match.Pattern != queryDef.Name {
 				t.Errorf("Expected pattern %q, got %q", queryDef.Name, match.Pattern)
 			}
-			
+
 			if match.File != "test.php" {
 				t.Errorf("Expected file %q, got %q", "test.php", match.File)
 			}
@@ -265,11 +265,11 @@ func TestBroadcastMatcher_BuildDisplayContent(t *testing.T) {
 	defer matcher.Close()
 
 	tests := []struct {
-		name         string
-		methodName   string
-		channelName  string
-		expected     string
-		description  string
+		name        string
+		methodName  string
+		channelName string
+		expected    string
+		description string
 	}{
 		{
 			name:        "public_channel",
@@ -425,12 +425,12 @@ func TestBroadcastMatcher_IsChannelParameterQuery(t *testing.T) {
 
 func TestBroadcastMatcher_ValidationFunctions(t *testing.T) {
 	tests := []struct {
-		name           string
-		methodName     string
-		channelName    string
-		hasCallback    bool
-		expected       bool
-		description    string
+		name        string
+		methodName  string
+		channelName string
+		hasCallback bool
+		expected    bool
+		description string
 	}{
 		{
 			name:        "valid_public_channel_with_callback",
@@ -511,16 +511,16 @@ func TestBroadcastMatcher_ValidationFunctions(t *testing.T) {
 func TestBroadcastMatcher_UtilityFunctions(t *testing.T) {
 	t.Run("get_supported_patterns", func(t *testing.T) {
 		patterns := GetSupportedBroadcastPatterns()
-		
+
 		if len(patterns) == 0 {
 			t.Errorf("Expected at least one supported pattern")
 		}
-		
+
 		// Check that patterns contain expected broadcast method calls
 		foundChannel := false
 		foundPrivate := false
 		foundPresence := false
-		
+
 		for _, pattern := range patterns {
 			if strings.Contains(pattern, "Broadcast::channel") {
 				foundChannel = true
@@ -532,7 +532,7 @@ func TestBroadcastMatcher_UtilityFunctions(t *testing.T) {
 				foundPresence = true
 			}
 		}
-		
+
 		if !foundChannel {
 			t.Errorf("Expected to find channel pattern")
 		}
@@ -546,9 +546,9 @@ func TestBroadcastMatcher_UtilityFunctions(t *testing.T) {
 
 	t.Run("get_method_conventions", func(t *testing.T) {
 		conventions := GetBroadcastMethodConventions()
-		
+
 		expectedMethods := []string{"channel", "private", "presence"}
-		
+
 		for _, method := range expectedMethods {
 			if _, exists := conventions[method]; !exists {
 				t.Errorf("Expected convention for method %q", method)
@@ -569,9 +569,7 @@ func TestBroadcastMatcher_InterfaceCompliance(t *testing.T) {
 	t.Run("pattern_matcher_interface", func(t *testing.T) {
 		// Verify it implements PatternMatcher interface
 		var pm PatternMatcher = matcher
-		if pm == nil {
-			t.Errorf("Matcher should implement PatternMatcher interface")
-		}
+		_ = pm // Verify interface compliance
 
 		// Test interface methods
 		if matcher.GetType() != PatternTypeBroadcast {
@@ -591,8 +589,6 @@ func TestBroadcastMatcher_InterfaceCompliance(t *testing.T) {
 	t.Run("broadcast_matcher_interface", func(t *testing.T) {
 		// Verify it implements BroadcastMatcher interface
 		var bm BroadcastMatcher = matcher
-		if bm == nil {
-			t.Errorf("Matcher should implement BroadcastMatcher interface")
-		}
+		_ = bm // Verify interface compliance
 	})
 }

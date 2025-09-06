@@ -32,7 +32,6 @@ type BenchmarkResult struct {
 
 // BenchmarkSuite manages benchmark execution and result collection
 type BenchmarkSuite struct {
-	results []BenchmarkResult
 	tempDir string
 }
 
@@ -82,7 +81,7 @@ func (bs *BenchmarkSuite) createTestProject(name string, fileCount int, complexi
 			filename := fmt.Sprintf("File%d.php", fileIndex)
 			content := bs.generatePHPContent(filename, complexity)
 			filePath := filepath.Join(projectDir, dir, filename)
-			
+
 			if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
 				panic(fmt.Sprintf("failed to create file %s: %v", filePath, err))
 			}
@@ -207,14 +206,14 @@ class %s
 func BenchmarkIndexing_SingleFile(b *testing.B) {
 	suite := NewBenchmarkSuite(b)
 	projectDir := suite.createTestProject("single", 1, ComplexitySmall)
-	
+
 	indexer := NewDefaultFileIndexer()
 	manifest := createTestManifest(projectDir, 1, 4, true)
-	
+
 	if err := indexer.LoadFromManifest(manifest); err != nil {
 		b.Fatalf("Failed to load manifest: %v", err)
 	}
-	
+
 	ctx := context.Background()
 	config := IndexConfig{
 		Targets:      []string{"app"},
@@ -224,10 +223,10 @@ func BenchmarkIndexing_SingleFile(b *testing.B) {
 		MaxFiles:     1,
 		CacheEnabled: false,
 	}
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		result, err := indexer.IndexFiles(ctx, config)
 		if err != nil {
@@ -243,14 +242,14 @@ func BenchmarkIndexing_SingleFile(b *testing.B) {
 func BenchmarkIndexing_SmallLaravel(b *testing.B) {
 	suite := NewBenchmarkSuite(b)
 	projectDir := suite.createTestProject("small-laravel", 50, ComplexitySmall)
-	
+
 	indexer := NewDefaultFileIndexer()
 	manifest := createTestManifest(projectDir, 100, 4, true)
-	
+
 	if err := indexer.LoadFromManifest(manifest); err != nil {
 		b.Fatalf("Failed to load manifest: %v", err)
 	}
-	
+
 	ctx := context.Background()
 	config := IndexConfig{
 		Targets:      []string{"app", "routes"},
@@ -260,10 +259,10 @@ func BenchmarkIndexing_SmallLaravel(b *testing.B) {
 		MaxFiles:     100,
 		CacheEnabled: false, // Cold start measurement
 	}
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		result, err := indexer.IndexFiles(ctx, config)
 		if err != nil {
@@ -283,14 +282,14 @@ func BenchmarkIndexing_SmallLaravel(b *testing.B) {
 func BenchmarkIndexing_MediumLaravel(b *testing.B) {
 	suite := NewBenchmarkSuite(b)
 	projectDir := suite.createTestProject("medium-laravel", 250, ComplexityMedium)
-	
+
 	indexer := NewDefaultFileIndexer()
 	manifest := createTestManifest(projectDir, 500, 8, true)
-	
+
 	if err := indexer.LoadFromManifest(manifest); err != nil {
 		b.Fatalf("Failed to load manifest: %v", err)
 	}
-	
+
 	ctx := context.Background()
 	config := IndexConfig{
 		Targets:      []string{"app", "routes", "database"},
@@ -300,10 +299,10 @@ func BenchmarkIndexing_MediumLaravel(b *testing.B) {
 		MaxFiles:     500,
 		CacheEnabled: false, // Cold start measurement
 	}
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		result, err := indexer.IndexFiles(ctx, config)
 		if err != nil {
@@ -323,14 +322,14 @@ func BenchmarkIndexing_MediumLaravel(b *testing.B) {
 func BenchmarkIndexing_LargeLaravel(b *testing.B) {
 	suite := NewBenchmarkSuite(b)
 	projectDir := suite.createTestProject("large-laravel", 800, ComplexityLarge)
-	
+
 	indexer := NewDefaultFileIndexer()
 	manifest := createTestManifest(projectDir, 1000, 12, true)
-	
+
 	if err := indexer.LoadFromManifest(manifest); err != nil {
 		b.Fatalf("Failed to load manifest: %v", err)
 	}
-	
+
 	ctx := context.Background()
 	config := IndexConfig{
 		Targets:      []string{"app", "routes", "database", "packages"},
@@ -340,10 +339,10 @@ func BenchmarkIndexing_LargeLaravel(b *testing.B) {
 		MaxFiles:     1000,
 		CacheEnabled: false, // Cold start measurement
 	}
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		result, err := indexer.IndexFiles(ctx, config)
 		if err != nil {
@@ -367,16 +366,16 @@ func BenchmarkIndexing_LargeLaravel(b *testing.B) {
 func BenchmarkIndexing_CacheHitVsMiss(b *testing.B) {
 	suite := NewBenchmarkSuite(b)
 	projectDir := suite.createTestProject("cache-test", 100, ComplexityMedium)
-	
+
 	// Subtest: Cold start (cache miss)
 	b.Run("CacheMiss", func(b *testing.B) {
 		indexer := NewDefaultFileIndexer()
 		manifest := createTestManifest(projectDir, 200, 4, true)
-		
+
 		if err := indexer.LoadFromManifest(manifest); err != nil {
 			b.Fatalf("Failed to load manifest: %v", err)
 		}
-		
+
 		ctx := context.Background()
 		config := IndexConfig{
 			Targets:      []string{"app"},
@@ -386,16 +385,16 @@ func BenchmarkIndexing_CacheHitVsMiss(b *testing.B) {
 			MaxFiles:     200,
 			CacheEnabled: true,
 		}
-		
+
 		b.ResetTimer()
 		b.ReportAllocs()
-		
+
 		for i := 0; i < b.N; i++ {
 			// Clear cache for each iteration to simulate cold start
 			if err := indexer.RefreshIndex(ctx); err != nil {
 				b.Fatalf("Failed to refresh index: %v", err)
 			}
-			
+
 			result, err := indexer.IndexFiles(ctx, config)
 			if err != nil {
 				b.Fatalf("Indexing failed: %v", err)
@@ -405,16 +404,16 @@ func BenchmarkIndexing_CacheHitVsMiss(b *testing.B) {
 			}
 		}
 	})
-	
+
 	// Subtest: Warm start (cache hit)
 	b.Run("CacheHit", func(b *testing.B) {
 		indexer := NewDefaultFileIndexer()
 		manifest := createTestManifest(projectDir, 200, 4, true)
-		
+
 		if err := indexer.LoadFromManifest(manifest); err != nil {
 			b.Fatalf("Failed to load manifest: %v", err)
 		}
-		
+
 		ctx := context.Background()
 		config := IndexConfig{
 			Targets:      []string{"app"},
@@ -424,16 +423,16 @@ func BenchmarkIndexing_CacheHitVsMiss(b *testing.B) {
 			MaxFiles:     200,
 			CacheEnabled: true,
 		}
-		
+
 		// Prime the cache
 		_, err := indexer.IndexFiles(ctx, config)
 		if err != nil {
 			b.Fatalf("Failed to prime cache: %v", err)
 		}
-		
+
 		b.ResetTimer()
 		b.ReportAllocs()
-		
+
 		for i := 0; i < b.N; i++ {
 			result, err := indexer.IndexFiles(ctx, config)
 			if err != nil {
@@ -451,14 +450,14 @@ func BenchmarkIndexing_CacheHitVsMiss(b *testing.B) {
 func BenchmarkIndexing_IncrementalWithCache(b *testing.B) {
 	suite := NewBenchmarkSuite(b)
 	projectDir := suite.createTestProject("incremental", 500, ComplexityMedium)
-	
+
 	indexer := NewDefaultFileIndexer()
 	manifest := createTestManifest(projectDir, 600, 8, true)
-	
+
 	if err := indexer.LoadFromManifest(manifest); err != nil {
 		b.Fatalf("Failed to load manifest: %v", err)
 	}
-	
+
 	ctx := context.Background()
 	config := IndexConfig{
 		Targets:      []string{"app", "routes"},
@@ -468,19 +467,19 @@ func BenchmarkIndexing_IncrementalWithCache(b *testing.B) {
 		MaxFiles:     600,
 		CacheEnabled: true,
 	}
-	
+
 	// Prime the cache
 	_, err := indexer.IndexFiles(ctx, config)
 	if err != nil {
 		b.Fatalf("Failed to prime cache: %v", err)
 	}
-	
+
 	// Modify 10% of files to simulate incremental changes
 	files, err := filepath.Glob(filepath.Join(projectDir, "app", "**", "*.php"))
 	if err != nil {
 		b.Fatalf("Failed to glob files: %v", err)
 	}
-	
+
 	modifyCount := len(files) / 10 // 10% of files
 	for i := 0; i < modifyCount; i++ {
 		content := fmt.Sprintf("<?php\n// Modified at %s\nclass Modified%d {}\n", time.Now().Format(time.RFC3339), i)
@@ -488,10 +487,10 @@ func BenchmarkIndexing_IncrementalWithCache(b *testing.B) {
 			b.Fatalf("Failed to modify file: %v", err)
 		}
 	}
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		result, err := indexer.IndexFiles(ctx, config)
 		if err != nil {
@@ -512,18 +511,18 @@ func BenchmarkIndexing_IncrementalWithCache(b *testing.B) {
 func BenchmarkIndexing_WorkerScaling(b *testing.B) {
 	suite := NewBenchmarkSuite(b)
 	projectDir := suite.createTestProject("scaling", 200, ComplexityMedium)
-	
+
 	workerCounts := []int{1, 2, 4, 8, 16}
-	
+
 	for _, workers := range workerCounts {
 		b.Run(fmt.Sprintf("Workers%d", workers), func(b *testing.B) {
 			indexer := NewDefaultFileIndexer()
 			manifest := createTestManifest(projectDir, 300, workers, false) // No cache for pure worker measurement
-			
+
 			if err := indexer.LoadFromManifest(manifest); err != nil {
 				b.Fatalf("Failed to load manifest: %v", err)
 			}
-			
+
 			ctx := context.Background()
 			config := IndexConfig{
 				Targets:      []string{"app", "routes"},
@@ -533,10 +532,10 @@ func BenchmarkIndexing_WorkerScaling(b *testing.B) {
 				MaxFiles:     300,
 				CacheEnabled: false,
 			}
-			
+
 			b.ResetTimer()
 			b.ReportAllocs()
-			
+
 			for i := 0; i < b.N; i++ {
 				result, err := indexer.IndexFiles(ctx, config)
 				if err != nil {
@@ -553,19 +552,19 @@ func BenchmarkIndexing_WorkerScaling(b *testing.B) {
 // BenchmarkIndexing_MemoryUsage measures memory usage under different project sizes
 func BenchmarkIndexing_MemoryUsage(b *testing.B) {
 	fileCounts := []int{50, 250, 800}
-	
+
 	for _, count := range fileCounts {
 		b.Run(fmt.Sprintf("Files%d", count), func(b *testing.B) {
 			suite := NewBenchmarkSuite(b)
 			projectDir := suite.createTestProject(fmt.Sprintf("memory-%d", count), count, ComplexityMedium)
-			
+
 			indexer := NewDefaultFileIndexer()
 			manifest := createTestManifest(projectDir, count+100, 8, true)
-			
+
 			if err := indexer.LoadFromManifest(manifest); err != nil {
 				b.Fatalf("Failed to load manifest: %v", err)
 			}
-			
+
 			ctx := context.Background()
 			config := IndexConfig{
 				Targets:      []string{"app", "routes", "database"},
@@ -575,15 +574,15 @@ func BenchmarkIndexing_MemoryUsage(b *testing.B) {
 				MaxFiles:     count + 100,
 				CacheEnabled: true,
 			}
-			
+
 			// Force garbage collection before measurement
 			runtime.GC()
 			var memBefore runtime.MemStats
 			runtime.ReadMemStats(&memBefore)
-			
+
 			b.ResetTimer()
 			b.ReportAllocs()
-			
+
 			for i := 0; i < b.N; i++ {
 				result, err := indexer.IndexFiles(ctx, config)
 				if err != nil {
@@ -593,12 +592,12 @@ func BenchmarkIndexing_MemoryUsage(b *testing.B) {
 					b.Fatalf("No files processed")
 				}
 			}
-			
+
 			// Check memory usage didn't spike beyond reasonable limits
 			var memAfter runtime.MemStats
 			runtime.ReadMemStats(&memAfter)
 			memUsed := memAfter.Alloc - memBefore.Alloc
-			
+
 			// Target: <100MB memory usage for largest projects
 			if memUsed > 100*1024*1024 && b.N == 1 {
 				b.Logf("WARNING: Memory usage %d bytes (target: <100MB)", memUsed)
@@ -615,14 +614,14 @@ func BenchmarkIndexing_MemoryUsage(b *testing.B) {
 func BenchmarkIndexing_Determinism(b *testing.B) {
 	suite := NewBenchmarkSuite(b)
 	projectDir := suite.createTestProject("determinism", 100, ComplexityMedium)
-	
+
 	indexer := NewDefaultFileIndexer()
 	manifest := createTestManifest(projectDir, 150, 4, true)
-	
+
 	if err := indexer.LoadFromManifest(manifest); err != nil {
 		b.Fatalf("Failed to load manifest: %v", err)
 	}
-	
+
 	ctx := context.Background()
 	config := IndexConfig{
 		Targets:      []string{"app", "routes"},
@@ -632,33 +631,33 @@ func BenchmarkIndexing_Determinism(b *testing.B) {
 		MaxFiles:     150,
 		CacheEnabled: false, // Ensure fresh runs
 	}
-	
+
 	// First run to establish baseline
 	result1, err := indexer.IndexFiles(ctx, config)
 	if err != nil {
 		b.Fatalf("First indexing failed: %v", err)
 	}
-	
+
 	hash1 := hashResult(result1)
-	
+
 	b.ResetTimer()
-	
+
 	for i := 0; i < b.N; i++ {
 		result, err := indexer.IndexFiles(ctx, config)
 		if err != nil {
 			b.Fatalf("Indexing failed: %v", err)
 		}
-		
+
 		hash := hashResult(result)
 		if hash != hash1 {
 			b.Fatalf("Non-deterministic output detected! Hash mismatch")
 		}
-		
+
 		// Verify file order is consistent
 		if len(result.Files) != len(result1.Files) {
 			b.Fatalf("File count mismatch: got %d, expected %d", len(result.Files), len(result1.Files))
 		}
-		
+
 		for j, file := range result.Files {
 			if file.Path != result1.Files[j].Path {
 				b.Fatalf("File order mismatch at index %d: got %s, expected %s", j, file.Path, result1.Files[j].Path)
@@ -668,21 +667,21 @@ func BenchmarkIndexing_Determinism(b *testing.B) {
 }
 
 // ==============================================================================
-// COMPONENT PERFORMANCE BENCHMARKS  
+// COMPONENT PERFORMANCE BENCHMARKS
 // ==============================================================================
 
 // BenchmarkComponent_FileDiscoverer measures T3.1 FileDiscoverer performance
 func BenchmarkComponent_FileDiscoverer(b *testing.B) {
 	suite := NewBenchmarkSuite(b)
 	projectDir := suite.createTestProject("discoverer", 500, ComplexityMedium)
-	
+
 	discoverer := NewFileDiscoverer()
 	targets := []string{"app", "routes", "database"}
 	globs := []string{"**/*.php"}
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		files, err := discoverer.DiscoverFiles(context.Background(), targets, globs, projectDir)
 		if err != nil {
@@ -700,9 +699,9 @@ func BenchmarkComponent_FileCacher(b *testing.B) {
 		Enabled: &[]bool{true}[0],
 		Kind:    &[]string{CacheModeModTime}[0],
 	}
-	
+
 	cacher := NewFileCache(cacheConfig)
-	
+
 	// Pre-populate cache
 	for i := 0; i < 1000; i++ {
 		path := fmt.Sprintf("app/Models/Model%d.php", i)
@@ -714,10 +713,10 @@ func BenchmarkComponent_FileCacher(b *testing.B) {
 		}
 		_ = cacher.SetCacheEntry(path, entry)
 	}
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	b.RunParallel(func(pb *testing.PB) {
 		i := 0
 		for pb.Next() {
@@ -732,20 +731,20 @@ func BenchmarkComponent_FileCacher(b *testing.B) {
 func BenchmarkComponent_WorkerPool(b *testing.B) {
 	suite := NewBenchmarkSuite(b)
 	projectDir := suite.createTestProject("workers", 1000, ComplexitySmall)
-	
+
 	// Discover files first
 	discoverer := NewFileDiscoverer()
 	files, err := discoverer.DiscoverFiles(context.Background(), []string{"app"}, []string{"**/*.php"}, projectDir)
 	if err != nil {
 		b.Fatalf("Discovery failed: %v", err)
 	}
-	
+
 	workerPool := NewWorkerPoolManager()
 	processor := &SimpleFileProcessor{}
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		err := workerPool.ProcessFiles(context.Background(), files, 8, processor)
 		if err != nil {
@@ -783,30 +782,18 @@ func createTestManifest(baseDir string, maxFiles, maxWorkers int, cacheEnabled b
 // hashResult creates a deterministic hash of IndexResult for consistency validation
 func hashResult(result *IndexResult) string {
 	hasher := sha256.New()
-	
+
 	// Hash file paths in order (should be deterministically sorted)
 	for _, file := range result.Files {
 		hasher.Write([]byte(file.Path))
 		hasher.Write([]byte{0}) // separator
 	}
-	
+
 	// Hash counts and flags
-	hasher.Write([]byte(fmt.Sprintf("%d:%d:%d:%t:%d", 
+	hasher.Write([]byte(fmt.Sprintf("%d:%d:%d:%t:%d",
 		result.Cached, result.Fresh, result.Skipped, result.Partial, result.TotalFiles)))
-	
+
 	return fmt.Sprintf("%x", hasher.Sum(nil))
 }
 
 // reportBenchmarkResults outputs detailed performance analysis
-func reportBenchmarkResults(b *testing.B, result *IndexResult, memStats runtime.MemStats) {
-	b.ReportMetric(float64(len(result.Files)), "files")
-	b.ReportMetric(float64(result.DurationMs), "duration_ms")
-	b.ReportMetric(float64(len(result.Files))*1000/float64(result.DurationMs), "files_per_sec")
-	b.ReportMetric(float64(memStats.TotalAlloc), "alloc_bytes")
-	b.ReportMetric(float64(memStats.Mallocs), "allocs")
-	
-	if result.Cached+result.Fresh > 0 {
-		hitRate := float64(result.Cached) / float64(result.Cached+result.Fresh) * 100
-		b.ReportMetric(hitRate, "cache_hit_rate_percent")
-	}
-}

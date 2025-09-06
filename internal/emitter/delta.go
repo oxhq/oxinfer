@@ -3,10 +3,10 @@
 package emitter
 
 import (
-    "bytes"
-    "encoding/json"
-    "fmt"
-    "sort"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"sort"
 )
 
 // Delta represents the complete analysis output structure matching delta.schema.json.
@@ -43,133 +43,188 @@ type MetaStats struct {
 	PropertiesInferred int64            `json:"propertiesInferred,omitempty"`
 	CacheHits          int64            `json:"cacheHits,omitempty"`
 	CacheMisses        int64            `json:"cacheMisses,omitempty"`
+	AssemblerStats     *AssemblerStats  `json:"assemblerStats,omitempty"`
+}
+
+// AssemblerStats tracks delta assembly effectiveness for debugging.
+type AssemblerStats struct {
+	SkippedControllers   int `json:"skippedControllers"`   // Controllers that couldn't be processed
+	SkippedModels        int `json:"skippedModels"`        // Models that couldn't be processed  
+	SkippedPatterns      int `json:"skippedPatterns"`      // Patterns that couldn't be matched to methods
+	UnresolvableMatches  int `json:"unresolvableMatches"`  // Matches that couldn't be resolved to valid keys
 }
 
 // MarshalJSON implements deterministic JSON encoding for MetaStats, ensuring
 // stable ordering of map fields (phaseStats, matchStats) and consistent field order.
 func (m MetaStats) MarshalJSON() ([]byte, error) {
-    // Collect sorted keys for maps first
-    // PhaseStats
-    phaseKeys := make([]string, 0, len(m.PhaseStats))
-    for k := range m.PhaseStats {
-        phaseKeys = append(phaseKeys, k)
-    }
-    if len(phaseKeys) > 1 {
-        sort.Strings(phaseKeys)
-    }
-    // MatchStats
-    matchKeys := make([]string, 0, len(m.MatchStats))
-    for k := range m.MatchStats {
-        matchKeys = append(matchKeys, k)
-    }
-    if len(matchKeys) > 1 {
-        sort.Strings(matchKeys)
-    }
+	// Collect sorted keys for maps first
+	// PhaseStats
+	phaseKeys := make([]string, 0, len(m.PhaseStats))
+	for k := range m.PhaseStats {
+		phaseKeys = append(phaseKeys, k)
+	}
+	if len(phaseKeys) > 1 {
+		sort.Strings(phaseKeys)
+	}
+	// MatchStats
+	matchKeys := make([]string, 0, len(m.MatchStats))
+	for k := range m.MatchStats {
+		matchKeys = append(matchKeys, k)
+	}
+	if len(matchKeys) > 1 {
+		sort.Strings(matchKeys)
+	}
 
-    // Build JSON manually for deterministic key order
-    var buf bytes.Buffer
-    buf.WriteByte('{')
-    wrote := false
+	// Build JSON manually for deterministic key order
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	wrote := false
 
-    // Required fields (always present)
-    // filesParsed
-    buf.WriteString("\"filesParsed\":")
-    buf.WriteString(intToString(m.FilesParsed))
-    wrote = true
-    // skipped
-    buf.WriteByte(',')
-    buf.WriteString("\"skipped\":")
-    buf.WriteString(intToString(m.Skipped))
-    // durationMs
-    buf.WriteByte(',')
-    buf.WriteString("\"durationMs\":")
-    buf.WriteString(intToString(m.DurationMs))
+	// Required fields (always present)
+	// filesParsed
+	buf.WriteString("\"filesParsed\":")
+	buf.WriteString(intToString(m.FilesParsed))
+	wrote = true
+	// skipped
+	buf.WriteByte(',')
+	buf.WriteString("\"skipped\":")
+	buf.WriteString(intToString(m.Skipped))
+	// durationMs
+	buf.WriteByte(',')
+	buf.WriteString("\"durationMs\":")
+	buf.WriteString(intToString(m.DurationMs))
 
-    // Optional numeric fields if non-zero
-    if m.TotalFiles != 0 {
-        buf.WriteByte(',')
-        buf.WriteString("\"totalFiles\":")
-        buf.WriteString(intToString(m.TotalFiles))
-    }
-    if m.ErrorCount != 0 {
-        buf.WriteByte(',')
-        buf.WriteString("\"errorCount\":")
-        buf.WriteString(intToString(m.ErrorCount))
-    }
-    if m.StartTime != 0 {
-        buf.WriteByte(',')
-        buf.WriteString("\"startTime\":")
-        buf.WriteString(intToString(m.StartTime))
-    }
-    if m.EndTime != 0 {
-        buf.WriteByte(',')
-        buf.WriteString("\"endTime\":")
-        buf.WriteString(intToString(m.EndTime))
-    }
-    if m.InferenceOps != 0 {
-        buf.WriteByte(',')
-        buf.WriteString("\"inferenceOps\":")
-        buf.WriteString(intToString(m.InferenceOps))
-    }
-    if m.PropertiesInferred != 0 {
-        buf.WriteByte(',')
-        buf.WriteString("\"propertiesInferred\":")
-        buf.WriteString(intToString(m.PropertiesInferred))
-    }
-    if m.CacheHits != 0 {
-        buf.WriteByte(',')
-        buf.WriteString("\"cacheHits\":")
-        buf.WriteString(intToString(m.CacheHits))
-    }
-    if m.CacheMisses != 0 {
-        buf.WriteByte(',')
-        buf.WriteString("\"cacheMisses\":")
-        buf.WriteString(intToString(m.CacheMisses))
-    }
+	// Optional numeric fields if non-zero
+	if m.TotalFiles != 0 {
+		buf.WriteByte(',')
+		buf.WriteString("\"totalFiles\":")
+		buf.WriteString(intToString(m.TotalFiles))
+	}
+	if m.ErrorCount != 0 {
+		buf.WriteByte(',')
+		buf.WriteString("\"errorCount\":")
+		buf.WriteString(intToString(m.ErrorCount))
+	}
+	if m.StartTime != 0 {
+		buf.WriteByte(',')
+		buf.WriteString("\"startTime\":")
+		buf.WriteString(intToString(m.StartTime))
+	}
+	if m.EndTime != 0 {
+		buf.WriteByte(',')
+		buf.WriteString("\"endTime\":")
+		buf.WriteString(intToString(m.EndTime))
+	}
+	if m.InferenceOps != 0 {
+		buf.WriteByte(',')
+		buf.WriteString("\"inferenceOps\":")
+		buf.WriteString(intToString(m.InferenceOps))
+	}
+	if m.PropertiesInferred != 0 {
+		buf.WriteByte(',')
+		buf.WriteString("\"propertiesInferred\":")
+		buf.WriteString(intToString(m.PropertiesInferred))
+	}
+	if m.CacheHits != 0 {
+		buf.WriteByte(',')
+		buf.WriteString("\"cacheHits\":")
+		buf.WriteString(intToString(m.CacheHits))
+	}
+	if m.CacheMisses != 0 {
+		buf.WriteByte(',')
+		buf.WriteString("\"cacheMisses\":")
+		buf.WriteString(intToString(m.CacheMisses))
+	}
 
-    // PhaseStats map (sorted keys)
-    if len(phaseKeys) > 0 {
-        buf.WriteByte(',')
-        buf.WriteString("\"phaseStats\":{")
-        for i, k := range phaseKeys {
-            if i > 0 { buf.WriteByte(',') }
-            keyBytes, _ := json.Marshal(k)
-            buf.Write(keyBytes)
-            buf.WriteByte(':')
-            buf.WriteString(intToString(m.PhaseStats[k]))
-        }
-        buf.WriteByte('}')
-    }
+	// PhaseStats map (sorted keys)
+	if len(phaseKeys) > 0 {
+		buf.WriteByte(',')
+		buf.WriteString("\"phaseStats\":{")
+		for i, k := range phaseKeys {
+			if i > 0 {
+				buf.WriteByte(',')
+			}
+			keyBytes, _ := json.Marshal(k)
+			buf.Write(keyBytes)
+			buf.WriteByte(':')
+			buf.WriteString(intToString(m.PhaseStats[k]))
+		}
+		buf.WriteByte('}')
+	}
 
-    // MatchStats map (sorted keys)
-    if len(matchKeys) > 0 {
-        buf.WriteByte(',')
-        buf.WriteString("\"matchStats\":{")
-        for i, k := range matchKeys {
-            if i > 0 { buf.WriteByte(',') }
-            keyBytes, _ := json.Marshal(k)
-            buf.Write(keyBytes)
-            buf.WriteByte(':')
-            buf.WriteString(intToString(int64(m.MatchStats[k])))
-        }
-        buf.WriteByte('}')
-    }
+	// MatchStats map (sorted keys)
+	if len(matchKeys) > 0 {
+		buf.WriteByte(',')
+		buf.WriteString("\"matchStats\":{")
+		for i, k := range matchKeys {
+			if i > 0 {
+				buf.WriteByte(',')
+			}
+			keyBytes, _ := json.Marshal(k)
+			buf.Write(keyBytes)
+			buf.WriteByte(':')
+			buf.WriteString(intToString(int64(m.MatchStats[k])))
+		}
+		buf.WriteByte('}')
+	}
 
-    buf.WriteByte('}')
-    _ = wrote
-    return buf.Bytes(), nil
+	// AssemblerStats (if not nil and has useful data)
+	if m.AssemblerStats != nil && (m.AssemblerStats.SkippedControllers > 0 || 
+		m.AssemblerStats.SkippedModels > 0 || 
+		m.AssemblerStats.SkippedPatterns > 0 || 
+		m.AssemblerStats.UnresolvableMatches > 0) {
+		
+		buf.WriteByte(',')
+		buf.WriteString("\"assemblerStats\":{")
+		
+		assemblerWrote := false
+		if m.AssemblerStats.SkippedControllers > 0 {
+			buf.WriteString("\"skippedControllers\":")
+			buf.WriteString(intToString(int64(m.AssemblerStats.SkippedControllers)))
+			assemblerWrote = true
+		}
+		if m.AssemblerStats.SkippedModels > 0 {
+			if assemblerWrote {
+				buf.WriteByte(',')
+			}
+			buf.WriteString("\"skippedModels\":")
+			buf.WriteString(intToString(int64(m.AssemblerStats.SkippedModels)))
+			assemblerWrote = true
+		}
+		if m.AssemblerStats.SkippedPatterns > 0 {
+			if assemblerWrote {
+				buf.WriteByte(',')
+			}
+			buf.WriteString("\"skippedPatterns\":")
+			buf.WriteString(intToString(int64(m.AssemblerStats.SkippedPatterns)))
+			assemblerWrote = true
+		}
+		if m.AssemblerStats.UnresolvableMatches > 0 {
+			if assemblerWrote {
+				buf.WriteByte(',')
+			}
+			buf.WriteString("\"unresolvableMatches\":")
+			buf.WriteString(intToString(int64(m.AssemblerStats.UnresolvableMatches)))
+		}
+		
+		buf.WriteByte('}')
+	}
+
+	buf.WriteByte('}')
+	_ = wrote
+	return buf.Bytes(), nil
 }
 
 // intToString formats integers without allocation-heavy fmt where possible.
 func intToString(v int64) string {
-    // Using json.Marshal on number would add quotes; use fmt to keep it simple
-    // However, since this is in a hot path rarely, keep it straightforward
-    return fmt.Sprintf("%d", v)
+	// Using json.Marshal on number would add quotes; use fmt to keep it simple
+	// However, since this is in a hot path rarely, keep it straightforward
+	return fmt.Sprintf("%d", v)
 }
 
 // NewMetaStatsFromProcessingStats converts processing stats to MetaStats format.
 // This ensures deterministic JSON output by sorting all map keys consistently.
-func NewMetaStatsFromProcessingStats(processingStats interface{}) MetaStats {
+func NewMetaStatsFromProcessingStats(processingStats any) MetaStats {
 	// Use reflection-free approach by defining interface methods we need
 	type statsReader interface {
 		GetFilesProcessed() int64
@@ -180,11 +235,11 @@ func NewMetaStatsFromProcessingStats(processingStats interface{}) MetaStats {
 	}
 
 	type phaseStatsReader interface {
-		GetPhaseStats() interface{} // Will cast to map[string]int64
+		GetPhaseStats() any // Will cast to map[string]int64
 	}
 
 	type matchStatsReader interface {
-		GetMatchStats() interface{} // Will cast to map[string]int
+		GetMatchStats() any // Will cast to map[string]int
 	}
 
 	// Create default empty stats
@@ -296,12 +351,12 @@ func NewMetaStatsFromProcessingStats(processingStats interface{}) MetaStats {
 
 // Controller represents a Laravel controller method with its detected patterns.
 type Controller struct {
-	FQCN        string        `json:"fqcn"`
-	Method      string        `json:"method"`
-	HTTP        *HTTPInfo     `json:"http,omitempty"`
-	Request     *RequestInfo  `json:"request,omitempty"`
-	Resources   []Resource    `json:"resources,omitempty"`
-	ScopesUsed  []ScopeUsed   `json:"scopesUsed,omitempty"`
+	FQCN       string       `json:"fqcn"`
+	Method     string       `json:"method"`
+	HTTP       *HTTPInfo    `json:"http,omitempty"`
+	Request    *RequestInfo `json:"request,omitempty"`
+	Resources  []Resource   `json:"resources,omitempty"`
+	ScopesUsed []ScopeUsed  `json:"scopesUsed,omitempty"`
 }
 
 // HTTPInfo captures HTTP-related metadata for controller methods.
@@ -361,7 +416,7 @@ func (o OrderedObject) MarshalJSON() ([]byte, error) {
 }
 
 // NewOrderedObjectFromMap converts a nested map[string]interface{} into OrderedObject.
-func NewOrderedObjectFromMap(m map[string]interface{}) OrderedObject {
+func NewOrderedObjectFromMap(m map[string]any) OrderedObject {
 	if m == nil {
 		return nil
 	}
@@ -375,7 +430,7 @@ func NewOrderedObjectFromMap(m map[string]interface{}) OrderedObject {
 	for _, k := range keys {
 		v := m[k]
 		// Expect nested map or empty object
-		if childMap, ok := v.(map[string]interface{}); ok {
+		if childMap, ok := v.(map[string]any); ok {
 			out[k] = NewOrderedObjectFromMap(childMap)
 		} else {
 			// Leaf
@@ -400,9 +455,9 @@ type ScopeUsed struct {
 
 // Model represents an Eloquent model class with its detected features.
 type Model struct {
-	FQCN        string                `json:"fqcn"`
-	WithPivot   []PivotInfo           `json:"withPivot,omitempty"`
-	Attributes  []Attribute           `json:"attributes,omitempty"`
+	FQCN       string      `json:"fqcn"`
+	WithPivot  []PivotInfo `json:"withPivot,omitempty"`
+	Attributes []Attribute `json:"attributes,omitempty"`
 }
 
 // PivotInfo describes pivot table configurations in many-to-many relationships.
@@ -434,55 +489,65 @@ type PolymorphicRelation struct {
 
 // PolymorphicDiscriminator contains discriminator mapping information for polymorphic relationships.
 type PolymorphicDiscriminator struct {
-    PropertyName string            `json:"propertyName"`          // Discriminator property name
-    Mapping      map[string]string `json:"mapping"`               // Type mappings
-    Source       string            `json:"source"`                // Source of mapping (morphMap, explicit, inferred)
-    IsExplicit   bool              `json:"isExplicit"`            // Whether mapping is explicitly defined
-    DefaultType  *string           `json:"defaultType,omitempty"` // Default type if no mapping matches
+	PropertyName string            `json:"propertyName"`          // Discriminator property name
+	Mapping      map[string]string `json:"mapping"`               // Type mappings
+	Source       string            `json:"source"`                // Source of mapping (morphMap, explicit, inferred)
+	IsExplicit   bool              `json:"isExplicit"`            // Whether mapping is explicitly defined
+	DefaultType  *string           `json:"defaultType,omitempty"` // Default type if no mapping matches
 }
 
 // MarshalJSON ensures deterministic ordering for Mapping keys and object fields
 func (pd PolymorphicDiscriminator) MarshalJSON() ([]byte, error) {
-    // Sort mapping keys
-    keys := make([]string, 0, len(pd.Mapping))
-    for k := range pd.Mapping { keys = append(keys, k) }
-    if len(keys) > 1 { sort.Strings(keys) }
-    var buf bytes.Buffer
-    buf.WriteByte('{')
-    // propertyName
-    buf.WriteString("\"propertyName\":")
-    nameBytes, _ := json.Marshal(pd.PropertyName)
-    buf.Write(nameBytes)
-    // mapping
-    buf.WriteByte(',')
-    buf.WriteString("\"mapping\":{")
-    for i, k := range keys {
-        if i > 0 { buf.WriteByte(',') }
-        keyBytes, _ := json.Marshal(k)
-        buf.Write(keyBytes)
-        buf.WriteByte(':')
-        valBytes, _ := json.Marshal(pd.Mapping[k])
-        buf.Write(valBytes)
-    }
-    buf.WriteByte('}')
-    // source
-    buf.WriteByte(',')
-    buf.WriteString("\"source\":")
-    srcBytes, _ := json.Marshal(pd.Source)
-    buf.Write(srcBytes)
-    // isExplicit
-    buf.WriteByte(',')
-    buf.WriteString("\"isExplicit\":")
-    if pd.IsExplicit { buf.WriteString("true") } else { buf.WriteString("false") }
-    // defaultType (optional)
-    if pd.DefaultType != nil {
-        buf.WriteByte(',')
-        buf.WriteString("\"defaultType\":")
-        defBytes, _ := json.Marshal(*pd.DefaultType)
-        buf.Write(defBytes)
-    }
-    buf.WriteByte('}')
-    return buf.Bytes(), nil
+	// Sort mapping keys
+	keys := make([]string, 0, len(pd.Mapping))
+	for k := range pd.Mapping {
+		keys = append(keys, k)
+	}
+	if len(keys) > 1 {
+		sort.Strings(keys)
+	}
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	// propertyName
+	buf.WriteString("\"propertyName\":")
+	nameBytes, _ := json.Marshal(pd.PropertyName)
+	buf.Write(nameBytes)
+	// mapping
+	buf.WriteByte(',')
+	buf.WriteString("\"mapping\":{")
+	for i, k := range keys {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		keyBytes, _ := json.Marshal(k)
+		buf.Write(keyBytes)
+		buf.WriteByte(':')
+		valBytes, _ := json.Marshal(pd.Mapping[k])
+		buf.Write(valBytes)
+	}
+	buf.WriteByte('}')
+	// source
+	buf.WriteByte(',')
+	buf.WriteString("\"source\":")
+	srcBytes, _ := json.Marshal(pd.Source)
+	buf.Write(srcBytes)
+	// isExplicit
+	buf.WriteByte(',')
+	buf.WriteString("\"isExplicit\":")
+	if pd.IsExplicit {
+		buf.WriteString("true")
+	} else {
+		buf.WriteString("false")
+	}
+	// defaultType (optional)
+	if pd.DefaultType != nil {
+		buf.WriteByte(',')
+		buf.WriteString("\"defaultType\":")
+		defBytes, _ := json.Marshal(*pd.DefaultType)
+		buf.Write(defBytes)
+	}
+	buf.WriteByte('}')
+	return buf.Bytes(), nil
 }
 
 // Polymorphic represents detected polymorphic relationship configurations.
@@ -502,35 +567,41 @@ type MorphInfo struct {
 
 // Discriminator provides type mapping for polymorphic relationships.
 type Discriminator struct {
-    PropertyName string            `json:"propertyName"`
-    Mapping      map[string]string `json:"mapping"`
+	PropertyName string            `json:"propertyName"`
+	Mapping      map[string]string `json:"mapping"`
 }
 
 // MarshalJSON ensures deterministic ordering for Mapping keys
 func (d Discriminator) MarshalJSON() ([]byte, error) {
-    keys := make([]string, 0, len(d.Mapping))
-    for k := range d.Mapping { keys = append(keys, k) }
-    if len(keys) > 1 { sort.Strings(keys) }
-    var buf bytes.Buffer
-    buf.WriteByte('{')
-    // propertyName first
-    buf.WriteString("\"propertyName\":")
-    nameBytes, _ := json.Marshal(d.PropertyName)
-    buf.Write(nameBytes)
-    // mapping
-    buf.WriteByte(',')
-    buf.WriteString("\"mapping\":{")
-    for i, k := range keys {
-        if i > 0 { buf.WriteByte(',') }
-        keyBytes, _ := json.Marshal(k)
-        buf.Write(keyBytes)
-        buf.WriteByte(':')
-        valBytes, _ := json.Marshal(d.Mapping[k])
-        buf.Write(valBytes)
-    }
-    buf.WriteByte('}')
-    buf.WriteByte('}')
-    return buf.Bytes(), nil
+	keys := make([]string, 0, len(d.Mapping))
+	for k := range d.Mapping {
+		keys = append(keys, k)
+	}
+	if len(keys) > 1 {
+		sort.Strings(keys)
+	}
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	// propertyName first
+	buf.WriteString("\"propertyName\":")
+	nameBytes, _ := json.Marshal(d.PropertyName)
+	buf.Write(nameBytes)
+	// mapping
+	buf.WriteByte(',')
+	buf.WriteString("\"mapping\":{")
+	for i, k := range keys {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		keyBytes, _ := json.Marshal(k)
+		buf.Write(keyBytes)
+		buf.WriteByte(':')
+		valBytes, _ := json.Marshal(d.Mapping[k])
+		buf.Write(valBytes)
+	}
+	buf.WriteByte('}')
+	buf.WriteByte('}')
+	return buf.Bytes(), nil
 }
 
 // Broadcast represents Laravel broadcasting channel configurations.

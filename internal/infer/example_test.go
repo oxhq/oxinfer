@@ -12,10 +12,10 @@ func Example() {
 	// Create a sample request usage match (simulating output from matchers package)
 	requestMatch := matchers.RequestUsageMatch{
 		ContentTypes: []string{"application/json"},
-		Body: map[string]interface{}{
-			"name":  map[string]interface{}{},
-			"email": map[string]interface{}{},
-			"age":   map[string]interface{}{},
+		Body: map[string]any{
+			"name":  map[string]any{},
+			"email": map[string]any{},
+			"age":   map[string]any{},
 		},
 		Methods: []string{"input", "validate"},
 	}

@@ -87,25 +87,25 @@ func TestOrderedObject_MarshalJSON(t *testing.T) {
 
 func TestOrderedObject_AddProperty(t *testing.T) {
 	obj := CreateEmptyOrderedObject()
-	
+
 	prop1 := CreateStringProperty("First property", "")
 	prop2 := CreateNumberProperty("Second property", "")
-	
+
 	obj.AddProperty("first", prop1)
 	obj.AddProperty("second", prop2)
-	
+
 	if obj.PropertyCount() != 2 {
 		t.Errorf("Expected 2 properties, got %d", obj.PropertyCount())
 	}
-	
+
 	if len(obj.Order) != 2 {
 		t.Errorf("Expected 2 items in order, got %d", len(obj.Order))
 	}
-	
+
 	if obj.Order[0] != "first" || obj.Order[1] != "second" {
 		t.Errorf("Expected order [first, second], got %v", obj.Order)
 	}
-	
+
 	// Test adding duplicate property
 	obj.AddProperty("first", prop1)
 	if obj.PropertyCount() != 2 {
@@ -120,7 +120,7 @@ func TestOrderedObject_GetProperty(t *testing.T) {
 	obj := CreateEmptyOrderedObject()
 	prop := CreateStringProperty("Test property", "")
 	obj.AddProperty("test", prop)
-	
+
 	// Test existing property
 	retrieved, exists := obj.GetProperty("test")
 	if !exists {
@@ -129,7 +129,7 @@ func TestOrderedObject_GetProperty(t *testing.T) {
 	if retrieved.Type != PropertyTypeString {
 		t.Errorf("Expected string type, got %v", retrieved.Type)
 	}
-	
+
 	// Test non-existing property
 	_, exists = obj.GetProperty("nonexistent")
 	if exists {
@@ -140,11 +140,11 @@ func TestOrderedObject_GetProperty(t *testing.T) {
 func TestOrderedObject_HasProperty(t *testing.T) {
 	obj := CreateEmptyOrderedObject()
 	obj.AddProperty("test", CreateStringProperty("Test", ""))
-	
+
 	if !obj.HasProperty("test") {
 		t.Error("Expected HasProperty to return true for existing property")
 	}
-	
+
 	if obj.HasProperty("nonexistent") {
 		t.Error("Expected HasProperty to return false for non-existing property")
 	}
@@ -155,7 +155,7 @@ func TestOrderedObject_IsEmpty(t *testing.T) {
 	if !obj.IsEmpty() {
 		t.Error("Expected empty object to return true for IsEmpty")
 	}
-	
+
 	obj.AddProperty("test", CreateStringProperty("Test", ""))
 	if obj.IsEmpty() {
 		t.Error("Expected object with properties to return false for IsEmpty")
@@ -164,24 +164,24 @@ func TestOrderedObject_IsEmpty(t *testing.T) {
 
 func TestOrderedObject_AddRequired(t *testing.T) {
 	obj := CreateEmptyOrderedObject()
-	
+
 	obj.AddRequired("field1")
 	obj.AddRequired("field2")
 	obj.AddRequired("field1") // Duplicate
-	
+
 	if len(obj.Required) != 2 {
 		t.Errorf("Expected 2 required fields, got %d", len(obj.Required))
 	}
-	
+
 	// Should be sorted
 	if obj.Required[0] != "field1" || obj.Required[1] != "field2" {
 		t.Errorf("Expected sorted required fields [field1, field2], got %v", obj.Required)
 	}
-	
+
 	if !obj.IsRequired("field1") {
 		t.Error("Expected field1 to be required")
 	}
-	
+
 	if obj.IsRequired("field3") {
 		t.Error("Expected field3 to not be required")
 	}
@@ -199,13 +199,13 @@ func TestPropertyCreators(t *testing.T) {
 	if stringProp.Format != "email" {
 		t.Errorf("Expected format 'email', got %v", stringProp.Format)
 	}
-	
+
 	// Test number property
 	numberProp := CreateNumberProperty("A number", "float")
 	if numberProp.Type != PropertyTypeNumber {
 		t.Errorf("Expected number type, got %v", numberProp.Type)
 	}
-	
+
 	// Test file property
 	fileProp := CreateFileProperty("A file")
 	if fileProp.Type != PropertyTypeFile {
@@ -214,7 +214,7 @@ func TestPropertyCreators(t *testing.T) {
 	if fileProp.Format != "binary" {
 		t.Errorf("Expected binary format, got %v", fileProp.Format)
 	}
-	
+
 	// Test array property
 	itemProp := CreateStringProperty("Array item", "")
 	arrayProp := CreateArrayProperty(itemProp, "An array")
@@ -227,7 +227,7 @@ func TestPropertyCreators(t *testing.T) {
 	if arrayProp.Items.Type != PropertyTypeString {
 		t.Errorf("Expected string item type, got %v", arrayProp.Items.Type)
 	}
-	
+
 	// Test object property
 	obj := CreateEmptyOrderedObject()
 	objProp := CreateObjectProperty(obj, "An object")
@@ -246,11 +246,11 @@ func TestPropertyInfo_Clone(t *testing.T) {
 	if cloned != nil {
 		t.Error("Expected nil clone to return nil")
 	}
-	
+
 	// Test simple property clone
 	original := CreateStringProperty("Original", "email")
 	cloned = original.Clone()
-	
+
 	if cloned.Type != original.Type {
 		t.Error("Expected cloned type to match original")
 	}
@@ -260,24 +260,24 @@ func TestPropertyInfo_Clone(t *testing.T) {
 	if cloned.Format != original.Format {
 		t.Error("Expected cloned format to match original")
 	}
-	
+
 	// Modify original and ensure clone is unaffected
 	original.Description = "Modified"
 	if cloned.Description == "Modified" {
 		t.Error("Clone should not be affected by original modification")
 	}
-	
+
 	// Test complex property with nested structures
 	obj := CreateEmptyOrderedObject()
 	obj.AddProperty("nested", CreateStringProperty("Nested", ""))
-	
+
 	itemProp := CreateStringProperty("Item", "")
 	arrayProp := CreateArrayProperty(itemProp, "Array")
 	objectProp := CreateObjectProperty(obj, "Object")
-	
+
 	arrayClone := arrayProp.Clone()
 	objectClone := objectProp.Clone()
-	
+
 	if arrayClone.Items == nil {
 		t.Error("Expected cloned array to have items")
 	}
@@ -293,27 +293,27 @@ func TestOrderedObject_Clone(t *testing.T) {
 	if cloned != nil {
 		t.Error("Expected nil clone to return nil")
 	}
-	
+
 	// Test complex object clone
 	original := CreateEmptyOrderedObject()
 	original.AddProperty("name", CreateStringProperty("Name", ""))
 	original.AddProperty("age", CreateNumberProperty("Age", ""))
 	original.AddRequired("name")
-	
+
 	cloned = original.Clone()
-	
+
 	if cloned.PropertyCount() != original.PropertyCount() {
 		t.Error("Expected cloned object to have same property count")
 	}
-	
+
 	if len(cloned.Required) != len(original.Required) {
 		t.Error("Expected cloned object to have same required count")
 	}
-	
+
 	if len(cloned.Order) != len(original.Order) {
 		t.Error("Expected cloned object to have same order count")
 	}
-	
+
 	// Test independence of clone
 	original.AddProperty("email", CreateStringProperty("Email", ""))
 	if cloned.PropertyCount() == original.PropertyCount() {
@@ -328,7 +328,7 @@ func TestShapeInferenceError(t *testing.T) {
 	if err.Error() != expected {
 		t.Errorf("Expected error message %q, got %q", expected, err.Error())
 	}
-	
+
 	// Test error with context
 	err = NewShapeInferenceError(ErrorTypeKeyPathParsing, "Invalid path", "user.profile.name")
 	expected = "KEY_PATH_PARSING: Invalid path (context: user.profile.name)"
@@ -339,7 +339,7 @@ func TestShapeInferenceError(t *testing.T) {
 
 func TestDefaultInferenceConfig(t *testing.T) {
 	config := DefaultInferenceConfig()
-	
+
 	if config.MaxDepth != 5 {
 		t.Errorf("Expected MaxDepth 5, got %d", config.MaxDepth)
 	}
@@ -355,7 +355,7 @@ func TestDefaultInferenceConfig(t *testing.T) {
 	if !config.MergeSimilarTypes {
 		t.Error("Expected MergeSimilarTypes to be true")
 	}
-	
+
 	expectedContentTypes := []string{
 		"application/json",
 		"multipart/form-data",
@@ -373,14 +373,14 @@ func TestDefaultInferenceConfig(t *testing.T) {
 
 func TestInferenceStats_String(t *testing.T) {
 	stats := &InferenceStats{
-		PatternsProcessed: 5,
+		PatternsProcessed:  5,
 		PropertiesInferred: 12,
-		ContentTypesFound: 2,
-		AverageConfidence: 0.85,
-		ProcessingTimeMs: 150,
-		ErrorsEncountered: 1,
+		ContentTypesFound:  2,
+		AverageConfidence:  0.85,
+		ProcessingTimeMs:   150,
+		ErrorsEncountered:  1,
 	}
-	
+
 	result := stats.String()
 	expected := "InferenceStats{patterns: 5, properties: 12, contentTypes: 2, confidence: 0.85, time: 150ms, errors: 1}"
 	if result != expected {
@@ -405,19 +405,19 @@ func TestConsolidatedRequest_JSON(t *testing.T) {
 			},
 		},
 	}
-	
+
 	data, err := json.Marshal(req)
 	if err != nil {
 		t.Errorf("Failed to marshal ConsolidatedRequest: %v", err)
 	}
-	
+
 	// Unmarshal to verify structure
 	var unmarshaled ConsolidatedRequest
 	err = json.Unmarshal(data, &unmarshaled)
 	if err != nil {
 		t.Errorf("Failed to unmarshal ConsolidatedRequest: %v", err)
 	}
-	
+
 	if len(unmarshaled.ContentTypes) != 1 {
 		t.Errorf("Expected 1 content type, got %d", len(unmarshaled.ContentTypes))
 	}
@@ -435,29 +435,29 @@ func TestRequestInfo_JSON(t *testing.T) {
 	body.AddProperty("name", CreateStringProperty("User name", ""))
 	body.AddProperty("email", CreateStringProperty("User email", "email"))
 	body.AddRequired("name")
-	
+
 	info := &RequestInfo{
 		ContentTypes: []string{"application/json", "multipart/form-data"},
 		Body:         *body,
 	}
-	
+
 	data, err := json.Marshal(info)
 	if err != nil {
 		t.Errorf("Failed to marshal RequestInfo: %v", err)
 	}
-	
+
 	// Verify the JSON contains expected structure
-	var jsonMap map[string]interface{}
+	var jsonMap map[string]any
 	err = json.Unmarshal(data, &jsonMap)
 	if err != nil {
 		t.Errorf("Failed to unmarshal RequestInfo JSON: %v", err)
 	}
-	
-	bodyMap, ok := jsonMap["body"].(map[string]interface{})
+
+	bodyMap, ok := jsonMap["body"].(map[string]any)
 	if !ok {
 		t.Error("Expected body to be an object")
 	}
-	
+
 	if _, hasName := bodyMap["name"]; !hasName {
 		t.Error("Expected body to contain name property")
 	}
@@ -470,7 +470,7 @@ func BenchmarkOrderedObject_MarshalJSON(b *testing.B) {
 		key := "property" + string(rune('0'+i%10))
 		obj.AddProperty(key, CreateStringProperty("Test property", ""))
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, err := obj.MarshalJSON()
@@ -484,9 +484,9 @@ func BenchmarkPropertyInfo_Clone(b *testing.B) {
 	// Create a complex property structure
 	nestedObj := CreateEmptyOrderedObject()
 	nestedObj.AddProperty("deep", CreateStringProperty("Deep property", ""))
-	
+
 	prop := CreateObjectProperty(nestedObj, "Complex object")
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = prop.Clone()

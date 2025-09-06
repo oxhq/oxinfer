@@ -6,10 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"time"
 
@@ -467,13 +465,13 @@ func (v *TripleRunValidator) StressTestValidation(ctx context.Context, manifest 
 // Helper functions
 
 func loadJSONFile(path string) ([]byte, error) {
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file %s: %w", path, err)
 	}
 
 	// Validate it's proper JSON
-	var temp interface{}
+	var temp any
 	if err := json.Unmarshal(data, &temp); err != nil {
 		return nil, fmt.Errorf("file %s contains invalid JSON: %w", path, err)
 	}
@@ -483,7 +481,7 @@ func loadJSONFile(path string) ([]byte, error) {
 
 func writeTempManifest(manifest *manifest.Manifest) (string, func(), error) {
 	// Create temporary file
-	tmpFile, err := ioutil.TempFile("", "oxinfer-manifest-*.json")
+	tmpFile, err := os.CreateTemp("", "oxinfer-manifest-*.json")
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to create temp file: %w", err)
 	}
@@ -524,30 +522,6 @@ func parseDeltaFromJSON(data []byte) (*emitter.Delta, error) {
 	}
 
 	return &delta, nil
-}
-
-// buildCLIBinary builds the CLI binary and returns its path.
-func buildCLIBinary() (string, func(), error) {
-	// Determine build command and target
-	binaryName := "oxinfer"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-
-	binaryPath := filepath.Join(".", "bin", binaryName)
-
-	// Build command
-	cmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/oxinfer")
-	if err := cmd.Run(); err != nil {
-		return "", nil, fmt.Errorf("failed to build CLI binary: %w", err)
-	}
-
-	cleanup := func() {
-		// Remove binary after use
-		exec.Command("rm", "-f", binaryPath).Run()
-	}
-
-	return binaryPath, cleanup, nil
 }
 
 // DetectNonDeterministicElements analyzes delta structures to identify

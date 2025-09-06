@@ -14,9 +14,8 @@ import (
 // DefaultPHPConstructExtractor implements PHPConstructExtractor interface.
 // Combines QueryEngine results into structured representations for pattern analysis.
 type DefaultPHPConstructExtractor struct {
-	queryEngine QueryEngine      // Query engine for construct extraction
-	config      *ParserConfig    // Configuration for extraction behavior
-	mu          sync.RWMutex     // Thread safety for concurrent access
+	queryEngine QueryEngine   // Query engine for construct extraction
+	config      *ParserConfig // Configuration for extraction behavior
 }
 
 // NewPHPConstructExtractor creates a new PHP construct extractor.
@@ -46,7 +45,7 @@ func (e *DefaultPHPConstructExtractor) ExtractAllConstructs(tree *SyntaxTree) (*
 	// Extract all construct types concurrently for better performance
 	type extractResult struct {
 		name string
-		data interface{}
+		data any
 		err  error
 	}
 
@@ -112,10 +111,9 @@ func (e *DefaultPHPConstructExtractor) ExtractAllConstructs(tree *SyntaxTree) (*
 	}()
 
 	// Collect results
-	var errors []error
 	for result := range results {
 		if result.err != nil {
-			errors = append(errors, result.err)
+			// Log error but continue processing other constructs
 			continue
 		}
 
@@ -231,9 +229,8 @@ func (e *DefaultPHPConstructExtractor) ExtractUseStatements(tree *SyntaxTree) ([
 
 // extractUseStatements internal implementation for use statement extraction.
 func (e *DefaultPHPConstructExtractor) extractUseStatements(tree *SyntaxTree) ([]PHPUseStatement, error) {
-	// This would use the use query from queries.go
-	// For now, return empty slice as a placeholder
-	return []PHPUseStatement{}, nil
+	// Use the query engine to extract use statements
+	return e.queryEngine.ExtractUseStatements(tree)
 }
 
 // resolveFullyQualifiedNames updates construct names with namespace context.

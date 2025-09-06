@@ -89,7 +89,7 @@ func TestJSONEmitter_MarshalDeterministic(t *testing.T) {
 			wantErr: false,
 			validate: func(t *testing.T, data []byte) {
 				// Should be valid JSON
-				var result map[string]interface{}
+				var result map[string]any
 				if err := json.Unmarshal(data, &result); err != nil {
 					t.Errorf("invalid JSON: %v", err)
 				}
@@ -130,7 +130,7 @@ func TestJSONEmitter_MarshalDeterministic(t *testing.T) {
 						},
 						ScopesUsed: []ScopeUsed{
 							{On: "ZModel", Name: "zScope", Args: []string{"z", "a"}}, // Test arg sorting
-							{On: "AModel", Name: "aScope"}, // Should be sorted first
+							{On: "AModel", Name: "aScope"},                           // Should be sorted first
 						},
 					},
 					{
@@ -143,7 +143,7 @@ func TestJSONEmitter_MarshalDeterministic(t *testing.T) {
 						FQCN: "ZModel", // Should be sorted last
 						WithPivot: []PivotInfo{
 							{Relation: "zRelation", Columns: []string{"z_col", "a_col"}}, // Test column sorting
-							{Relation: "aRelation", Columns: []string{"col"}}, // Should be sorted first
+							{Relation: "aRelation", Columns: []string{"col"}},            // Should be sorted first
 						},
 						Attributes: []Attribute{
 							{Name: "z_attr", Via: "Attribute::make"},
@@ -170,32 +170,32 @@ func TestJSONEmitter_MarshalDeterministic(t *testing.T) {
 			wantErr: false,
 			validate: func(t *testing.T, data []byte) {
 				// Parse JSON to verify structure
-				var result map[string]interface{}
+				var result map[string]any
 				if err := json.Unmarshal(data, &result); err != nil {
 					t.Errorf("invalid JSON: %v", err)
 					return
 				}
 
 				// Verify controllers are sorted
-				controllers, ok := result["controllers"].([]interface{})
+				controllers, ok := result["controllers"].([]any)
 				if !ok || len(controllers) != 2 {
 					t.Error("expected 2 controllers")
 					return
 				}
 
-				firstController := controllers[0].(map[string]interface{})
+				firstController := controllers[0].(map[string]any)
 				if firstController["fqcn"] != "AController" {
 					t.Errorf("first controller should be AController, got %v", firstController["fqcn"])
 				}
 
-				secondController := controllers[1].(map[string]interface{})
+				secondController := controllers[1].(map[string]any)
 				if secondController["fqcn"] != "ZController" {
 					t.Errorf("second controller should be ZController, got %v", secondController["fqcn"])
 				}
 
 				// Verify content types are sorted
-				if request, ok := secondController["request"].(map[string]interface{}); ok {
-					if contentTypes, ok := request["contentTypes"].([]interface{}); ok {
+				if request, ok := secondController["request"].(map[string]any); ok {
+					if contentTypes, ok := request["contentTypes"].([]any); ok {
 						if len(contentTypes) >= 2 {
 							first := contentTypes[0].(string)
 							second := contentTypes[1].(string)
@@ -207,13 +207,13 @@ func TestJSONEmitter_MarshalDeterministic(t *testing.T) {
 				}
 
 				// Verify models are sorted
-				models, ok := result["models"].([]interface{})
+				models, ok := result["models"].([]any)
 				if !ok || len(models) != 2 {
 					t.Error("expected 2 models")
 					return
 				}
 
-				firstModel := models[0].(map[string]interface{})
+				firstModel := models[0].(map[string]any)
 				if firstModel["fqcn"] != "AModel" {
 					t.Errorf("first model should be AModel, got %v", firstModel["fqcn"])
 				}
@@ -224,7 +224,7 @@ func TestJSONEmitter_MarshalDeterministic(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			data, err := emitter.MarshalDeterministic(tt.delta)
-			
+
 			if tt.wantErr {
 				if err == nil {
 					t.Error("expected error, got nil")
@@ -353,14 +353,14 @@ func TestJSONEmitter_WriteJSON(t *testing.T) {
 			}(),
 			wantErr: false,
 			verify: func(t *testing.T, data []byte) {
-				var result map[string]interface{}
+				var result map[string]any
 				if err := json.Unmarshal(data, &result); err != nil {
 					t.Errorf("invalid JSON: %v", err)
 				}
 
 				// Verify required fields from schema
 				if meta, ok := result["meta"]; ok {
-					if metaObj, ok := meta.(map[string]interface{}); ok {
+					if metaObj, ok := meta.(map[string]any); ok {
 						if _, ok := metaObj["partial"]; !ok {
 							t.Error("missing meta.partial field")
 						}
@@ -379,7 +379,7 @@ func TestJSONEmitter_WriteJSON(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			err := emitter.WriteJSON(&buf, tt.delta)
-			
+
 			if tt.wantErr {
 				if err == nil {
 					t.Error("expected error, got nil")
@@ -420,7 +420,7 @@ func TestJSONEmitter_SchemaCompliance(t *testing.T) {
 	}
 
 	// Parse and verify structure matches expected schema
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(data, &result); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
@@ -434,7 +434,7 @@ func TestJSONEmitter_SchemaCompliance(t *testing.T) {
 	}
 
 	// Verify meta structure
-	if meta, ok := result["meta"].(map[string]interface{}); ok {
+	if meta, ok := result["meta"].(map[string]any); ok {
 		if _, ok := meta["partial"]; !ok {
 			t.Error("missing meta.partial")
 		}
@@ -442,7 +442,7 @@ func TestJSONEmitter_SchemaCompliance(t *testing.T) {
 			t.Error("missing meta.stats")
 		}
 
-		if stats, ok := meta["stats"].(map[string]interface{}); ok {
+		if stats, ok := meta["stats"].(map[string]any); ok {
 			statsFields := []string{"filesParsed", "skipped", "durationMs"}
 			for _, field := range statsFields {
 				if _, ok := stats[field]; !ok {
@@ -457,7 +457,7 @@ func TestJSONEmitter_SchemaCompliance(t *testing.T) {
 	// Verify arrays are present (even if empty)
 	arrayFields := []string{"controllers", "models", "polymorphic", "broadcast"}
 	for _, field := range arrayFields {
-		if arr, ok := result[field].([]interface{}); !ok {
+		if arr, ok := result[field].([]any); !ok {
 			t.Errorf("%s is not an array", field)
 		} else if arr == nil {
 			t.Errorf("%s array is nil", field)
@@ -495,31 +495,31 @@ func TestJSONEmitter_SortingBehavior(t *testing.T) {
 	}
 
 	// Parse result and check sorting
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(data, &result); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 
-	controllers := result["controllers"].([]interface{})
+	controllers := result["controllers"].([]any)
 	if len(controllers) != 2 {
 		t.Fatal("expected 2 controllers")
 	}
 
 	// First should be A\Controller
-	first := controllers[0].(map[string]interface{})
+	first := controllers[0].(map[string]any)
 	if first["fqcn"] != "A\\Controller" {
 		t.Errorf("first controller FQCN = %v, want A\\Controller", first["fqcn"])
 	}
 
 	// Second should be Z\Controller
-	second := controllers[1].(map[string]interface{})
+	second := controllers[1].(map[string]any)
 	if second["fqcn"] != "Z\\Controller" {
 		t.Errorf("second controller FQCN = %v, want Z\\Controller", second["fqcn"])
 	}
 
 	// Check content types are sorted
-	if request, ok := second["request"].(map[string]interface{}); ok {
-		if contentTypes, ok := request["contentTypes"].([]interface{}); ok && len(contentTypes) >= 2 {
+	if request, ok := second["request"].(map[string]any); ok {
+		if contentTypes, ok := request["contentTypes"].([]any); ok && len(contentTypes) >= 2 {
 			first := contentTypes[0].(string)
 			second := contentTypes[1].(string)
 			if first != "application/json" || second != "multipart/form-data" {
@@ -562,7 +562,7 @@ func TestJSONEmitter_EmptyCollections(t *testing.T) {
 	}
 
 	// Polymorphic might be null since it's nil - verify it doesn't break parsing
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(data, &result); err != nil {
 		t.Errorf("failed to parse JSON with nil slice: %v", err)
 	}

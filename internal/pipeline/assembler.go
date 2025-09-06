@@ -13,13 +13,25 @@ import (
 	"github.com/garaekz/oxinfer/internal/matchers"
 )
 
+// AssemblerStats tracks statistics during assembly process for debugging and optimization.
+type AssemblerStats struct {
+	SkippedControllers   int // Controllers skipped due to unresolvable keys
+	SkippedModels       int // Models skipped due to unresolvable FQCNs  
+	SkippedPatterns     int // Patterns skipped due to missing context
+	UnresolvableMatches int // Total matches that couldn't be resolved
+}
+
 // DefaultDeltaAssembler implements the DeltaAssembler interface.
 // It converts pipeline results from all phases into the final delta.json format.
-type DefaultDeltaAssembler struct{}
+type DefaultDeltaAssembler struct {
+	stats AssemblerStats // Track assembly statistics
+}
 
 // NewDeltaAssembler creates a new delta assembler instance.
 func NewDeltaAssembler() *DefaultDeltaAssembler {
-	return &DefaultDeltaAssembler{}
+	return &DefaultDeltaAssembler{
+		stats: AssemblerStats{}, // Initialize stats
+	}
 }
 
 // AssembleDelta creates the final delta.json from all pipeline results.
@@ -162,55 +174,59 @@ func (a *DefaultDeltaAssembler) AssembleModels(parseResults *ParseResults, match
 			FQCN: md.FQCN,
 		}
 
-    // Add pivot information (aggregated deterministically per relation)
-    if len(md.Pivots) > 0 {
-        type agg struct {
-            columns   map[string]struct{}
-            alias     *string
-            timestamps bool
-        }
-        aggs := make(map[string]*agg)
-        for _, p := range md.Pivots {
-            a := aggs[p.Relation]
-            if a == nil {
-                a = &agg{columns: make(map[string]struct{})}
-                aggs[p.Relation] = a
-            }
-            // accumulate columns
-            for _, c := range p.Fields {
-                a.columns[c] = struct{}{}
-            }
-            // choose deterministic alias: lexicographically smallest non-empty
-            if p.Alias != "" {
-                if a.alias == nil || p.Alias < *a.alias {
-                    s := p.Alias
-                    a.alias = &s
-                }
-            }
-            // timestamps true if any occurrence has it
-            if p.Timestamps {
-                a.timestamps = true
-            }
-        }
-        // Build stable slice
-        rels := make([]string, 0, len(aggs))
-        for rel := range aggs { rels = append(rels, rel) }
-        sort.Strings(rels)
-        pivots := make([]emitter.PivotInfo, 0, len(rels))
-        for _, rel := range rels {
-            a := aggs[rel]
-            // sort columns
-            cols := make([]string, 0, len(a.columns))
-            for c := range a.columns { cols = append(cols, c) }
-            sort.Strings(cols)
-            pi := emitter.PivotInfo{ Relation: rel, Columns: cols }
-            // Intentionally omit alias to ensure deterministic aggregation across runs
-            ts := a.timestamps
-            pi.Timestamps = &ts
-            pivots = append(pivots, pi)
-        }
-        model.WithPivot = pivots
-    }
+		// Add pivot information (aggregated deterministically per relation)
+		if len(md.Pivots) > 0 {
+			type agg struct {
+				columns    map[string]struct{}
+				alias      *string
+				timestamps bool
+			}
+			aggs := make(map[string]*agg)
+			for _, p := range md.Pivots {
+				a := aggs[p.Relation]
+				if a == nil {
+					a = &agg{columns: make(map[string]struct{})}
+					aggs[p.Relation] = a
+				}
+				// accumulate columns
+				for _, c := range p.Fields {
+					a.columns[c] = struct{}{}
+				}
+				// choose deterministic alias: lexicographically smallest non-empty
+				if p.Alias != "" {
+					if a.alias == nil || p.Alias < *a.alias {
+						s := p.Alias
+						a.alias = &s
+					}
+				}
+				// timestamps true if any occurrence has it
+				if p.Timestamps {
+					a.timestamps = true
+				}
+			}
+			// Build stable slice
+			rels := make([]string, 0, len(aggs))
+			for rel := range aggs {
+				rels = append(rels, rel)
+			}
+			sort.Strings(rels)
+			pivots := make([]emitter.PivotInfo, 0, len(rels))
+			for _, rel := range rels {
+				a := aggs[rel]
+				// sort columns
+				cols := make([]string, 0, len(a.columns))
+				for c := range a.columns {
+					cols = append(cols, c)
+				}
+				sort.Strings(cols)
+				pi := emitter.PivotInfo{Relation: rel, Columns: cols}
+				// Intentionally omit alias to ensure deterministic aggregation across runs
+				ts := a.timestamps
+				pi.Timestamps = &ts
+				pivots = append(pivots, pi)
+			}
+			model.WithPivot = pivots
+		}
 
 		// Add attributes
 		if len(md.Attributes) > 0 {
@@ -227,46 +243,7 @@ func (a *DefaultDeltaAssembler) AssembleModels(parseResults *ParseResults, match
 			model.Attributes = attributes
 		}
 
-		// Add polymorphic relationships
-		if len(md.Polymorphic) > 0 {
-			polymorphicRels := make([]emitter.PolymorphicRelation, 0, len(md.Polymorphic))
-			for _, poly := range md.Polymorphic {
-				rel := emitter.PolymorphicRelation{
-					Relation:      poly.Relation,
-					Type:          poly.Type,
-					MorphType:     poly.MorphType,
-					MorphId:       poly.MorphId,
-					RelatedModels: poly.RelatedModels,
-				}
-
-				if poly.Model != "" {
-					rel.Model = &poly.Model
-				}
-
-				if poly.DepthTruncated {
-					rel.DepthTruncated = &poly.DepthTruncated
-				}
-
-				if poly.MaxDepth > 0 {
-					rel.MaxDepth = &poly.MaxDepth
-				}
-
-				if poly.Discriminator != nil {
-					rel.Discriminator = &emitter.PolymorphicDiscriminator{
-						PropertyName: poly.Discriminator.PropertyName,
-						Mapping:      poly.Discriminator.Mapping,
-						Source:       poly.Discriminator.Source,
-						IsExplicit:   poly.Discriminator.IsExplicit,
-					}
-					if poly.Discriminator.DefaultType != "" {
-						rel.Discriminator.DefaultType = &poly.Discriminator.DefaultType
-					}
-				}
-
-				polymorphicRels = append(polymorphicRels, rel)
-			}
-			// Polymorphic relationships moved to top-level delta structure
-		}
+		// Polymorphic relationships are handled by AssemblePolymorphic method
 
 		models = append(models, model)
 	}
@@ -289,8 +266,10 @@ func (a *DefaultDeltaAssembler) AssemblePolymorphic(matchResults *MatchResults) 
 	polymorphicGroups := make(map[string][]*matchers.PolymorphicMatch)
 	for _, match := range matchResults.PolymorphicMatches {
 		// Extract parent from relation context (simplified)
-		parent := a.extractParentFromContext(match)
-		polymorphicGroups[parent] = append(polymorphicGroups[parent], match)
+		if parent, ok := a.extractParentFromContext(match); ok {
+			polymorphicGroups[parent] = append(polymorphicGroups[parent], match)
+		}
+		// Skip polymorphic matches that cannot be resolved to valid parents
 	}
 
 	var polymorphic []emitter.Polymorphic
@@ -373,6 +352,17 @@ func (a *DefaultDeltaAssembler) AssembleMetadata(results *PipelineResults, stats
 		DurationMs:  int64(stats.TotalDuration.Milliseconds()),
 	}
 
+	// Add assembler stats if they contain meaningful data
+	if a.stats.SkippedControllers > 0 || a.stats.SkippedModels > 0 || 
+		a.stats.SkippedPatterns > 0 || a.stats.UnresolvableMatches > 0 {
+		metaStats.AssemblerStats = &emitter.AssemblerStats{
+			SkippedControllers:   a.stats.SkippedControllers,
+			SkippedModels:        a.stats.SkippedModels,
+			SkippedPatterns:      a.stats.SkippedPatterns,
+			UnresolvableMatches:  a.stats.UnresolvableMatches,
+		}
+	}
+
 	meta := emitter.MetaInfo{
 		Partial: results.Partial,
 		Stats:   metaStats,
@@ -419,18 +409,26 @@ func (a *DefaultDeltaAssembler) groupByControllerMethod(parseResults *ParseResul
 
 	// Add HTTP status matches by extracting method from pattern
 	for _, match := range matchResults.HTTPStatusMatches {
-		key := a.extractMethodKeyFromPattern(match.Pattern)
-		if cm, exists := methodMap[key]; exists {
-			cm.HTTPStatus = match
-		} else {
-			// Create new controller method if it doesn't exist
-			cm := &ControllerMethod{
-				FQCN:       a.extractControllerFromKey(key),
-				Method:     a.extractMethodFromKey(key),
-				HTTPStatus: match,
+		if key, ok := a.extractMethodKeyFromPattern(match.Pattern); ok {
+			if cm, exists := methodMap[key]; exists {
+				cm.HTTPStatus = match
+			} else {
+				// Create new controller method if it doesn't exist
+				if controller, controllerOk := a.extractControllerFromKey(key); controllerOk {
+					if method, methodOk := a.extractMethodFromKey(key); methodOk {
+						cm := &ControllerMethod{
+							FQCN:       controller,
+							Method:     method,
+							HTTPStatus: match,
+						}
+						methodMap[key] = cm
+					}
+					// Skip if method cannot be resolved from key
+				}
+				// Skip if controller cannot be resolved
 			}
-			methodMap[key] = cm
 		}
+		// Skip matches that cannot be resolved to valid method keys
 	}
 
 	// Add request info from inference with sorted keys for determinism
@@ -440,7 +438,7 @@ func (a *DefaultDeltaAssembler) groupByControllerMethod(parseResults *ParseResul
 			inferenceKeys = append(inferenceKeys, methodKey)
 		}
 		sort.Strings(inferenceKeys)
-		
+
 		for _, methodKey := range inferenceKeys {
 			requestInfo := inferenceResults.RequestShapes[methodKey]
 			if cm, exists := methodMap[methodKey]; exists {
@@ -451,24 +449,30 @@ func (a *DefaultDeltaAssembler) groupByControllerMethod(parseResults *ParseResul
 
 	// Add other pattern matches with proper key extraction
 	for _, match := range matchResults.ResourceMatches {
-		key := a.extractMethodKeyFromPattern(match.Pattern)
-		if cm, exists := methodMap[key]; exists {
-			cm.Resources = append(cm.Resources, match)
+		if key, ok := a.extractMethodKeyFromPattern(match.Pattern); ok {
+			if cm, exists := methodMap[key]; exists {
+				cm.Resources = append(cm.Resources, match)
+			}
 		}
+		// Skip resource matches that cannot be resolved to valid method keys
 	}
 
 	for _, match := range matchResults.ScopeMatches {
-		key := a.extractMethodKeyFromScopeMatch(match.Context, match.Pattern)
-		if cm, exists := methodMap[key]; exists {
-			cm.Scopes = append(cm.Scopes, match)
+		if key, ok := a.extractMethodKeyFromScopeMatch(match.Context, match.Pattern); ok {
+			if cm, exists := methodMap[key]; exists {
+				cm.Scopes = append(cm.Scopes, match)
+			}
 		}
+		// Skip scope matches that cannot be resolved to valid method keys
 	}
 
 	for _, match := range matchResults.PolymorphicMatches {
-		key := a.extractMethodKeyFromPolymorphicMatch(match.Context, match.Pattern)
-		if cm, exists := methodMap[key]; exists {
-			cm.Polymorphic = append(cm.Polymorphic, match)
+		if key, ok := a.extractMethodKeyFromPolymorphicMatch(match.Context, match.Pattern); ok {
+			if cm, exists := methodMap[key]; exists {
+				cm.Polymorphic = append(cm.Polymorphic, match)
+			}
 		}
+		// Skip polymorphic matches that cannot be resolved to valid method keys
 	}
 
 	// Convert map to slice
@@ -515,44 +519,50 @@ func (a *DefaultDeltaAssembler) groupByModelClass(parseResults *ParseResults, ma
 
 	// Add pivot matches with proper model extraction
 	for _, match := range matchResults.PivotMatches {
-		fqcn := a.extractModelFromPatternAndMethod(match.Pattern, match.Method)
-		if md, exists := modelMap[fqcn]; exists {
-			md.Pivots = append(md.Pivots, match)
-		} else {
-			md := &ModelData{
-				FQCN:   fqcn,
-				Pivots: []*matchers.PivotMatch{match},
+		if fqcn, ok := a.extractModelFromPatternAndMethod(match.Pattern, match.Method); ok {
+			if md, exists := modelMap[fqcn]; exists {
+				md.Pivots = append(md.Pivots, match)
+			} else {
+				md := &ModelData{
+					FQCN:   fqcn,
+					Pivots: []*matchers.PivotMatch{match},
+				}
+				modelMap[fqcn] = md
 			}
-			modelMap[fqcn] = md
 		}
+		// Skip pivot matches that cannot be resolved to valid model FQCNs
 	}
 
 	// Add attribute matches with proper model extraction
 	for _, match := range matchResults.AttributeMatches {
-		fqcn := a.extractModelFromPatternAndMethod(match.Pattern, match.Method)
-		if md, exists := modelMap[fqcn]; exists {
-			md.Attributes = append(md.Attributes, match)
-		} else {
-			md := &ModelData{
-				FQCN:       fqcn,
-				Attributes: []*matchers.AttributeMatch{match},
+		if fqcn, ok := a.extractModelFromPatternAndMethod(match.Pattern, match.Method); ok {
+			if md, exists := modelMap[fqcn]; exists {
+				md.Attributes = append(md.Attributes, match)
+			} else {
+				md := &ModelData{
+					FQCN:       fqcn,
+					Attributes: []*matchers.AttributeMatch{match},
+				}
+				modelMap[fqcn] = md
 			}
-			modelMap[fqcn] = md
 		}
+		// Skip attribute matches that cannot be resolved to valid model FQCNs
 	}
 
 	// Add polymorphic matches with proper model extraction
 	for _, match := range matchResults.PolymorphicMatches {
-		fqcn := a.extractModelFromPolymorphicMatch(match.Context, match.Pattern)
-		if md, exists := modelMap[fqcn]; exists {
-			md.Polymorphic = append(md.Polymorphic, match)
-		} else {
-			md := &ModelData{
-				FQCN:        fqcn,
-				Polymorphic: []*matchers.PolymorphicMatch{match},
+		if fqcn, ok := a.extractModelFromPolymorphicMatch(match.Context, match.Pattern); ok {
+			if md, exists := modelMap[fqcn]; exists {
+				md.Polymorphic = append(md.Polymorphic, match)
+			} else {
+				md := &ModelData{
+					FQCN:        fqcn,
+					Polymorphic: []*matchers.PolymorphicMatch{match},
+				}
+				modelMap[fqcn] = md
 			}
-			modelMap[fqcn] = md
 		}
+		// Skip polymorphic matches that cannot be resolved to valid model FQCNs
 	}
 
 	// Convert map to slice
@@ -565,7 +575,7 @@ func (a *DefaultDeltaAssembler) groupByModelClass(parseResults *ParseResults, ma
 	sort.Slice(models, func(i, j int) bool {
 		return models[i].FQCN < models[j].FQCN
 	})
-	
+
 	// Sort internal arrays within each model for determinism
 	for _, md := range models {
 		// Sort pivot matches
@@ -580,7 +590,7 @@ func (a *DefaultDeltaAssembler) groupByModelClass(parseResults *ParseResults, ma
 				return md.Pivots[i].Method < md.Pivots[j].Method
 			})
 		}
-		
+
 		// Sort attribute matches
 		if len(md.Attributes) > 0 {
 			sort.Slice(md.Attributes, func(i, j int) bool {
@@ -590,7 +600,7 @@ func (a *DefaultDeltaAssembler) groupByModelClass(parseResults *ParseResults, ma
 				return md.Attributes[i].Pattern < md.Attributes[j].Pattern
 			})
 		}
-		
+
 		// Sort polymorphic matches
 		if len(md.Polymorphic) > 0 {
 			sort.Slice(md.Polymorphic, func(i, j int) bool {
@@ -649,106 +659,130 @@ func (a *DefaultDeltaAssembler) convertPropertyToEmitter(prop *infer.PropertyInf
 }
 
 // extractParentFromContext extracts parent class from polymorphic match context.
-func (a *DefaultDeltaAssembler) extractParentFromContext(match *matchers.PolymorphicMatch) string {
+// Returns empty string and false if cannot resolve to a valid parent.
+func (a *DefaultDeltaAssembler) extractParentFromContext(match *matchers.PolymorphicMatch) (string, bool) {
+	if match == nil {
+		a.stats.SkippedModels++
+		return "", false
+	}
+	
 	if match.Context != "" {
 		// Extract parent from context string (simplified)
 		parts := strings.Split(match.Context, "::")
-		if len(parts) > 0 {
-			return parts[0]
+		if len(parts) > 0 && parts[0] != "" {
+			return parts[0], true
 		}
 	}
-	return "default"
+	
+	// Could not resolve parent from context
+	a.stats.SkippedModels++
+	return "", false
 }
 
-// extractMethodKeyFromMatch extracts a method key from match context and file.
-func (a *DefaultDeltaAssembler) extractMethodKeyFromMatch(context, file string) string {
-	// Try to extract from context first
-	if context != "" && strings.Contains(context, "::") {
-		return context
-	}
-	
-	// Fallback to file-based extraction
-	if file != "" {
-		parts := strings.Split(file, "/")
-		if len(parts) > 0 {
-			filename := parts[len(parts)-1]
-			controllerName := strings.TrimSuffix(filename, ".php")
-			// Use a default method if no specific method context
-			return controllerName + "::index"
-		}
-	}
-	
-	return "DefaultController::index"
-}
 
 // extractControllerFromKey extracts controller FQCN from method key.
-func (a *DefaultDeltaAssembler) extractControllerFromKey(key string) string {
-	parts := strings.Split(key, "::")
-	if len(parts) > 0 {
-		return parts[0]
+// Returns empty string and false if the key cannot be resolved to a valid controller.
+func (a *DefaultDeltaAssembler) extractControllerFromKey(key string) (string, bool) {
+	if key == "" {
+		return "", false
 	}
-	return "DefaultController"
+	
+	parts := strings.Split(key, "::")
+	if len(parts) > 0 && parts[0] != "" {
+		return parts[0], true
+	}
+	
+	a.stats.SkippedControllers++
+	return "", false
 }
 
 // extractMethodFromKey extracts method name from method key.
-func (a *DefaultDeltaAssembler) extractMethodFromKey(key string) string {
-	parts := strings.Split(key, "::")
-	if len(parts) > 1 {
-		return parts[1]
+// Returns empty string and false if cannot resolve to a valid method name.
+func (a *DefaultDeltaAssembler) extractMethodFromKey(key string) (string, bool) {
+	if key == "" {
+		a.stats.SkippedControllers++
+		return "", false
 	}
-	return "index"
+	
+	parts := strings.Split(key, "::")
+	if len(parts) > 1 && parts[1] != "" {
+		return parts[1], true
+	}
+	
+	// Could not resolve method from key
+	a.stats.SkippedControllers++
+	return "", false
 }
 
 // extractMethodKeyFromPattern extracts a method key from a pattern string.
-func (a *DefaultDeltaAssembler) extractMethodKeyFromPattern(pattern string) string {
-	// For now, use a default key - in a real implementation you'd parse the pattern
-	return "DefaultController::index"
+// Returns empty string and false if the pattern cannot be resolved to a valid method key.
+func (a *DefaultDeltaAssembler) extractMethodKeyFromPattern(pattern string) (string, bool) {
+	if pattern == "" {
+		a.stats.SkippedPatterns++
+		return "", false
+	}
+	
+	// For now, we cannot resolve method keys from patterns without additional context
+	// This is a placeholder that should be implemented based on actual pattern structure
+	// Real implementation would parse the pattern to extract Controller::method
+	
+	a.stats.UnresolvableMatches++
+	return "", false
 }
 
 // extractMethodKeyFromScopeMatch extracts a method key from scope match context and pattern.
-func (a *DefaultDeltaAssembler) extractMethodKeyFromScopeMatch(context, pattern string) string {
+// Returns empty string and false if cannot resolve to a valid method key.
+func (a *DefaultDeltaAssembler) extractMethodKeyFromScopeMatch(context, pattern string) (string, bool) {
 	if context != "" && strings.Contains(context, "::") {
-		return context
+		return context, true
 	}
+	
+	// Try to extract from pattern, but this will likely fail
 	return a.extractMethodKeyFromPattern(pattern)
 }
 
 // extractMethodKeyFromPolymorphicMatch extracts a method key from polymorphic match context and pattern.
-func (a *DefaultDeltaAssembler) extractMethodKeyFromPolymorphicMatch(context, pattern string) string {
+// Returns empty string and false if cannot resolve to a valid method key.
+func (a *DefaultDeltaAssembler) extractMethodKeyFromPolymorphicMatch(context, pattern string) (string, bool) {
 	if context != "" && strings.Contains(context, "::") {
-		return context
+		return context, true
 	}
 	return a.extractMethodKeyFromPattern(pattern)
 }
 
 // extractModelFromPatternAndMethod extracts a model FQCN from pattern and method.
-func (a *DefaultDeltaAssembler) extractModelFromPatternAndMethod(pattern, method string) string {
+// Returns empty string and false if cannot resolve to a valid model FQCN.
+func (a *DefaultDeltaAssembler) extractModelFromPatternAndMethod(pattern, method string) (string, bool) {
 	// Try to extract from method first if it contains class info
 	if method != "" && strings.Contains(method, "\\") {
-		return method
+		return method, true
 	}
 	
-	// Fallback to pattern analysis - in a real implementation you'd parse the pattern
-	return "App\\Models\\DefaultModel"
+	// Cannot resolve model from pattern alone without additional context
+	// Real implementation would need access to parsed models from parse results
+	
+	a.stats.SkippedModels++
+	return "", false
 }
 
 // extractModelFromPolymorphicMatch extracts a model FQCN from polymorphic match context and pattern.
-func (a *DefaultDeltaAssembler) extractModelFromPolymorphicMatch(context, pattern string) string {
+// Returns empty string and false if cannot resolve to a valid model FQCN.
+func (a *DefaultDeltaAssembler) extractModelFromPolymorphicMatch(context, pattern string) (string, bool) {
 	// Try to extract from context first
 	if context != "" {
 		// Look for model class name in context
 		if strings.Contains(context, "\\Models\\") {
-			return context
+			return context, true
 		}
 		if strings.Contains(context, "::") {
 			parts := strings.Split(context, "::")
-			if len(parts) > 0 {
-				return parts[0]
+			if len(parts) > 0 && parts[0] != "" {
+				return parts[0], true
 			}
 		}
 	}
-	
-	// Fallback to pattern-based extraction
+
+	// Try pattern-based extraction, but this will likely fail
 	return a.extractModelFromPatternAndMethod(pattern, "")
 }
 
@@ -778,7 +812,24 @@ func (a *DefaultDeltaAssembler) calculatePipelineStats(results *PipelineResults)
 		stats.InferenceDuration = results.InferenceResults.InferenceDuration
 	}
 
-	stats.TotalDuration = results.ProcessingTime
+	// Stats wiring: fallback duration calculation if ProcessingTime is zero
+	if results.ProcessingTime == 0 {
+		// Compute fallback as sum of available stage durations for non-trivial runs
+		var fallbackDuration time.Duration
+		if results.IndexResult != nil && results.IndexResult.DurationMs > 0 {
+			fallbackDuration += time.Duration(results.IndexResult.DurationMs) * time.Millisecond
+		}
+		if results.InferenceResults != nil {
+			fallbackDuration += results.InferenceResults.InferenceDuration
+		}
+		// If no stage durations available, compute from start/end times
+		if fallbackDuration == 0 && !results.EndTime.IsZero() && !results.StartTime.IsZero() {
+			fallbackDuration = results.EndTime.Sub(results.StartTime)
+		}
+		stats.TotalDuration = fallbackDuration
+	} else {
+		stats.TotalDuration = results.ProcessingTime
+	}
 
 	return stats
 }

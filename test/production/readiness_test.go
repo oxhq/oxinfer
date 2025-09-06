@@ -37,9 +37,9 @@ type MVPValidation struct {
 	BroadcastMatching    bool
 
 	// T11-T12: Inference + Emission
-	ShapeInference     bool
-	DeltaEmission      bool
-	StatsCollection    bool
+	ShapeInference  bool
+	DeltaEmission   bool
+	StatsCollection bool
 
 	// T13: Production Quality
 	PerformanceTargets  bool
@@ -47,7 +47,7 @@ type MVPValidation struct {
 	ErrorHandling       bool
 
 	// Overall results
-	TotalComponents int
+	TotalComponents   int
 	PassingComponents int
 	FailureReasons    []string
 }
@@ -111,7 +111,7 @@ func TestMVPProductionReadiness(t *testing.T) {
 
 	// Fail if critical components are not working
 	if validation.PassingComponents < 8 { // Minimum viable components
-		t.Errorf("MVP not ready: only %d/%d components working", 
+		t.Errorf("MVP not ready: only %d/%d components working",
 			validation.PassingComponents, validation.TotalComponents)
 	}
 }
@@ -152,7 +152,7 @@ func testManifestValidation(t *testing.T, cliPath string) bool {
 	// Create a valid manifest
 	tempDir := t.TempDir()
 	manifestPath := filepath.Join(tempDir, "manifest.json")
-	
+
 	validManifest := fmt.Sprintf(`{
 		"project": {
 			"root": "%s",
@@ -205,10 +205,11 @@ func testManifestValidation(t *testing.T, cliPath string) bool {
 // testPSR4Resolution tests real PSR-4 resolution functionality.
 func testPSR4Resolution(t *testing.T, ctx context.Context) bool {
 	t.Helper()
+	_ = ctx
 
 	// Create a test project with PSR-4 structure
 	tempDir := t.TempDir()
-	
+
 	// Create composer.json with PSR-4 mapping
 	composerContent := `{
 		"name": "test/project",
@@ -229,7 +230,7 @@ func testPSR4Resolution(t *testing.T, ctx context.Context) bool {
 	// Test PSR-4 resolver directly
 	// Note: This tests the actual implementation, not mocks
 	// If it fails, PSR-4 resolution is not working
-	
+
 	t.Logf("✓ PSR-4 resolution structure testable (implementation may be incomplete)")
 	return true // Mark as passing if structure exists
 }
@@ -237,6 +238,7 @@ func testPSR4Resolution(t *testing.T, ctx context.Context) bool {
 // testFileIndexing tests real file indexing functionality.
 func testFileIndexing(t *testing.T, ctx context.Context) bool {
 	t.Helper()
+	_ = ctx
 
 	// Create test files
 	tempDir := t.TempDir()
@@ -261,7 +263,7 @@ func testFileIndexing(t *testing.T, ctx context.Context) bool {
 			return false
 		}
 
-		content := fmt.Sprintf("<?php\nnamespace App;\nclass %s {}\n", 
+		content := fmt.Sprintf("<?php\nnamespace App;\nclass %s {}\n",
 			strings.TrimSuffix(filepath.Base(file), ".php"))
 		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
 			t.Logf("Failed to create file %s: %v", file, err)
@@ -271,7 +273,7 @@ func testFileIndexing(t *testing.T, ctx context.Context) bool {
 
 	// Test file indexing by checking if files can be discovered
 	// This is a real functionality test
-	
+
 	t.Logf("✓ File indexing testable (created %d test files)", len(testFiles))
 	return true
 }
@@ -279,10 +281,11 @@ func testFileIndexing(t *testing.T, ctx context.Context) bool {
 // testCacheInvalidation tests cache invalidation functionality.
 func testCacheInvalidation(t *testing.T, ctx context.Context) bool {
 	t.Helper()
+	_ = ctx
 
 	// Cache invalidation is complex to test without full implementation
 	// For now, verify that cache interfaces exist and are callable
-	
+
 	t.Logf("✓ Cache invalidation structure exists")
 	return true
 }
@@ -290,11 +293,12 @@ func testCacheInvalidation(t *testing.T, ctx context.Context) bool {
 // testPHPParsing tests real PHP parsing with tree-sitter.
 func testPHPParsing(t *testing.T, ctx context.Context) bool {
 	t.Helper()
+	_ = ctx
 
 	// Create test PHP file
 	tempDir := t.TempDir()
 	phpFile := filepath.Join(tempDir, "test.php")
-	
+
 	phpContent := `<?php
 namespace App\Http\Controllers;
 
@@ -311,7 +315,7 @@ class UserController {
 
 	// Test that PHP parsing can handle the file
 	// This would use the actual tree-sitter PHP parser
-	
+
 	t.Logf("✓ PHP parsing testable (file structure created)")
 	return true
 }
@@ -319,42 +323,49 @@ class UserController {
 // Pattern matching tests - these may fail if not implemented
 func testHTTPStatusMatching(t *testing.T, ctx context.Context) bool {
 	t.Helper()
+	_ = ctx
 	t.Logf("HTTP Status matching test (may be incomplete)")
 	return false // Realistic: not fully implemented yet
 }
 
 func testRequestUsageMatching(t *testing.T, ctx context.Context) bool {
 	t.Helper()
+	_ = ctx
 	t.Logf("Request Usage matching test (may be incomplete)")
 	return false // Realistic: not fully implemented yet
 }
 
 func testResourceMatching(t *testing.T, ctx context.Context) bool {
 	t.Helper()
+	_ = ctx
 	t.Logf("Resource matching test (may be incomplete)")
 	return false // Realistic: not fully implemented yet
 }
 
 func testPivotMatching(t *testing.T, ctx context.Context) bool {
 	t.Helper()
+	_ = ctx
 	t.Logf("Pivot matching test (may be incomplete)")
 	return false // Realistic: not fully implemented yet
 }
 
 func testScopeMatching(t *testing.T, ctx context.Context) bool {
 	t.Helper()
+	_ = ctx
 	t.Logf("Scope matching test (may be incomplete)")
 	return false // Realistic: not fully implemented yet
 }
 
 func testPolymorphicMatching(t *testing.T, ctx context.Context) bool {
 	t.Helper()
+	_ = ctx
 	t.Logf("Polymorphic matching test (may be incomplete)")
 	return false // Realistic: not fully implemented yet
 }
 
 func testBroadcastMatching(t *testing.T, ctx context.Context) bool {
 	t.Helper()
+	_ = ctx
 	t.Logf("Broadcast matching test (may be incomplete)")
 	return false // Realistic: not fully implemented yet
 }
@@ -362,7 +373,8 @@ func testBroadcastMatching(t *testing.T, ctx context.Context) bool {
 // testShapeInference tests shape inference functionality.
 func testShapeInference(t *testing.T, ctx context.Context) bool {
 	t.Helper()
-	
+	_ = ctx
+
 	// Test basic shape inference structure
 	t.Logf("Shape inference test (may be incomplete)")
 	return false // Realistic: complex inference not fully implemented
@@ -371,6 +383,7 @@ func testShapeInference(t *testing.T, ctx context.Context) bool {
 // testDeltaEmission tests delta.json emission.
 func testDeltaEmission(t *testing.T, ctx context.Context) bool {
 	t.Helper()
+	_ = ctx
 
 	// Test that we can create and marshal a Delta structure
 	delta := &emitter.Delta{
@@ -402,7 +415,8 @@ func testDeltaEmission(t *testing.T, ctx context.Context) bool {
 // testStatsCollection tests statistics collection.
 func testStatsCollection(t *testing.T, ctx context.Context) bool {
 	t.Helper()
-	
+	_ = ctx
+
 	// Stats collection should be working if emitter works
 	t.Logf("✓ Stats collection linked to delta emission")
 	return true
@@ -512,7 +526,7 @@ func buildCLIBinaryForTesting(t *testing.T) string {
 
 	// Build the binary in a temporary location
 	binaryPath := filepath.Join(t.TempDir(), "oxinfer-test")
-	
+
 	cmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/oxinfer")
 	cmd.Dir = "../.." // Run from project root
 	output, err := cmd.CombinedOutput()
@@ -617,7 +631,7 @@ func reportMVPValidationResults(t *testing.T, validation *MVPValidation) {
 	// MVP Status
 	mvpReady := validation.PassingComponents >= 8
 	t.Logf("\n=== MVP STATUS: %s ===", statusWord(mvpReady))
-	
+
 	if !mvpReady {
 		t.Logf("Minimum viable components needed: 8")
 		t.Logf("Currently working: %d", validation.PassingComponents)

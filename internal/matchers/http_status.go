@@ -12,11 +12,11 @@ import (
 
 // DefaultHTTPStatusMatcher implements HTTPStatusMatcher interface.
 type DefaultHTTPStatusMatcher struct {
-	config       *MatcherConfig
-	queries      []*sitter.Query
-	queryDefs    []QueryDefinition
-	compiler     *QueryCompiler
-	initialized  bool
+	config           *MatcherConfig
+	queries          []*sitter.Query
+	queryDefs        []QueryDefinition
+	compiler         *QueryCompiler
+	initialized      bool
 	confidenceLevels *ConfidenceLevel
 }
 
@@ -25,7 +25,7 @@ func NewHTTPStatusMatcher(language *sitter.Language, config *MatcherConfig) (*De
 	if language == nil {
 		return nil, fmt.Errorf("language cannot be nil")
 	}
-	
+
 	if config == nil {
 		config = DefaultMatcherConfig()
 	}
@@ -51,7 +51,7 @@ func (m *DefaultHTTPStatusMatcher) initialize() error {
 	if err != nil {
 		return fmt.Errorf("failed to compile HTTP status queries: %w", err)
 	}
-	
+
 	m.queries = queries
 	m.initialized = true
 	return nil
@@ -83,7 +83,7 @@ func (m *DefaultHTTPStatusMatcher) Match(ctx context.Context, tree *parser.Synta
 		}
 
 		queryDef := m.queryDefs[i]
-		
+
 		// Convert SyntaxTree back to tree-sitter node for querying
 		sitterNode, sitterTree, err := m.convertToSitterNode(tree)
 		if err != nil {
@@ -104,11 +104,11 @@ func (m *DefaultHTTPStatusMatcher) Match(ctx context.Context, tree *parser.Synta
 			// Extract status code from captures
 			for _, capture := range match.Captures {
 				captureName := query.CaptureNameForId(capture.Index)
-				
+
 				if captureName == "status" {
 					statusNode := capture.Node
 					statusText := string(statusNode.Content(tree.Source))
-					
+
 					// Parse status code
 					statusCode, err := strconv.Atoi(statusText)
 					if err != nil {
@@ -153,7 +153,7 @@ func (m *DefaultHTTPStatusMatcher) Match(ctx context.Context, tree *parser.Synta
 
 	// Apply confidence filtering
 	filteredResults := m.filterByConfidence(allResults)
-	
+
 	// Deduplicate results
 	finalResults := m.deduplicateResults(filteredResults)
 
@@ -192,7 +192,7 @@ func (m *DefaultHTTPStatusMatcher) Close() error {
 	if m.compiler != nil {
 		m.compiler.Close()
 	}
-	
+
 	m.initialized = false
 	m.queries = nil
 	return nil
@@ -252,7 +252,7 @@ func (m *DefaultHTTPStatusMatcher) convertToSitterNode(tree *parser.SyntaxTree) 
 	}
 
 	tempParser.SetLanguage(m.compiler.language)
-	
+
 	sitterTree, err := tempParser.ParseCtx(context.Background(), nil, tree.Source)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to re-parse content: %w", err)
@@ -282,7 +282,7 @@ func (m *DefaultHTTPStatusMatcher) deduplicateResults(results []*MatchResult) []
 	for _, result := range results {
 		// Create a unique key based on position and content
 		key := fmt.Sprintf("%d:%d:%s", result.Position.Row, result.Position.Column, result.Content)
-		
+
 		if !seen[key] {
 			seen[key] = true
 			deduplicated = append(deduplicated, result)
@@ -296,7 +296,7 @@ func (m *DefaultHTTPStatusMatcher) deduplicateResults(results []*MatchResult) []
 func GetSupportedStatusCodes() []int {
 	return []int{
 		200, 201, 202, 204, // 2xx Success
-		300, 301, 302, 304, // 3xx Redirection  
+		300, 301, 302, 304, // 3xx Redirection
 		400, 401, 403, 404, 405, 409, 410, 422, 429, // 4xx Client Error
 		500, 501, 502, 503, 504, // 5xx Server Error
 	}
@@ -317,7 +317,7 @@ func IsCommonStatusCode(code int) bool {
 func GetStatusCodeMeaning(code int) string {
 	meanings := map[int]string{
 		200: "OK",
-		201: "Created", 
+		201: "Created",
 		202: "Accepted",
 		204: "No Content",
 		300: "Multiple Choices",
@@ -339,11 +339,11 @@ func GetStatusCodeMeaning(code int) string {
 		503: "Service Unavailable",
 		504: "Gateway Timeout",
 	}
-	
+
 	if meaning, exists := meanings[code]; exists {
 		return meaning
 	}
-	
+
 	// Return generic meaning based on code class
 	switch {
 	case code >= 200 && code < 300:

@@ -83,9 +83,9 @@ type PipelineConfig struct {
 // PipelineResults aggregates results from all pipeline phases.
 type PipelineResults struct {
 	// Phase results
-	IndexResult    *indexer.IndexResult
-	ParseResults   *ParseResults
-	MatchResults   *MatchResults
+	IndexResult      *indexer.IndexResult
+	ParseResults     *ParseResults
+	MatchResults     *MatchResults
 	InferenceResults *InferenceResults
 
 	// Final output
@@ -183,11 +183,11 @@ type PipelineStats struct {
 	FilesFailed     int
 
 	// Phase durations
-	IndexingDuration time.Duration
-	ParsingDuration  time.Duration
-	MatchingDuration time.Duration
+	IndexingDuration  time.Duration
+	ParsingDuration   time.Duration
+	MatchingDuration  time.Duration
 	InferenceDuration time.Duration
-	AssemblyDuration time.Duration
+	AssemblyDuration  time.Duration
 
 	// Pattern detection
 	PatternsDetected int
@@ -217,7 +217,7 @@ type PipelineProgress struct {
 	FilesFailed     int
 
 	// Pattern progress
-	PatternsFound int
+	PatternsFound  int
 	ShapesInferred int
 
 	// Timing
@@ -341,13 +341,13 @@ func NewComponentRegistry() *ComponentRegistry {
 func (r *ComponentRegistry) ClearCaches() {
 	// Clear PSR-4 resolver cache if it has one
 	// PSR4Resolver interface would need to define this method
-	
+
 	// Clear parser caches if available
 	// PHPParser interface would need to define this method
-	
+
 	// Clear pattern matcher caches if available
 	// CompositePatternMatcher interface would need to define this method
-	
+
 	// For now, we'll reset component references to force re-initialization
 	// This is a safe approach that ensures clean state
 	r.PSR4Resolver = nil
@@ -454,7 +454,7 @@ func (config *PipelineConfig) ConfigureFromManifest(manifest *manifest.Manifest)
 		if config.MatcherConfig == nil {
 			config.MatcherConfig = matchers.DefaultMatcherConfig()
 		}
-		
+
 		featureConfig := &matchers.FeatureConfig{
 			HTTPStatus:        manifest.Features.HTTPStatus,
 			RequestUsage:      manifest.Features.RequestUsage,

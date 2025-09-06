@@ -4,6 +4,7 @@ package matchers
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 	"time"
 
@@ -25,7 +26,7 @@ func NewCompositePatternMatcher(language *sitter.Language, config *MatcherConfig
 	if language == nil {
 		return nil, fmt.Errorf("language cannot be nil")
 	}
-	
+
 	if config == nil {
 		config = DefaultMatcherConfig()
 	}
@@ -40,13 +41,13 @@ func NewCompositePatternMatcher(language *sitter.Language, config *MatcherConfig
 
 // AddMatcher registers a new pattern matcher.
 func (c *DefaultCompositePatternMatcher) AddMatcher(matcher PatternMatcher) error {
-    if matcher == nil {
-        return fmt.Errorf("matcher cannot be nil")
-    }
+	if matcher == nil {
+		return fmt.Errorf("matcher cannot be nil")
+	}
 
-    patternType := matcher.GetType()
-    c.matchers[patternType] = matcher
-    return nil
+	patternType := matcher.GetType()
+	c.matchers[patternType] = matcher
+	return nil
 }
 
 // RemoveMatcher unregisters a pattern matcher by type.
@@ -111,7 +112,7 @@ func (c *DefaultCompositePatternMatcher) MatchAll(ctx context.Context, tree *par
 	c.stats.ProcessingTimeMs += processingTime.Milliseconds()
 
 	// Update pattern detection count
-	patternCount := int64(len(patterns.HTTPStatus) + len(patterns.RequestUsage) + len(patterns.Resources) + 
+	patternCount := int64(len(patterns.HTTPStatus) + len(patterns.RequestUsage) + len(patterns.Resources) +
 		len(patterns.Pivots) + len(patterns.Attributes) + len(patterns.Scopes) + len(patterns.Polymorphics) + len(patterns.Broadcasts))
 	c.stats.PatternsDetected += patternCount
 
@@ -122,9 +123,7 @@ func (c *DefaultCompositePatternMatcher) MatchAll(ctx context.Context, tree *par
 func (c *DefaultCompositePatternMatcher) GetMatchers() map[PatternType]PatternMatcher {
 	// Return copy to prevent external modification
 	matchers := make(map[PatternType]PatternMatcher)
-	for k, v := range c.matchers {
-		matchers[k] = v
-	}
+	maps.Copy(matchers, c.matchers)
 	return matchers
 }
 
@@ -141,13 +140,13 @@ func (c *DefaultCompositePatternMatcher) IsInitialized() bool {
 // Close releases resources from all matchers.
 func (c *DefaultCompositePatternMatcher) Close() error {
 	var firstError error
-	
+
 	for _, matcher := range c.matchers {
 		if err := matcher.Close(); err != nil && firstError == nil {
 			firstError = err
 		}
 	}
-	
+
 	c.matchers = make(map[PatternType]PatternMatcher)
 	return firstError
 }
@@ -280,7 +279,7 @@ func (p *DefaultPatternMatchingProcessor) initializeMatchers(language *sitter.La
 	}
 
 	// Initialize T7 pattern matchers if enabled
-	
+
 	// Pivot matcher
 	if config.EnablePivotMatching {
 		pivotMatcher, err := NewPivotMatcher(language, config)
@@ -315,7 +314,7 @@ func (p *DefaultPatternMatchingProcessor) initializeMatchers(language *sitter.La
 	}
 
 	// Initialize T8 pattern matchers if enabled
-	
+
 	// Polymorphic matcher
 	if config.EnablePolymorphicMatching {
 		polymorphicMatcher, err := NewPolymorphicMatcher(language, config)
@@ -328,7 +327,7 @@ func (p *DefaultPatternMatchingProcessor) initializeMatchers(language *sitter.La
 	}
 
 	// Initialize T10 pattern matchers if enabled
-	
+
 	// Broadcast matcher
 	if config.EnableBroadcastMatching {
 		broadcastMatcher, err := NewBroadcastMatcher(language, config)
@@ -363,9 +362,18 @@ func (p *DefaultPatternMatchingProcessor) ConvertToEmitterFormat(patterns *Larav
 		return nil, fmt.Errorf("patterns cannot be nil")
 	}
 
+	// Extract class and method names
+	className, classOk := p.extractClassName(patterns)
+	methodName, methodOk := p.extractMethodName(patterns)
+	
+	// Skip if we cannot extract valid identifiers
+	if !classOk || !methodOk {
+		return nil, nil // Return nil to indicate this should be skipped
+	}
+
 	controller := &emitter.Controller{
-		FQCN:   p.extractClassName(patterns),
-		Method: p.extractMethodName(patterns),
+		FQCN:   className,
+		Method: methodName,
 	}
 
 	// Convert HTTP status patterns
@@ -378,15 +386,15 @@ func (p *DefaultPatternMatchingProcessor) ConvertToEmitterFormat(patterns *Larav
 	}
 
 	// Convert request usage patterns
-    if len(patterns.RequestUsage) > 0 {
-        reqMatch := patterns.RequestUsage[0] // Use first match for primary request info
-        controller.Request = &emitter.RequestInfo{
-            ContentTypes: reqMatch.ContentTypes,
-            Body:         emitter.NewOrderedObjectFromMap(reqMatch.Body),
-            Query:        emitter.NewOrderedObjectFromMap(reqMatch.Query),
-            Files:        emitter.NewOrderedObjectFromMap(reqMatch.Files),
-        }
-    }
+	if len(patterns.RequestUsage) > 0 {
+		reqMatch := patterns.RequestUsage[0] // Use first match for primary request info
+		controller.Request = &emitter.RequestInfo{
+			ContentTypes: reqMatch.ContentTypes,
+			Body:         emitter.NewOrderedObjectFromMap(reqMatch.Body),
+			Query:        emitter.NewOrderedObjectFromMap(reqMatch.Query),
+			Files:        emitter.NewOrderedObjectFromMap(reqMatch.Files),
+		}
+	}
 
 	// Convert resource patterns
 	controller.Resources = make([]emitter.Resource, 0, len(patterns.Resources))
@@ -408,14 +416,14 @@ func (p *DefaultPatternMatchingProcessor) ConvertToEmitterFormat(patterns *Larav
 				Name: scopeMatch.Name,
 				Args: make([]string, 0, len(scopeMatch.Args)),
 			}
-			
+
 			// Convert args from interface{} to string
 			for _, arg := range scopeMatch.Args {
 				if argStr, ok := arg.(string); ok {
 					scopeUsed.Args = append(scopeUsed.Args, argStr)
 				}
 			}
-			
+
 			controller.ScopesUsed = append(controller.ScopesUsed, scopeUsed)
 		}
 	}
@@ -481,8 +489,14 @@ func (p *DefaultPatternMatchingProcessor) ConvertToModelFormat(patterns *Laravel
 		return nil, nil
 	}
 
+	// Extract class name for the model
+	className, classOk := p.extractClassName(patterns)
+	if !classOk {
+		return nil, nil // Skip if cannot extract valid class name
+	}
+
 	model := &emitter.Model{
-		FQCN: p.extractClassName(patterns),
+		FQCN: className,
 	}
 
 	// Convert pivot patterns
@@ -493,14 +507,14 @@ func (p *DefaultPatternMatchingProcessor) ConvertToModelFormat(patterns *Laravel
 			Columns:  make([]string, len(pivotMatch.Fields)),
 		}
 		copy(pivotInfo.Columns, pivotMatch.Fields)
-		
+
 		if pivotMatch.Alias != "" {
 			pivotInfo.Alias = &pivotMatch.Alias
 		}
 		if pivotMatch.Timestamps {
 			pivotInfo.Timestamps = &pivotMatch.Timestamps
 		}
-		
+
 		model.WithPivot = append(model.WithPivot, pivotInfo)
 	}
 
@@ -549,22 +563,42 @@ func (p *DefaultPatternMatchingProcessor) Close() error {
 	return nil
 }
 
-// extractClassName attempts to extract class name from file path.
-func (p *DefaultPatternMatchingProcessor) extractClassName(patterns *LaravelPatterns) string {
-	if patterns.ClassName != "" {
-		return patterns.ClassName
+// extractClassName attempts to extract class name from patterns.
+// Returns empty string and false if cannot resolve to a valid class name.
+func (p *DefaultPatternMatchingProcessor) extractClassName(patterns *LaravelPatterns) (string, bool) {
+	if patterns == nil {
+		return "", false
 	}
 	
-	// Try to infer from file path - this is a simplification
-	// In a real implementation, this would use PSR-4 resolution
-	return "UnknownController" // Placeholder
+	if patterns.ClassName != "" {
+		return patterns.ClassName, true
+	}
+
+	// Cannot reliably infer class name without proper AST context.
+	// This would require PSR-4 resolution from file path + namespace analysis.
+	
+	// TODO: T1.4 - Implement PSR-4 resolution for class name extraction
+	// Should integrate with psr4.Resolver to map file paths to FQCNs
+	// based on composer.json autoload configuration.
+	
+	return "", false
 }
 
 // extractMethodName attempts to extract method name from patterns.
-func (p *DefaultPatternMatchingProcessor) extractMethodName(patterns *LaravelPatterns) string {
-	// This would typically be extracted from the actual method being analyzed
-	// For now, return a default
-	return "index" // Placeholder
+// Returns empty string and false if cannot resolve to a valid method name.
+func (p *DefaultPatternMatchingProcessor) extractMethodName(patterns *LaravelPatterns) (string, bool) {
+	if patterns == nil {
+		return "", false
+	}
+	
+	// Method name extraction requires AST context from the pattern matching phase.
+	// The patterns should include method context from where they were detected.
+	
+	// TODO: T1.4 - Enhance pattern matching to include method context
+	// Patterns should capture the method declaration AST node context
+	// where each pattern was detected, allowing accurate method name extraction.
+	
+	return "", false
 }
 
 // calculateAverageConfidence calculates average confidence from all processed patterns.
@@ -581,7 +615,7 @@ func CreateDefaultMatcherSetup(language *sitter.Language) (*DefaultPatternMatchi
 	if err != nil {
 		return nil, fmt.Errorf("failed to create pattern matching processor: %w", err)
 	}
-	
+
 	return processor, nil
 }
 
@@ -608,8 +642,8 @@ func ValidateMatcherConfiguration(config *MatcherConfig) error {
 	}
 
 	// At least one matcher type must be enabled
-	if !config.EnableHTTPStatusMatching && 
-		!(config.EnableRequestUsageMatching || config.EnableRequestMatching) && 
+	if !config.EnableHTTPStatusMatching &&
+		!(config.EnableRequestUsageMatching || config.EnableRequestMatching) &&
 		!config.EnableResourceMatching &&
 		!config.EnablePivotMatching && !config.EnableAttributeMatching && !config.EnableScopeMatching &&
 		!config.EnablePolymorphicMatching && !config.EnableBroadcastMatching {

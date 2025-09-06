@@ -18,10 +18,10 @@ import (
 type ProjectSize int
 
 const (
-	ProjectSizeSmall ProjectSize = iota // < 100 PHP files
-	ProjectSizeMedium                   // 100-500 PHP files  
-	ProjectSizeLarge                    // 500-1000 PHP files
-	ProjectSizeEnterprise               // > 1000 PHP files
+	ProjectSizeSmall      ProjectSize = iota // < 100 PHP files
+	ProjectSizeMedium                        // 100-500 PHP files
+	ProjectSizeLarge                         // 500-1000 PHP files
+	ProjectSizeEnterprise                    // > 1000 PHP files
 )
 
 // String returns human-readable project size description
@@ -53,34 +53,34 @@ type OptimizationProfile struct {
 
 // CacheConfig defines optimized caching parameters for different scenarios
 type CacheConfig struct {
-	Enabled      bool          `json:"enabled"`
-	Kind         string        `json:"kind"`          // "mtime" or "sha256+mtime"
-	MaxSize      int           `json:"max_size"`      // Maximum cache entries
+	Enabled         bool          `json:"enabled"`
+	Kind            string        `json:"kind"`             // "mtime" or "sha256+mtime"
+	MaxSize         int           `json:"max_size"`         // Maximum cache entries
 	CleanupInterval time.Duration `json:"cleanup_interval"` // Cache cleanup frequency
 }
 
 // WorkerPoolConfig defines optimized worker pool parameters
 type WorkerPoolConfig struct {
-	MaxWorkers    int `json:"max_workers"`    // Maximum concurrent workers
-	QueueSize     int `json:"queue_size"`     // Work queue buffer size
+	MaxWorkers    int           `json:"max_workers"`    // Maximum concurrent workers
+	QueueSize     int           `json:"queue_size"`     // Work queue buffer size
 	WorkerTimeout time.Duration `json:"worker_timeout"` // Individual worker timeout
 }
 
 // LimitsConfig defines resource limits for different project scales
 type LimitsConfig struct {
-	MaxFiles int `json:"max_files"` // Maximum files to process
-	MaxDepth int `json:"max_depth"` // Maximum directory depth
+	MaxFiles  int   `json:"max_files"`  // Maximum files to process
+	MaxDepth  int   `json:"max_depth"`  // Maximum directory depth
 	MaxMemory int64 `json:"max_memory"` // Memory usage limit in bytes
 }
 
 // PerformanceTarget defines expected performance characteristics
 type PerformanceTarget struct {
-	ColdStartMs     int64   `json:"cold_start_ms"`      // Cold start target (ms)
-	IncrementalMs   int64   `json:"incremental_ms"`     // Incremental target (ms)  
-	ThroughputFPS   float64 `json:"throughput_fps"`     // Files per second
-	CacheHitRate    float64 `json:"cache_hit_rate"`     // Expected cache hit rate %
-	MemoryUsageMB   int64   `json:"memory_usage_mb"`    // Expected memory usage MB
-	WorkerEfficiency float64 `json:"worker_efficiency"`  // Worker utilization %
+	ColdStartMs      int64   `json:"cold_start_ms"`     // Cold start target (ms)
+	IncrementalMs    int64   `json:"incremental_ms"`    // Incremental target (ms)
+	ThroughputFPS    float64 `json:"throughput_fps"`    // Files per second
+	CacheHitRate     float64 `json:"cache_hit_rate"`    // Expected cache hit rate %
+	MemoryUsageMB    int64   `json:"memory_usage_mb"`   // Expected memory usage MB
+	WorkerEfficiency float64 `json:"worker_efficiency"` // Worker utilization %
 }
 
 // OptimizationProfiles contains pre-defined performance configurations for common Laravel project types
@@ -95,8 +95,8 @@ var OptimizationProfiles = map[string]OptimizationProfile{
 			CleanupInterval: 5 * time.Minute,
 		},
 		WorkerConfig: WorkerPoolConfig{
-			MaxWorkers:    2,              // Conservative for small projects
-			QueueSize:     50,             // Small queue
+			MaxWorkers:    2,  // Conservative for small projects
+			QueueSize:     50, // Small queue
 			WorkerTimeout: 30 * time.Second,
 		},
 		LimitsConfig: LimitsConfig{
@@ -125,8 +125,8 @@ var OptimizationProfiles = map[string]OptimizationProfile{
 			CleanupInterval: 10 * time.Minute,
 		},
 		WorkerConfig: WorkerPoolConfig{
-			MaxWorkers:    4,              // Balanced concurrency
-			QueueSize:     200,            // Moderate queue
+			MaxWorkers:    4,   // Balanced concurrency
+			QueueSize:     200, // Moderate queue
 			WorkerTimeout: 60 * time.Second,
 		},
 		LimitsConfig: LimitsConfig{
@@ -137,7 +137,7 @@ var OptimizationProfiles = map[string]OptimizationProfile{
 		Suitable: []ProjectSize{ProjectSizeMedium},
 		Performance: PerformanceTarget{
 			ColdStartMs:      1000, // < 1s
-			IncrementalMs:    200,  // < 200ms  
+			IncrementalMs:    200,  // < 200ms
 			ThroughputFPS:    500,  // 500 files/sec
 			CacheHitRate:     90,   // 90% cache hits
 			MemoryUsageMB:    50,   // 50MB typical
@@ -155,8 +155,8 @@ var OptimizationProfiles = map[string]OptimizationProfile{
 			CleanupInterval: 15 * time.Minute,
 		},
 		WorkerConfig: WorkerPoolConfig{
-			MaxWorkers:    8,               // High concurrency
-			QueueSize:     500,             // Large queue
+			MaxWorkers:    8,   // High concurrency
+			QueueSize:     500, // Large queue
 			WorkerTimeout: 120 * time.Second,
 		},
 		LimitsConfig: LimitsConfig{
@@ -185,8 +185,8 @@ var OptimizationProfiles = map[string]OptimizationProfile{
 			CleanupInterval: 30 * time.Minute,
 		},
 		WorkerConfig: WorkerPoolConfig{
-			MaxWorkers:    12,              // Maximum concurrency
-			QueueSize:     1000,            // Large queue
+			MaxWorkers:    12,   // Maximum concurrency
+			QueueSize:     1000, // Large queue
 			WorkerTimeout: 300 * time.Second,
 		},
 		LimitsConfig: LimitsConfig{
@@ -245,8 +245,8 @@ var OptimizationProfiles = map[string]OptimizationProfile{
 			CleanupInterval: 2 * time.Minute, // Frequent cleanup
 		},
 		WorkerConfig: WorkerPoolConfig{
-			MaxWorkers:    2,              // Fewer workers
-			QueueSize:     25,             // Small queue
+			MaxWorkers:    2,  // Fewer workers
+			QueueSize:     25, // Small queue
 			WorkerTimeout: 30 * time.Second,
 		},
 		LimitsConfig: LimitsConfig{
@@ -268,25 +268,25 @@ var OptimizationProfiles = map[string]OptimizationProfile{
 
 // ProjectStats contains analyzed characteristics of a Laravel project
 type ProjectStats struct {
-	FileCount       int           `json:"file_count"`
-	DirectoryDepth  int           `json:"directory_depth"`
-	AverageFileSize int64         `json:"average_file_size"`
-	Complexity      ProjectSize   `json:"complexity"`
-	HasVendor       bool          `json:"has_vendor"`
-	HasPackages     bool          `json:"has_packages"`
-	Structure       []string      `json:"structure"` // Detected Laravel directories
-	EstimatedMemory int64         `json:"estimated_memory_bytes"`
+	FileCount       int         `json:"file_count"`
+	DirectoryDepth  int         `json:"directory_depth"`
+	AverageFileSize int64       `json:"average_file_size"`
+	Complexity      ProjectSize `json:"complexity"`
+	HasVendor       bool        `json:"has_vendor"`
+	HasPackages     bool        `json:"has_packages"`
+	Structure       []string    `json:"structure"` // Detected Laravel directories
+	EstimatedMemory int64       `json:"estimated_memory_bytes"`
 }
 
 // PerformanceReport contains comprehensive performance analysis and metrics
 type PerformanceReport struct {
-	ProjectStats      ProjectStats      `json:"project_stats"`
+	ProjectStats      ProjectStats        `json:"project_stats"`
 	SelectedProfile   OptimizationProfile `json:"selected_profile"`
-	ActualPerformance PerformanceMetrics `json:"actual_performance"`
-	Bottlenecks       []string          `json:"bottlenecks"`
-	Recommendations   []string          `json:"recommendations"`
-	Efficiency        EfficiencyMetrics `json:"efficiency"`
-	Timestamp         time.Time         `json:"timestamp"`
+	ActualPerformance PerformanceMetrics  `json:"actual_performance"`
+	Bottlenecks       []string            `json:"bottlenecks"`
+	Recommendations   []string            `json:"recommendations"`
+	Efficiency        EfficiencyMetrics   `json:"efficiency"`
+	Timestamp         time.Time           `json:"timestamp"`
 }
 
 // PerformanceMetrics captures actual measured performance
@@ -303,11 +303,11 @@ type PerformanceMetrics struct {
 
 // EfficiencyMetrics measures how well the system performed against targets
 type EfficiencyMetrics struct {
-	SpeedEfficiency   float64 `json:"speed_efficiency_percent"`   // Actual vs target speed
-	MemoryEfficiency  float64 `json:"memory_efficiency_percent"`  // Memory usage efficiency
-	CacheEfficiency   float64 `json:"cache_efficiency_percent"`   // Cache hit rate efficiency
-	WorkerEfficiency  float64 `json:"worker_efficiency_percent"`  // Worker utilization efficiency
-	OverallScore      float64 `json:"overall_score_percent"`      // Weighted overall score
+	SpeedEfficiency  float64 `json:"speed_efficiency_percent"`  // Actual vs target speed
+	MemoryEfficiency float64 `json:"memory_efficiency_percent"` // Memory usage efficiency
+	CacheEfficiency  float64 `json:"cache_efficiency_percent"`  // Cache hit rate efficiency
+	WorkerEfficiency float64 `json:"worker_efficiency_percent"` // Worker utilization efficiency
+	OverallScore     float64 `json:"overall_score_percent"`     // Weighted overall score
 }
 
 // PerformanceOptimizer provides intelligent performance optimization and monitoring
@@ -332,7 +332,7 @@ func (po *PerformanceOptimizer) AnalyzeProject(ctx context.Context, manifest *ma
 	}
 
 	discoverer := NewFileDiscoverer()
-	
+
 	// Discover all PHP files in the project
 	files, err := discoverer.DiscoverFiles(ctx, manifest.Scan.Targets, manifest.Scan.Globs, manifest.Project.Root)
 	if err != nil {
@@ -349,7 +349,7 @@ func (po *PerformanceOptimizer) AnalyzeProject(ctx context.Context, manifest *ma
 
 	// Determine project complexity
 	stats.Complexity = categorizeProjectSize(stats.FileCount)
-	
+
 	// Detect special Laravel features
 	stats.HasVendor = containsPath(files, "vendor")
 	stats.HasPackages = containsPath(files, "packages")
@@ -374,7 +374,7 @@ func (po *PerformanceOptimizer) SelectOptimalConfiguration(stats ProjectStats) O
 
 	// Apply dynamic adjustments based on system capabilities
 	adjustedProfile := po.adjustProfileForSystem(bestProfile, stats)
-	
+
 	return adjustedProfile
 }
 
@@ -438,7 +438,7 @@ func (po *PerformanceOptimizer) adjustProfileForSystem(profile OptimizationProfi
 	// Adjust cache size based on available memory
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
-	
+
 	availableMemory := int64(memStats.Sys)
 	maxCacheMemory := availableMemory / 4 // Use at most 25% of available memory for cache
 
@@ -457,7 +457,7 @@ func (po *PerformanceOptimizer) adjustProfileForSystem(profile OptimizationProfi
 func (po *PerformanceOptimizer) ApplyOptimizationProfile(inputManifest *manifest.Manifest, profile OptimizationProfile) *manifest.Manifest {
 	// Create a copy to avoid modifying the original
 	result := *inputManifest
-	
+
 	// Create limits if not present
 	if result.Limits == nil {
 		result.Limits = &manifest.LimitsConfig{}
@@ -481,10 +481,10 @@ func (po *PerformanceOptimizer) ApplyOptimizationProfile(inputManifest *manifest
 // MeasurePerformance captures performance metrics from an IndexResult
 func (po *PerformanceOptimizer) MeasurePerformance(result *IndexResult, memStats runtime.MemStats) PerformanceMetrics {
 	metrics := PerformanceMetrics{
-		ColdStartMs:       result.DurationMs,
-		FilesProcessed:    len(result.Files),
-		ErrorCount:        result.Skipped,
-		MemoryUsageMB:     int64(memStats.Alloc / 1024 / 1024),
+		ColdStartMs:    result.DurationMs,
+		FilesProcessed: len(result.Files),
+		ErrorCount:     result.Skipped,
+		MemoryUsageMB:  int64(memStats.Alloc / 1024 / 1024),
 	}
 
 	// Calculate throughput
@@ -540,7 +540,7 @@ func (po *PerformanceOptimizer) calculateEfficiency(profile OptimizationProfile,
 		}
 	}
 
-	// Cache efficiency 
+	// Cache efficiency
 	cacheEff := 100.0
 	if target.CacheHitRate > 0 {
 		cacheEff = metrics.CacheHitRate / target.CacheHitRate * 100.0
@@ -556,11 +556,11 @@ func (po *PerformanceOptimizer) calculateEfficiency(profile OptimizationProfile,
 	overall := (speedEff*0.3 + memoryEff*0.2 + cacheEff*0.3 + workerEff*0.2)
 
 	return EfficiencyMetrics{
-		SpeedEfficiency:   speedEff,
-		MemoryEfficiency:  memoryEff,
-		CacheEfficiency:   cacheEff,
-		WorkerEfficiency:  workerEff,
-		OverallScore:      overall,
+		SpeedEfficiency:  speedEff,
+		MemoryEfficiency: memoryEff,
+		CacheEfficiency:  cacheEff,
+		WorkerEfficiency: workerEff,
+		OverallScore:     overall,
 	}
 }
 
@@ -572,17 +572,17 @@ func (po *PerformanceOptimizer) identifyBottlenecks(profile OptimizationProfile,
 	target := profile.Performance
 
 	if metrics.ColdStartMs > target.ColdStartMs*2 {
-		bottlenecks = append(bottlenecks, fmt.Sprintf("Cold start significantly slower than target (%dms vs %dms)", 
+		bottlenecks = append(bottlenecks, fmt.Sprintf("Cold start significantly slower than target (%dms vs %dms)",
 			metrics.ColdStartMs, target.ColdStartMs))
 	}
 
 	if metrics.ActualThroughput < target.ThroughputFPS*0.5 {
-		bottlenecks = append(bottlenecks, fmt.Sprintf("Low throughput (%0.1f fps vs %0.1f fps target)", 
+		bottlenecks = append(bottlenecks, fmt.Sprintf("Low throughput (%0.1f fps vs %0.1f fps target)",
 			metrics.ActualThroughput, target.ThroughputFPS))
 	}
 
 	if metrics.CacheHitRate < target.CacheHitRate*0.8 {
-		bottlenecks = append(bottlenecks, fmt.Sprintf("Poor cache hit rate (%0.1f%% vs %0.1f%% target)", 
+		bottlenecks = append(bottlenecks, fmt.Sprintf("Poor cache hit rate (%0.1f%% vs %0.1f%% target)",
 			metrics.CacheHitRate, target.CacheHitRate))
 	}
 
@@ -626,7 +626,7 @@ func (po *PerformanceOptimizer) generateRecommendations(profile OptimizationProf
 	if len(po.history) >= 2 {
 		recent := po.history[len(po.history)-1]
 		previous := po.history[len(po.history)-2]
-		
+
 		if float64(recent.ColdStartMs) > float64(previous.ColdStartMs)*1.5 {
 			recommendations = append(recommendations, "Performance degradation detected - consider cache cleanup or system resource check")
 		}
@@ -665,7 +665,7 @@ func calculateAverageFileSize(files []FileInfo) int64 {
 	if len(files) == 0 {
 		return 0
 	}
-	
+
 	total := int64(0)
 	for _, file := range files {
 		total += file.Size
@@ -675,19 +675,19 @@ func calculateAverageFileSize(files []FileInfo) int64 {
 
 func analyzeDirectoryStructure(files []FileInfo) []string {
 	directories := make(map[string]bool)
-	
+
 	for _, file := range files {
 		parts := strings.Split(file.Path, string(filepath.Separator))
 		if len(parts) > 0 {
 			directories[parts[0]] = true
 		}
 	}
-	
+
 	var structure []string
 	for dir := range directories {
 		structure = append(structure, dir)
 	}
-	
+
 	return structure
 }
 
@@ -717,6 +717,6 @@ func estimateMemoryUsage(fileCount int) int64 {
 	// Rough estimation: 10KB per file for metadata + processing overhead
 	basePerFile := int64(10 * 1024)
 	overhead := int64(20 * 1024 * 1024) // 20MB base overhead
-	
+
 	return int64(fileCount)*basePerFile + overhead
 }

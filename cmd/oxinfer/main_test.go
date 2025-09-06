@@ -72,15 +72,15 @@ func TestRun(t *testing.T) {
 			exitCode := run(tt.args)
 
 			// Restore stdout and stderr
-			wOut.Close()
-			wErr.Close()
+			_ = wOut.Close()
+			_ = wErr.Close()
 			os.Stdout = oldStdout
 			os.Stderr = oldStderr
 
 			// Read captured output
 			var bufOut, bufErr bytes.Buffer
-			bufOut.ReadFrom(rOut)
-			bufErr.ReadFrom(rErr)
+			_, _ = bufOut.ReadFrom(rOut)
+			_, _ = bufErr.ReadFrom(rErr)
 
 			stdout := strings.TrimSpace(bufOut.String())
 			stderr := strings.TrimSpace(bufErr.String())
@@ -158,7 +158,7 @@ func TestRunWithStdinInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create pipe: %v", err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 
 	os.Stdin = r
 
@@ -174,8 +174,8 @@ func TestRunWithStdinInput(t *testing.T) {
 	}`, tempDir)
 
 	go func() {
-		defer w.Close()
-		w.Write([]byte(manifestContent))
+		defer func() { _ = w.Close() }()
+		_, _ = w.Write([]byte(manifestContent))
 	}()
 
 	// Test with stdin input - this will fail until emitter is implemented
@@ -229,12 +229,12 @@ func TestPrintError(t *testing.T) {
 			printError(tt.err, tt.noColor)
 
 			// Restore stderr
-			w.Close()
+			_ = w.Close()
 			os.Stderr = oldStderr
 
 			// Read captured output
 			var buf bytes.Buffer
-			buf.ReadFrom(r)
+			_, _ = buf.ReadFrom(r)
 			output := strings.TrimSpace(buf.String())
 
 			if tt.wantJSON {

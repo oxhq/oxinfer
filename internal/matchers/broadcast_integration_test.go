@@ -27,7 +27,7 @@ func TestBroadcastMatcherIntegration(t *testing.T) {
 		if PatternTypeBroadcast == "" {
 			t.Errorf("Expected broadcast pattern type to be defined")
 		}
-		
+
 		expected := PatternType("broadcast")
 		if PatternTypeBroadcast != expected {
 			t.Errorf("Expected pattern type %q, got %q", expected, PatternTypeBroadcast)
@@ -118,19 +118,19 @@ func TestBroadcastMatcherIntegration(t *testing.T) {
 		// Test that broadcast query lookup functions work
 		queryName := "broadcast_channel_public"
 		queryDef, found := GetBroadcastUsageQuery(queryName)
-		
+
 		if !found {
 			t.Errorf("Expected to find query %q", queryName)
 		}
-		
+
 		if queryDef.Name != queryName {
 			t.Errorf("Expected query name %q, got %q", queryName, queryDef.Name)
 		}
-		
+
 		if queryDef.Pattern == "" {
 			t.Errorf("Expected non-empty pattern for query %q", queryName)
 		}
-		
+
 		if queryDef.Confidence <= 0 {
 			t.Errorf("Expected positive confidence for query %q, got %f", queryName, queryDef.Confidence)
 		}
@@ -287,7 +287,7 @@ func TestBroadcastMatcherIntegration(t *testing.T) {
 
 				// 3. Process file to get patterns
 				ctx := context.Background()
-				patterns, err := processor.ProcessFile(ctx, syntaxTree, "test.php")
+				patterns, err := processor.ProcessFile(ctx, syntaxTree, "routes/channels.php")
 				if err != nil {
 					t.Fatalf("Failed to process file: %v", err)
 				}
@@ -359,7 +359,7 @@ func TestBroadcastMatcherIntegration(t *testing.T) {
 		// Test with broadcast matching disabled
 		configDisabled := DefaultMatcherConfig()
 		configDisabled.EnableBroadcastMatching = false
-		
+
 		processorDisabled, err := NewPatternMatchingProcessor(language, configDisabled)
 		if err != nil {
 			t.Fatalf("Failed to create processor: %v", err)
@@ -367,7 +367,7 @@ func TestBroadcastMatcherIntegration(t *testing.T) {
 		defer processorDisabled.Close()
 
 		ctx := context.Background()
-		patternsDisabled, err := processorDisabled.ProcessFile(ctx, syntaxTree, "test.php")
+		patternsDisabled, err := processorDisabled.ProcessFile(ctx, syntaxTree, "routes/channels.php")
 		if err != nil {
 			t.Fatalf("Failed to process file: %v", err)
 		}
@@ -380,14 +380,14 @@ func TestBroadcastMatcherIntegration(t *testing.T) {
 		// Test with broadcast matching enabled
 		configEnabled := DefaultMatcherConfig()
 		configEnabled.EnableBroadcastMatching = true
-		
+
 		processorEnabled, err := NewPatternMatchingProcessor(language, configEnabled)
 		if err != nil {
 			t.Fatalf("Failed to create processor: %v", err)
 		}
 		defer processorEnabled.Close()
 
-		patternsEnabled, err := processorEnabled.ProcessFile(ctx, syntaxTree, "test.php")
+		patternsEnabled, err := processorEnabled.ProcessFile(ctx, syntaxTree, "routes/channels.php")
 		if err != nil {
 			t.Fatalf("Failed to process file: %v", err)
 		}

@@ -163,7 +163,7 @@ func TestNewQueryEngine(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			engine, err := NewQueryEngine(tt.language)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Errorf("expected error but got none")
@@ -172,22 +172,22 @@ func TestNewQueryEngine(t *testing.T) {
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			if engine == nil {
 				t.Error("expected non-nil engine")
 				return
 			}
-			
+
 			// Verify queries were compiled
 			if len(engine.queries) == 0 {
 				t.Error("expected compiled queries, got none")
 			}
-			
+
 			// Test closing
 			if err := engine.Close(); err != nil {
 				t.Errorf("unexpected error closing engine: %v", err)
@@ -522,9 +522,9 @@ func TestPerformance(t *testing.T) {
 
 	// Test individual extraction performance
 	tests := []struct {
-		name     string
-		fn       func() error
-		maxTime  time.Duration
+		name    string
+		fn      func() error
+		maxTime time.Duration
 	}{
 		{
 			name: "namespace extraction",
@@ -634,12 +634,12 @@ func setupTestEngine(t *testing.T, phpContent string) (*DefaultQueryEngine, *Syn
 
 // containsString checks if a string contains a substring.
 func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && 
-		(len(substr) == 0 || 
-		 (len(s) > 0 && 
-		  (s == substr || 
-		   containsString(s[1:], substr) || 
-		   (len(s) >= len(substr) && s[:len(substr)] == substr))))
+	return len(s) >= len(substr) &&
+		(len(substr) == 0 ||
+			(len(s) > 0 &&
+				(s == substr ||
+					containsString(s[1:], substr) ||
+					(len(s) >= len(substr) && s[:len(substr)] == substr))))
 }
 
 // equalClassSlices compares two class slices for equality.
@@ -647,18 +647,18 @@ func equalClassSlices(a, b []PHPClass) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	
+
 	for i := range a {
 		if a[i].Name != b[i].Name ||
-		   a[i].FullyQualifiedName != b[i].FullyQualifiedName ||
-		   a[i].Extends != b[i].Extends ||
-		   a[i].Visibility != b[i].Visibility ||
-		   a[i].IsAbstract != b[i].IsAbstract ||
-		   a[i].IsFinal != b[i].IsFinal {
+			a[i].FullyQualifiedName != b[i].FullyQualifiedName ||
+			a[i].Extends != b[i].Extends ||
+			a[i].Visibility != b[i].Visibility ||
+			a[i].IsAbstract != b[i].IsAbstract ||
+			a[i].IsFinal != b[i].IsFinal {
 			return false
 		}
 	}
-	
+
 	return true
 }
 
@@ -667,18 +667,18 @@ func equalMethodSlices(a, b []PHPMethod) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	
+
 	for i := range a {
 		if a[i].Name != b[i].Name ||
-		   a[i].ClassName != b[i].ClassName ||
-		   a[i].Visibility != b[i].Visibility ||
-		   a[i].IsStatic != b[i].IsStatic ||
-		   a[i].IsAbstract != b[i].IsAbstract ||
-		   a[i].IsFinal != b[i].IsFinal ||
-		   a[i].ReturnType != b[i].ReturnType {
+			a[i].ClassName != b[i].ClassName ||
+			a[i].Visibility != b[i].Visibility ||
+			a[i].IsStatic != b[i].IsStatic ||
+			a[i].IsAbstract != b[i].IsAbstract ||
+			a[i].IsFinal != b[i].IsFinal ||
+			a[i].ReturnType != b[i].ReturnType {
 			return false
 		}
 	}
-	
+
 	return true
 }

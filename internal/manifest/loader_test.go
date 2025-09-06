@@ -34,10 +34,10 @@ func TestManifestLoader_LoadFromReader(t *testing.T) {
 	loader := NewLoader(validator)
 
 	tests := []struct {
-		name        string
-		jsonInput   string
-		wantErr     bool
-		errorType   cli.ExitCode
+		name           string
+		jsonInput      string
+		wantErr        bool
+		errorType      cli.ExitCode
 		expectManifest func(*testing.T, *Manifest)
 	}{
 		{
@@ -708,7 +708,7 @@ func TestLoadDeterminism(t *testing.T) {
 	// Compare all manifests - they should be identical
 	for i := 1; i < len(manifests); i++ {
 		m1, m2 := manifests[0], manifests[i]
-		
+
 		if m1.Project.Root != m2.Project.Root {
 			t.Errorf("LoadFromReader() not deterministic: root differs between loads")
 		}

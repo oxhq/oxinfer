@@ -14,34 +14,34 @@ import (
 // All fields are designed for atomic operations and deterministic JSON output.
 type ProcessingStats struct {
 	// Core processing metrics
-	FilesParsed    int64 `json:"filesParsed"`
-	FilesSkipped   int64 `json:"skipped"`
-	DurationMs     int64 `json:"durationMs"`
-	Partial        int32 `json:"partial"` // 0 or 1, treated as bool in JSON
-	TotalFiles     int64 `json:"totalFiles,omitempty"`
-	
+	FilesParsed  int64 `json:"filesParsed"`
+	FilesSkipped int64 `json:"skipped"`
+	DurationMs   int64 `json:"durationMs"`
+	Partial      int32 `json:"partial"` // 0 or 1, treated as bool in JSON
+	TotalFiles   int64 `json:"totalFiles,omitempty"`
+
 	// Phase-specific timing metrics (stored as atomic int64, marshaled as map[string]int64)
-	phaseStatsMu   sync.RWMutex
-	phaseStats     map[string]*int64 `json:"-"`
-	
+	phaseStatsMu sync.RWMutex
+	phaseStats   map[string]*int64 `json:"-"`
+
 	// Pattern matching statistics (stored as atomic int64, marshaled as map[string]int)
-	matchStatsMu   sync.RWMutex
-	matchStats     map[string]*int64 `json:"-"`
-	
+	matchStatsMu sync.RWMutex
+	matchStats   map[string]*int64 `json:"-"`
+
 	// Error tracking
-	ErrorCount     int64 `json:"errorCount,omitempty"`
-	
+	ErrorCount int64 `json:"errorCount,omitempty"`
+
 	// Processing timestamps
-	StartTime      int64 `json:"startTime,omitempty"`      // Unix timestamp in milliseconds
-	EndTime        int64 `json:"endTime,omitempty"`        // Unix timestamp in milliseconds
-	
+	StartTime int64 `json:"startTime,omitempty"` // Unix timestamp in milliseconds
+	EndTime   int64 `json:"endTime,omitempty"`   // Unix timestamp in milliseconds
+
 	// Inference-specific metrics
-	InferenceOps   int64 `json:"inferenceOps,omitempty"`   // Number of shape inference operations
+	InferenceOps       int64 `json:"inferenceOps,omitempty"` // Number of shape inference operations
 	PropertiesInferred int64 `json:"propertiesInferred,omitempty"`
-	
+
 	// Cache statistics
-	CacheHits      int64 `json:"cacheHits,omitempty"`
-	CacheMisses    int64 `json:"cacheMisses,omitempty"`
+	CacheHits   int64 `json:"cacheHits,omitempty"`
+	CacheMisses int64 `json:"cacheMisses,omitempty"`
 }
 
 // PhaseStats represents processing time for different pipeline phases.
@@ -71,7 +71,7 @@ func (p *ProcessingStats) MarshalJSON() ([]byte, error) {
 		CacheHits          int64      `json:"cacheHits,omitempty"`
 		CacheMisses        int64      `json:"cacheMisses,omitempty"`
 	}
-	
+
 	js := jsonStats{
 		FilesParsed:        atomic.LoadInt64(&p.FilesParsed),
 		FilesSkipped:       atomic.LoadInt64(&p.FilesSkipped),
@@ -86,7 +86,7 @@ func (p *ProcessingStats) MarshalJSON() ([]byte, error) {
 		CacheHits:          atomic.LoadInt64(&p.CacheHits),
 		CacheMisses:        atomic.LoadInt64(&p.CacheMisses),
 	}
-	
+
 	// Convert phase stats with deterministic ordering
 	if phaseStats := p.GetPhaseStatsTyped(); len(phaseStats) > 0 {
 		js.PhaseStats = make(PhaseStats, len(phaseStats))
@@ -95,19 +95,19 @@ func (p *ProcessingStats) MarshalJSON() ([]byte, error) {
 			keys = append(keys, phase)
 		}
 		sort.Strings(keys)
-		
+
 		for _, phase := range keys {
 			if value := phaseStats[phase]; value > 0 {
 				js.PhaseStats[phase] = value
 			}
 		}
-		
+
 		// Don't include empty phase stats
 		if len(js.PhaseStats) == 0 {
 			js.PhaseStats = nil
 		}
 	}
-	
+
 	// Convert match stats with deterministic ordering
 	if matchStats := p.GetMatchStatsTyped(); len(matchStats) > 0 {
 		js.MatchStats = make(MatchStats, len(matchStats))
@@ -116,19 +116,19 @@ func (p *ProcessingStats) MarshalJSON() ([]byte, error) {
 			keys = append(keys, matchType)
 		}
 		sort.Strings(keys)
-		
+
 		for _, matchType := range keys {
 			if value := matchStats[matchType]; value > 0 {
 				js.MatchStats[matchType] = value
 			}
 		}
-		
+
 		// Don't include empty match stats
 		if len(js.MatchStats) == 0 {
 			js.MatchStats = nil
 		}
 	}
-	
+
 	return json.Marshal(js)
 }
 
@@ -191,25 +191,25 @@ func NewProcessingStats() *ProcessingStats {
 
 // GetPhaseStats returns a snapshot of phase statistics.
 // The returned map is safe for concurrent reading.
-func (p *ProcessingStats) GetPhaseStats() interface{} {
+func (p *ProcessingStats) GetPhaseStats() any {
 	p.phaseStatsMu.RLock()
 	defer p.phaseStatsMu.RUnlock()
-	
+
 	result := make(map[string]int64, len(p.phaseStats))
-	
+
 	// Create sorted list of phase names for deterministic output
 	phases := make([]string, 0, len(p.phaseStats))
 	for phase := range p.phaseStats {
 		phases = append(phases, phase)
 	}
 	sort.Strings(phases)
-	
+
 	for _, phase := range phases {
 		if counter := p.phaseStats[phase]; counter != nil {
 			result[phase] = atomic.LoadInt64(counter)
 		}
 	}
-	
+
 	return result
 }
 
@@ -231,25 +231,25 @@ func (p *ProcessingStats) GetPhaseStatsTyped() PhaseStats {
 
 // GetMatchStats returns a snapshot of match statistics.
 // The returned map is safe for concurrent reading.
-func (p *ProcessingStats) GetMatchStats() interface{} {
+func (p *ProcessingStats) GetMatchStats() any {
 	p.matchStatsMu.RLock()
 	defer p.matchStatsMu.RUnlock()
-	
+
 	result := make(map[string]int, len(p.matchStats))
-	
+
 	// Create sorted list of match types for deterministic output
 	matchTypes := make([]string, 0, len(p.matchStats))
 	for matchType := range p.matchStats {
 		matchTypes = append(matchTypes, matchType)
 	}
 	sort.Strings(matchTypes)
-	
+
 	for _, matchType := range matchTypes {
 		if counter := p.matchStats[matchType]; counter != nil {
 			result[matchType] = int(atomic.LoadInt64(counter))
 		}
 	}
-	
+
 	return result
 }
 
@@ -337,16 +337,16 @@ func (p *ProcessingStats) initializePhaseCounter(phase string) *int64 {
 		return counter
 	}
 	p.phaseStatsMu.RUnlock()
-	
+
 	// Upgrade to write lock to create new counter
 	p.phaseStatsMu.Lock()
 	defer p.phaseStatsMu.Unlock()
-	
+
 	// Check again in case another goroutine created it
 	if counter, exists := p.phaseStats[phase]; exists {
 		return counter
 	}
-	
+
 	// Create new counter initialized to 0
 	counter := new(int64)
 	p.phaseStats[phase] = counter
@@ -361,16 +361,16 @@ func (p *ProcessingStats) initializeMatchCounter(matchType string) *int64 {
 		return counter
 	}
 	p.matchStatsMu.RUnlock()
-	
+
 	// Upgrade to write lock to create new counter
 	p.matchStatsMu.Lock()
 	defer p.matchStatsMu.Unlock()
-	
+
 	// Check again in case another goroutine created it
 	if counter, exists := p.matchStats[matchType]; exists {
 		return counter
 	}
-	
+
 	// Create new counter initialized to 0
 	counter := new(int64)
 	p.matchStats[matchType] = counter

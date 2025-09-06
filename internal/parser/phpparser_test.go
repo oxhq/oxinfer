@@ -53,7 +53,7 @@ func TestNewPHPProjectParser(t *testing.T) {
 func TestNewPHPProjectParserFromManifest(t *testing.T) {
 	// Create temporary directory for test
 	tempDir := t.TempDir()
-	
+
 	// Create composer.json for PSR-4 resolver
 	composerContent := `{
 		"name": "test/project",
@@ -68,7 +68,7 @@ func TestNewPHPProjectParserFromManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create composer.json: %v", err)
 	}
-	
+
 	// Create test manifest
 	manifest := &manifest.Manifest{
 		Project: manifest.ProjectConfig{
@@ -134,7 +134,7 @@ func TestLoadFromManifest(t *testing.T) {
 
 	// Create temporary directory for testing
 	tempDir := t.TempDir()
-	
+
 	// Create required files and directories
 	composerContent := `{
 		"autoload": {
@@ -146,7 +146,7 @@ func TestLoadFromManifest(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tempDir, "custom-composer.json"), []byte(composerContent), 0644); err != nil {
 		t.Fatalf("Failed to create composer.json: %v", err)
 	}
-	
+
 	// Create src directory
 	if err := os.MkdirAll(filepath.Join(tempDir, "src"), 0755); err != nil {
 		t.Fatalf("Failed to create src directory: %v", err)
@@ -219,7 +219,7 @@ func TestProgressTracking(t *testing.T) {
 
 	for i, expected := range expectedPhases {
 		if progressUpdates[i].Phase != expected {
-			t.Errorf("Progress update %d: expected phase %v, got %v", 
+			t.Errorf("Progress update %d: expected phase %v, got %v",
 				i, expected, progressUpdates[i].Phase)
 		}
 	}
@@ -248,15 +248,15 @@ func TestParseProjectWithEmptyDirectory(t *testing.T) {
 
 	// Configure for empty directory
 	config := ProjectParserConfig{
-		ProjectRoot:  tempDir,
-		ComposerPath: filepath.Join(tempDir, "composer.json"),
-		Targets:      []string{"app"},
-		Globs:        []string{"**/*.php"},
-		MaxFiles:     100,
-		MaxDepth:     5,
-		MaxWorkers:   2,
-		ParseTimeout: 10 * time.Second,
-		CacheEnabled: false,
+		ProjectRoot:    tempDir,
+		ComposerPath:   filepath.Join(tempDir, "composer.json"),
+		Targets:        []string{"app"},
+		Globs:          []string{"**/*.php"},
+		MaxFiles:       100,
+		MaxDepth:       5,
+		MaxWorkers:     2,
+		ParseTimeout:   10 * time.Second,
+		CacheEnabled:   false,
 		ExtractClasses: true,
 		ExtractMethods: true,
 	}
@@ -413,22 +413,22 @@ func TestProjectParserConfigValidation(t *testing.T) {
 		errMsg  string
 	}{
 		{
-			name:   "valid config",
-			config: DefaultProjectParserConfig(),
+			name:    "valid config",
+			config:  DefaultProjectParserConfig(),
 			wantErr: false,
 		},
 		{
 			name: "empty project root",
 			config: ProjectParserConfig{
-				ProjectRoot: "",
+				ProjectRoot:  "",
 				ComposerPath: "composer.json",
-				Targets: []string{"app"},
-				Globs:   []string{"**/*.php"},
-				MaxFiles: 100,
-				MaxDepth: 5,
-				MaxWorkers: 4,
+				Targets:      []string{"app"},
+				Globs:        []string{"**/*.php"},
+				MaxFiles:     100,
+				MaxDepth:     5,
+				MaxWorkers:   4,
 				ParseTimeout: 30 * time.Second,
-				CacheKind: "mtime",
+				CacheKind:    "mtime",
 			},
 			wantErr: true,
 			errMsg:  "project root cannot be empty",
@@ -560,7 +560,7 @@ func TestMemoryEstimation(t *testing.T) {
 			estimatedMB := estimated / (1024 * 1024)
 
 			if estimatedMB < tt.expected-5 || estimatedMB > tt.expected+5 {
-				t.Errorf("Expected memory estimate around %d MB, got %d MB", 
+				t.Errorf("Expected memory estimate around %d MB, got %d MB",
 					tt.expected, estimatedMB)
 			}
 		})
@@ -571,8 +571,8 @@ func TestMemoryEstimation(t *testing.T) {
 func TestResourceWarnings(t *testing.T) {
 	// High resource config should generate warnings
 	highResourceConfig := ProjectParserConfig{
-		MaxWorkers:   16,  // High worker count (exceeds 8)
-		MaxFiles:     50000, // Large file count (exceeds 5000) 
+		MaxWorkers:   16,              // High worker count (exceeds 8)
+		MaxFiles:     50000,           // Large file count (exceeds 5000)
 		ParseTimeout: 1 * time.Second, // Short timeout (below 5s)
 	}
 
@@ -700,11 +700,11 @@ func stringPtr(s string) *string {
 }
 
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || 
-		(len(s) > len(substr) && 
-		 (s[:len(substr)] == substr || 
-		  s[len(s)-len(substr):] == substr || 
-		  findSubstring(s, substr))))
+	return len(s) >= len(substr) && (s == substr ||
+		(len(s) > len(substr) &&
+			(s[:len(substr)] == substr ||
+				s[len(s)-len(substr):] == substr ||
+				findSubstring(s, substr))))
 }
 
 func findSubstring(s, substr string) bool {

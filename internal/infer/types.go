@@ -35,7 +35,7 @@ type PropertyInfo struct {
 	Type        PropertyType   `json:"type"`
 	Description string         `json:"description,omitempty"`
 	Format      string         `json:"format,omitempty"`
-	Items       *PropertyInfo  `json:"items,omitempty"`       // For arrays
+	Items       *PropertyInfo  `json:"items,omitempty"`      // For arrays
 	Properties  *OrderedObject `json:"properties,omitempty"` // For nested objects
 }
 
@@ -116,12 +116,12 @@ func (o *OrderedObject) MarshalJSON() ([]byte, error) {
 // ConsolidatedRequest represents merged request patterns from multiple matchers.
 // It aggregates all detected request usage patterns into a unified structure.
 type ConsolidatedRequest struct {
-	ContentTypes []string                   `json:"contentTypes"`
-	Body         map[string]*PropertyInfo   `json:"body,omitempty"`
-	Query        map[string]*PropertyInfo   `json:"query,omitempty"`
-	Files        map[string]*PropertyInfo   `json:"files,omitempty"`
-	Methods      []string                   `json:"methods"`
-	Sources      []*RequestUsageSource      `json:"sources"` // Track source patterns
+	ContentTypes []string                 `json:"contentTypes"`
+	Body         map[string]*PropertyInfo `json:"body,omitempty"`
+	Query        map[string]*PropertyInfo `json:"query,omitempty"`
+	Files        map[string]*PropertyInfo `json:"files,omitempty"`
+	Methods      []string                 `json:"methods"`
+	Sources      []*RequestUsageSource    `json:"sources"` // Track source patterns
 }
 
 // RequestUsageSource tracks the origin of request usage patterns for debugging.
@@ -134,10 +134,10 @@ type RequestUsageSource struct {
 
 // PathSegment represents a component of a dot notation path like "user.profile.name".
 type PathSegment struct {
-	Key       string `json:"key"`
-	IsArray   bool   `json:"isArray"`
-	ArrayKey  string `json:"arrayKey,omitempty"` // For associative arrays
-	IsWildcard bool  `json:"isWildcard"`         // For paths like "users.*"
+	Key        string `json:"key"`
+	IsArray    bool   `json:"isArray"`
+	ArrayKey   string `json:"arrayKey,omitempty"` // For associative arrays
+	IsWildcard bool   `json:"isWildcard"`         // For paths like "users.*"
 }
 
 // RequestInfo represents the final shape inference result for a controller method.
@@ -214,7 +214,7 @@ type PropertyMerger interface {
 	MergeProperties(props []*PropertyInfo) (*PropertyInfo, error)
 
 	// ConvertToOrderedObject converts nested map structures to OrderedObject
-	ConvertToOrderedObject(data map[string]interface{}) (*OrderedObject, error)
+	ConvertToOrderedObject(data map[string]any) (*OrderedObject, error)
 }
 
 // ValidationRule represents a rule for validating inferred shapes.
@@ -275,12 +275,12 @@ func DefaultInferenceConfig() *InferenceConfig {
 
 // InferenceStats tracks statistics about the shape inference process.
 type InferenceStats struct {
-	PatternsProcessed   int     `json:"patternsProcessed"`
-	PropertiesInferred  int     `json:"propertiesInferred"`
-	ContentTypesFound   int     `json:"contentTypesFound"`
-	AverageConfidence   float64 `json:"averageConfidence"`
-	ProcessingTimeMs    int64   `json:"processingTimeMs"`
-	ErrorsEncountered   int     `json:"errorsEncountered"`
+	PatternsProcessed  int     `json:"patternsProcessed"`
+	PropertiesInferred int     `json:"propertiesInferred"`
+	ContentTypesFound  int     `json:"contentTypesFound"`
+	AverageConfidence  float64 `json:"averageConfidence"`
+	ProcessingTimeMs   int64   `json:"processingTimeMs"`
+	ErrorsEncountered  int     `json:"errorsEncountered"`
 }
 
 // String returns a human-readable representation of InferenceStats.
@@ -306,10 +306,10 @@ func (o *OrderedObject) AddProperty(key string, prop *PropertyInfo) {
 	if o.Properties == nil {
 		o.Properties = make(map[string]*PropertyInfo)
 	}
-	
+
 	// Add property
 	o.Properties[key] = prop
-	
+
 	// Add to order if not already present
 	for _, existing := range o.Order {
 		if existing == key {
@@ -415,21 +415,21 @@ func (p *PropertyInfo) Clone() *PropertyInfo {
 	if p == nil {
 		return nil
 	}
-	
+
 	clone := &PropertyInfo{
 		Type:        p.Type,
 		Description: p.Description,
 		Format:      p.Format,
 	}
-	
+
 	if p.Items != nil {
 		clone.Items = p.Items.Clone()
 	}
-	
+
 	if p.Properties != nil {
 		clone.Properties = p.Properties.Clone()
 	}
-	
+
 	return clone
 }
 
@@ -438,21 +438,21 @@ func (o *OrderedObject) Clone() *OrderedObject {
 	if o == nil {
 		return nil
 	}
-	
+
 	clone := &OrderedObject{
 		Properties: make(map[string]*PropertyInfo, len(o.Properties)),
 		Required:   make([]string, len(o.Required)),
 		Order:      make([]string, len(o.Order)),
 	}
-	
+
 	// Copy properties
 	for k, v := range o.Properties {
 		clone.Properties[k] = v.Clone()
 	}
-	
+
 	// Copy required and order slices
 	copy(clone.Required, o.Required)
 	copy(clone.Order, o.Order)
-	
+
 	return clone
 }

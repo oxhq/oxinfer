@@ -83,10 +83,10 @@ type SyntaxError struct {
 // Returns formatted syntax error with line and column details.
 func (e *SyntaxError) Error() string {
 	if e.FilePath != "" {
-		return fmt.Sprintf("syntax error in %s at line %d, column %d: %s", 
+		return fmt.Sprintf("syntax error in %s at line %d, column %d: %s",
 			e.FilePath, e.Line, e.Column, e.Message)
 	}
-	return fmt.Sprintf("syntax error at line %d, column %d: %s", 
+	return fmt.Sprintf("syntax error at line %d, column %d: %s",
 		e.Line, e.Column, e.Message)
 }
 
@@ -153,7 +153,7 @@ type TimeoutError struct {
 // Error implements the error interface for timeout errors.
 func (e *TimeoutError) Error() string {
 	if e.FilePath != "" {
-		return fmt.Sprintf("parsing timeout after %dms for %s (%d bytes): %s", 
+		return fmt.Sprintf("parsing timeout after %dms for %s (%d bytes): %s",
 			e.Duration, e.FilePath, e.SizeBytes, e.Message)
 	}
 	return fmt.Sprintf("parsing timeout after %dms: %s", e.Duration, e.Message)
@@ -188,8 +188,8 @@ func IsRecoverableError(err error) bool {
 	var parserErr *ParserError
 	if errors.As(err, &parserErr) {
 		// File not found, invalid content are recoverable
-		return errors.Is(err, ErrInvalidPHPContent) || 
-			   errors.Is(err, ErrContentTooLarge)
+		return errors.Is(err, ErrInvalidPHPContent) ||
+			errors.Is(err, ErrContentTooLarge)
 	}
 
 	// Internal errors and timeouts are not recoverable
@@ -205,7 +205,7 @@ func WrapTreeSitterError(operation string, err error) error {
 		return nil
 	}
 
-	return NewInternalError("tree-sitter", 
+	return NewInternalError("tree-sitter",
 		fmt.Sprintf("%s operation failed", operation), err)
 }
 
@@ -216,6 +216,6 @@ func WrapFileError(filePath, operation string, err error) error {
 		return nil
 	}
 
-	return NewParserErrorWithFile(filePath, 
+	return NewParserErrorWithFile(filePath,
 		fmt.Sprintf("file %s failed", operation), err)
 }

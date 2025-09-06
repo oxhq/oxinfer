@@ -41,38 +41,38 @@ func TestNewAttributeMatcher(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			matcher, err := NewAttributeMatcher(tt.language, tt.config)
-			
+
 			if tt.wantError {
 				if err == nil {
 					t.Errorf("NewAttributeMatcher() expected error, got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("NewAttributeMatcher() unexpected error: %v", err)
 				return
 			}
-			
+
 			if matcher == nil {
 				t.Errorf("NewAttributeMatcher() returned nil matcher")
 				return
 			}
-			
+
 			if !matcher.IsInitialized() {
 				t.Errorf("NewAttributeMatcher() matcher not initialized")
 			}
-			
+
 			if matcher.GetType() != PatternTypeAttribute {
-				t.Errorf("NewAttributeMatcher() wrong pattern type: got %v, want %v", 
+				t.Errorf("NewAttributeMatcher() wrong pattern type: got %v, want %v",
 					matcher.GetType(), PatternTypeAttribute)
 			}
-			
+
 			queries := matcher.GetQueries()
 			if len(queries) == 0 {
 				t.Errorf("NewAttributeMatcher() no queries compiled")
 			}
-			
+
 			// Clean up
 			matcher.Close()
 		})
@@ -104,7 +104,7 @@ class User extends Model {
     }
 }`,
 			wantMatches: 1,
-			debug: true,
+			debug:       true,
 			wantAttributes: []AttributeMatch{
 				{
 					Name:     "full_name",
@@ -161,26 +161,26 @@ class User extends Model {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tree := createAttributeTestSyntaxTree(t, tt.phpCode)
-			
+
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			
+
 			matches, err := matcher.MatchAttributes(ctx, tree, "test.php")
 			if err != nil {
 				t.Errorf("MatchAttributes() error: %v", err)
 				return
 			}
-			
+
 			if len(matches) != tt.wantMatches {
 				t.Errorf("MatchAttributes() got %d matches, want %d", len(matches), tt.wantMatches)
 			}
-			
+
 			for i, wantAttr := range tt.wantAttributes {
 				if i >= len(matches) {
 					t.Errorf("Missing expected match %d", i)
 					continue
 				}
-				
+
 				gotAttr := matches[i]
 				if gotAttr.Name != wantAttr.Name {
 					t.Errorf("Match %d name: got %v, want %v", i, gotAttr.Name, wantAttr.Name)
@@ -301,26 +301,26 @@ class User extends Model {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tree := createAttributeTestSyntaxTree(t, tt.phpCode)
-			
+
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			
+
 			matches, err := matcher.MatchAttributes(ctx, tree, "test.php")
 			if err != nil {
 				t.Errorf("MatchAttributes() error: %v", err)
 				return
 			}
-			
+
 			if len(matches) != tt.wantMatches {
 				t.Errorf("MatchAttributes() got %d matches, want %d", len(matches), tt.wantMatches)
 			}
-			
+
 			for i, wantAttr := range tt.wantAttributes {
 				if i >= len(matches) {
 					t.Errorf("Missing expected match %d", i)
 					continue
 				}
-				
+
 				gotAttr := matches[i]
 				if gotAttr.Name != wantAttr.Name {
 					t.Errorf("Match %d name: got %v, want %v", i, gotAttr.Name, wantAttr.Name)
@@ -338,7 +338,6 @@ class User extends Model {
 		})
 	}
 }
-
 
 func TestAttributeMatcherErrorCases(t *testing.T) {
 	matcher, err := NewAttributeMatcher(php.GetLanguage(), DefaultMatcherConfig())
@@ -368,9 +367,9 @@ func TestAttributeMatcherErrorCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			
+
 			_, err := matcher.Match(ctx, tt.tree, "test.php")
-			
+
 			if tt.wantErr && err == nil {
 				t.Errorf("Match() expected error, got none")
 			}
@@ -396,11 +395,11 @@ class User extends Model {
 }`
 
 	tree := createAttributeTestSyntaxTree(t, phpCode)
-	
+
 	// Create already cancelled context
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	
+
 	_, err = matcher.Match(ctx, tree, "test.php")
 	if err != context.Canceled {
 		t.Errorf("Match() with cancelled context should return context.Canceled, got: %v", err)
@@ -410,7 +409,7 @@ class User extends Model {
 func TestAttributeMatcherDeduplication(t *testing.T) {
 	config := DefaultMatcherConfig()
 	config.DeduplicateMatches = true
-	
+
 	matcher, err := NewAttributeMatcher(php.GetLanguage(), config)
 	if err != nil {
 		t.Fatalf("Failed to create attribute matcher: %v", err)
@@ -427,16 +426,16 @@ class User extends Model {
 `
 
 	tree := createAttributeTestSyntaxTree(t, phpCode)
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
+
 	matches, err := matcher.MatchAttributes(ctx, tree, "test.php")
 	if err != nil {
 		t.Errorf("MatchAttributes() error: %v", err)
 		return
 	}
-	
+
 	// Verify no duplicates
 	seen := make(map[string]bool)
 	for _, match := range matches {
@@ -526,7 +525,7 @@ func TestValidateAttributeMethodCall(t *testing.T) {
 		t.Run(tt.methodName+"_modern_"+modernStr, func(t *testing.T) {
 			got := ValidateAttributeMethodCall(tt.methodName, tt.isModern)
 			if got != tt.want {
-				t.Errorf("ValidateAttributeMethodCall(%v, %v) = %v, want %v", 
+				t.Errorf("ValidateAttributeMethodCall(%v, %v) = %v, want %v",
 					tt.methodName, tt.isModern, got, tt.want)
 			}
 		})
@@ -535,18 +534,18 @@ func TestValidateAttributeMethodCall(t *testing.T) {
 
 func TestGetSupportedAttributePatterns(t *testing.T) {
 	patterns := GetSupportedAttributePatterns()
-	
+
 	if len(patterns) == 0 {
 		t.Error("GetSupportedAttributePatterns() returned empty slice")
 	}
-	
+
 	expectedPatterns := []string{
 		"public function fullName(): Attribute",
 		"return Attribute::make(get: fn ($value) => strtoupper($value))",
 		"public function getFirstNameAttribute($value)",
 		"protected $casts = ['created_at' => 'datetime']",
 	}
-	
+
 	for _, expected := range expectedPatterns {
 		found := false
 		for _, pattern := range patterns {
@@ -563,11 +562,11 @@ func TestGetSupportedAttributePatterns(t *testing.T) {
 
 func TestGetAttributeMethodConventions(t *testing.T) {
 	conventions := GetAttributeMethodConventions()
-	
+
 	if len(conventions) == 0 {
 		t.Error("GetAttributeMethodConventions() returned empty map")
 	}
-	
+
 	expectedKeys := []string{"modern_accessor", "legacy_accessor", "legacy_mutator", "casts"}
 	for _, key := range expectedKeys {
 		if _, exists := conventions[key]; !exists {
@@ -580,12 +579,12 @@ func TestGetAttributeMethodConventions(t *testing.T) {
 func createAttributeTestSyntaxTree(t *testing.T, phpCode string) *parser.SyntaxTree {
 	phpParser := sitter.NewParser()
 	phpParser.SetLanguage(php.GetLanguage())
-	
+
 	tree, err := phpParser.ParseCtx(context.Background(), nil, []byte(phpCode))
 	if err != nil {
 		t.Fatalf("Failed to parse PHP code: %v", err)
 	}
-	
+
 	sourceBytes := []byte(phpCode)
 	return &parser.SyntaxTree{
 		Root:     convertAttributeTestSitterNode(tree.RootNode(), sourceBytes),
@@ -600,7 +599,7 @@ func convertAttributeTestSitterNode(node *sitter.Node, source []byte) *parser.Sy
 	if node == nil {
 		return nil
 	}
-	
+
 	syntaxNode := &parser.SyntaxNode{
 		Type:       node.Type(),
 		Text:       string(node.Content(source)),
@@ -610,7 +609,7 @@ func convertAttributeTestSitterNode(node *sitter.Node, source []byte) *parser.Sy
 		EndPoint:   parser.Point{Row: int(node.EndPoint().Row), Column: int(node.EndPoint().Column)},
 		Children:   make([]*parser.SyntaxNode, 0, int(node.ChildCount())),
 	}
-	
+
 	for i := uint32(0); i < node.ChildCount(); i++ {
 		child := convertAttributeTestSitterNode(node.Child(int(i)), source)
 		if child != nil {
@@ -618,6 +617,6 @@ func convertAttributeTestSitterNode(node *sitter.Node, source []byte) *parser.Sy
 			syntaxNode.Children = append(syntaxNode.Children, child)
 		}
 	}
-	
+
 	return syntaxNode
 }

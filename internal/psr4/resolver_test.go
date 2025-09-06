@@ -64,7 +64,7 @@ func TestNewPathResolver(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var baseDir string
 			var cleanup func()
-			
+
 			if tt.setupFunc != nil {
 				baseDir, cleanup = tt.setupFunc()
 				defer cleanup()
@@ -108,10 +108,10 @@ func TestNewPathResolver_Symlinks(t *testing.T) {
 	}
 
 	tests := []struct {
-		name        string
-		setupFunc   func() (string, func(), error) // returns symlink path, cleanup, error
-		wantError   bool
-		errorMsg    string
+		name          string
+		setupFunc     func() (string, func(), error) // returns symlink path, cleanup, error
+		wantError     bool
+		errorMsg      string
 		expectResolve bool // whether symlink should be resolved
 	}{
 		{
@@ -121,18 +121,18 @@ func TestNewPathResolver_Symlinks(t *testing.T) {
 				if err != nil {
 					return "", nil, err
 				}
-				
+
 				symlinkPath := filepath.Join(symlinkDir, "linked")
 				err = os.Symlink(realDir, symlinkPath)
 				if err != nil {
 					os.RemoveAll(symlinkDir)
 					return "", nil, err
 				}
-				
+
 				cleanup := func() { os.RemoveAll(symlinkDir) }
 				return symlinkPath, cleanup, nil
 			},
-			wantError: false,
+			wantError:     false,
 			expectResolve: true,
 		},
 		{
@@ -142,7 +142,7 @@ func TestNewPathResolver_Symlinks(t *testing.T) {
 				if err != nil {
 					return "", nil, err
 				}
-				
+
 				nonExistentTarget := filepath.Join(symlinkDir, "nonexistent")
 				symlinkPath := filepath.Join(symlinkDir, "broken-link")
 				err = os.Symlink(nonExistentTarget, symlinkPath)
@@ -150,12 +150,12 @@ func TestNewPathResolver_Symlinks(t *testing.T) {
 					os.RemoveAll(symlinkDir)
 					return "", nil, err
 				}
-				
+
 				cleanup := func() { os.RemoveAll(symlinkDir) }
 				return symlinkPath, cleanup, nil
 			},
 			wantError: true,
-			errorMsg: "failed to resolve symlinks",
+			errorMsg:  "failed to resolve symlinks",
 		},
 		{
 			name: "circular symlink",
@@ -164,10 +164,10 @@ func TestNewPathResolver_Symlinks(t *testing.T) {
 				if err != nil {
 					return "", nil, err
 				}
-				
+
 				link1 := filepath.Join(symlinkDir, "link1")
 				link2 := filepath.Join(symlinkDir, "link2")
-				
+
 				// Create circular symlinks: link1 -> link2, link2 -> link1
 				if err = os.Symlink(link2, link1); err != nil {
 					os.RemoveAll(symlinkDir)
@@ -177,12 +177,12 @@ func TestNewPathResolver_Symlinks(t *testing.T) {
 					os.RemoveAll(symlinkDir)
 					return "", nil, err
 				}
-				
+
 				cleanup := func() { os.RemoveAll(symlinkDir) }
 				return link1, cleanup, nil
 			},
 			wantError: true,
-			errorMsg: "failed to resolve symlinks",
+			errorMsg:  "failed to resolve symlinks",
 		},
 		{
 			name: "symlink to file instead of directory",
@@ -191,26 +191,26 @@ func TestNewPathResolver_Symlinks(t *testing.T) {
 				if err != nil {
 					return "", nil, err
 				}
-				
+
 				// Create a file and symlink to it
 				tempFile := filepath.Join(symlinkDir, "target.txt")
 				if err := os.WriteFile(tempFile, []byte("test"), 0644); err != nil {
 					os.RemoveAll(symlinkDir)
 					return "", nil, err
 				}
-				
+
 				symlinkPath := filepath.Join(symlinkDir, "file-link")
 				err = os.Symlink(tempFile, symlinkPath)
 				if err != nil {
 					os.RemoveAll(symlinkDir)
 					return "", nil, err
 				}
-				
+
 				cleanup := func() { os.RemoveAll(symlinkDir) }
 				return symlinkPath, cleanup, nil
 			},
 			wantError: true,
-			errorMsg: "base directory is not a directory",
+			errorMsg:  "base directory is not a directory",
 		},
 		{
 			name: "deeply nested symlink resolution",
@@ -219,12 +219,12 @@ func TestNewPathResolver_Symlinks(t *testing.T) {
 				if err != nil {
 					return "", nil, err
 				}
-				
+
 				// Create chain: realDir <- link1 <- link2 <- link3
 				link1 := filepath.Join(symlinkDir, "link1")
-				link2 := filepath.Join(symlinkDir, "link2") 
+				link2 := filepath.Join(symlinkDir, "link2")
 				link3 := filepath.Join(symlinkDir, "link3")
-				
+
 				if err = os.Symlink(realDir, link1); err != nil {
 					os.RemoveAll(symlinkDir)
 					return "", nil, err
@@ -237,11 +237,11 @@ func TestNewPathResolver_Symlinks(t *testing.T) {
 					os.RemoveAll(symlinkDir)
 					return "", nil, err
 				}
-				
+
 				cleanup := func() { os.RemoveAll(symlinkDir) }
 				return link3, cleanup, nil
 			},
-			wantError: false,
+			wantError:     false,
 			expectResolve: true,
 		},
 	}
@@ -284,7 +284,7 @@ func TestNewPathResolver_Symlinks(t *testing.T) {
 				ctx := context.Background()
 				candidates := []string{"test.php"}
 				resolvedPath, err := resolver.ResolvePath(ctx, candidates, "")
-				
+
 				if err != nil {
 					t.Errorf("Failed to resolve test file: %v", err)
 					return
@@ -292,14 +292,14 @@ func TestNewPathResolver_Symlinks(t *testing.T) {
 
 				// The resolved path should point to the real directory, not the symlink
 				expectedPath := filepath.Join(realDir, "test.php")
-				
+
 				// Resolve expected path symlinks for comparison (handles macOS /private differences)
 				expectedResolved, err := filepath.EvalSymlinks(expectedPath)
 				if err != nil {
 					t.Errorf("Failed to resolve expected path symlinks: %v", err)
 					return
 				}
-				
+
 				if resolvedPath != expectedResolved {
 					t.Errorf("Expected resolved path %s to be %s", resolvedPath, expectedResolved)
 				}
@@ -307,7 +307,7 @@ func TestNewPathResolver_Symlinks(t *testing.T) {
 				// Verify the symlink was actually resolved by checking that the base directory
 				// is the real directory, not the symlink directory
 				if strings.Contains(resolvedPath, filepath.Base(symlinkPath)) {
-					t.Errorf("Resolved path %s still contains symlink component %s", 
+					t.Errorf("Resolved path %s still contains symlink component %s",
 						resolvedPath, filepath.Base(symlinkPath))
 				}
 			}
@@ -358,7 +358,7 @@ func TestPathResolver_ResolvePath_Symlinks(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	
+
 	tests := []struct {
 		name       string
 		candidates []string
@@ -392,7 +392,7 @@ func TestPathResolver_ResolvePath_Symlinks(t *testing.T) {
 				// Test custom base directory through symlink
 				customBase = filepath.Join(symlinkPath, "app")
 			}
-			
+
 			resolvedPath, err := resolver.ResolvePath(ctx, tt.candidates, customBase)
 
 			if tt.wantError {
@@ -409,14 +409,14 @@ func TestPathResolver_ResolvePath_Symlinks(t *testing.T) {
 
 			// Verify the resolved path points to the real directory, not symlink
 			expectedPath := filepath.Join(realDir, tt.wantFile)
-			
+
 			// Resolve expected path symlinks for comparison (handles macOS /private differences)
 			expectedResolved, err := filepath.EvalSymlinks(expectedPath)
 			if err != nil {
 				t.Errorf("Failed to resolve expected path symlinks: %v", err)
 				return
 			}
-			
+
 			if resolvedPath != expectedResolved {
 				t.Errorf("ResolvePath() = %v, want %v", resolvedPath, expectedResolved)
 			}
@@ -428,7 +428,7 @@ func TestPathResolver_ResolvePath_Symlinks(t *testing.T) {
 
 			// Verify symlink was resolved (path should not contain symlink component)
 			if strings.Contains(resolvedPath, filepath.Base(symlinkPath)) {
-				t.Errorf("Resolved path %s still contains symlink component %s", 
+				t.Errorf("Resolved path %s still contains symlink component %s",
 					resolvedPath, filepath.Base(symlinkPath))
 			}
 		})
@@ -465,7 +465,7 @@ func TestPathResolver_ResolvePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create resolver: %v", err)
 	}
-	
+
 	// Get the resolved tempDir for accurate test expectations
 	resolvedTempDir, err := filepath.EvalSymlinks(tempDir)
 	if err != nil {
@@ -534,7 +534,7 @@ func TestPathResolver_ResolvePath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			
+
 			gotPath, err := resolver.ResolvePath(ctx, tt.candidates, tt.baseDir)
 
 			if tt.wantError {
@@ -542,7 +542,7 @@ func TestPathResolver_ResolvePath(t *testing.T) {
 					t.Errorf("ResolvePath() expected error but got none")
 					return
 				}
-				
+
 				if tt.errorType == "ResolutionError" {
 					if _, ok := err.(*ResolutionError); !ok {
 						t.Errorf("ResolvePath() expected ResolutionError, got %T", err)
@@ -563,7 +563,7 @@ func TestPathResolver_ResolvePath(t *testing.T) {
 					expectedResolved = resolved
 				}
 			}
-			
+
 			if gotPath != expectedResolved {
 				t.Errorf("ResolvePath() = %v, want %v", gotPath, expectedResolved)
 			}
@@ -621,7 +621,7 @@ func TestPathResolver_ResolvePath_Timeout(t *testing.T) {
 	// Create a context with a very short timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
 	defer cancel()
-	
+
 	// Give context time to expire
 	time.Sleep(1 * time.Millisecond)
 
@@ -723,7 +723,7 @@ func TestPathResolver_PathSecurity(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	
+
 	// Test various path traversal attempts
 	maliciousCandidates := [][]string{
 		{"../../../etc/passwd"},
@@ -738,7 +738,7 @@ func TestPathResolver_PathSecurity(t *testing.T) {
 	for i, candidates := range maliciousCandidates {
 		t.Run(fmt.Sprintf("path_traversal_%d", i), func(t *testing.T) {
 			_, err := resolver.ResolvePath(ctx, candidates, "")
-			
+
 			if err == nil {
 				t.Errorf("ResolvePath() should reject path traversal attempt: %v", candidates)
 				return
@@ -807,7 +807,7 @@ func TestPathResolver_CrossPlatformPaths(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			resolvedPath, err := resolver.ResolvePath(ctx, tt.candidates, "")
-			
+
 			if tt.wantExists {
 				if err != nil {
 					t.Errorf("ResolvePath() unexpected error: %v", err)

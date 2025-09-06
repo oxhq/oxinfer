@@ -21,18 +21,18 @@ func TestPolymorphicPatternsEndToEnd(t *testing.T) {
 	defer os.Remove(cliPath)
 
 	// Create comprehensive test manifest with polymorphic features enabled
-	testManifest := map[string]interface{}{
-		"project": map[string]interface{}{
+	testManifest := map[string]any{
+		"project": map[string]any{
 			"root":     "../../",
 			"composer": "go.mod",
 		},
-		"scan": map[string]interface{}{
+		"scan": map[string]any{
 			"targets": []string{"test/fixtures/matchers"},
 		},
-		"features": map[string]interface{}{
+		"features": map[string]any{
 			"polymorphic": true,
 		},
-		"limits": map[string]interface{}{
+		"limits": map[string]any{
 			"max_depth": 5, // Allow deeper traversal for complex polymorphic chains
 		},
 	}
@@ -71,7 +71,7 @@ func TestPolymorphicPatternsEndToEnd(t *testing.T) {
 		t.Fatal("CLI produced no output")
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal([]byte(output), &result); err != nil {
 		t.Fatalf("Output is not valid JSON: %v\nOutput: %s", err, output)
 	}
@@ -99,8 +99,8 @@ func TestPolymorphicPatternsEndToEnd(t *testing.T) {
 }
 
 // validatePolymorphicStructure validates the basic structure of polymorphic output
-func validatePolymorphicStructure(t *testing.T, result map[string]interface{}) {
-	polymorphicArray, ok := result["polymorphic"].([]interface{})
+func validatePolymorphicStructure(t *testing.T, result map[string]any) {
+	polymorphicArray, ok := result["polymorphic"].([]any)
 	if !ok {
 		t.Fatal("Polymorphic array not found or not an array")
 	}
@@ -111,8 +111,8 @@ func validatePolymorphicStructure(t *testing.T, result map[string]interface{}) {
 	}
 
 	// Validate structure of first polymorphic relationship
-	polymorph := polymorphicArray[0].(map[string]interface{})
-	
+	polymorph := polymorphicArray[0].(map[string]any)
+
 	requiredFields := []string{"parent", "morph", "discriminator"}
 	for _, field := range requiredFields {
 		if _, exists := polymorph[field]; !exists {
@@ -121,7 +121,7 @@ func validatePolymorphicStructure(t *testing.T, result map[string]interface{}) {
 	}
 
 	// Validate discriminator structure
-	if discriminator, exists := polymorph["discriminator"].(map[string]interface{}); exists {
+	if discriminator, exists := polymorph["discriminator"].(map[string]any); exists {
 		if _, hasPropName := discriminator["propertyName"]; !hasPropName {
 			t.Error("Discriminator missing 'propertyName' field")
 		}
@@ -131,7 +131,7 @@ func validatePolymorphicStructure(t *testing.T, result map[string]interface{}) {
 	}
 
 	// Validate morph structure
-	if morph, exists := polymorph["morph"].(map[string]interface{}); exists {
+	if morph, exists := polymorph["morph"].(map[string]any); exists {
 		if _, hasKey := morph["key"]; !hasKey {
 			t.Error("Morph missing 'key' field")
 		}
@@ -146,21 +146,21 @@ func validatePolymorphicStructure(t *testing.T, result map[string]interface{}) {
 }
 
 // validateMorphRelationships validates different types of polymorphic relationships
-func validateMorphRelationships(t *testing.T, result map[string]interface{}) {
-	polymorphicArray, ok := result["polymorphic"].([]interface{})
+func validateMorphRelationships(t *testing.T, result map[string]any) {
+	polymorphicArray, ok := result["polymorphic"].([]any)
 	if !ok || len(polymorphicArray) == 0 {
 		t.Log("No polymorphic relationships to validate")
 		return
 	}
 
 	foundRelationshipTypes := make(map[string]bool)
-	
+
 	for _, item := range polymorphicArray {
-		polymorph := item.(map[string]interface{})
-		
+		polymorph := item.(map[string]any)
+
 		if kind, exists := polymorph["kind"].(string); exists {
 			foundRelationshipTypes[kind] = true
-			
+
 			// Validate specific relationship patterns
 			switch kind {
 			case "morphTo":
@@ -185,17 +185,17 @@ func validateMorphRelationships(t *testing.T, result map[string]interface{}) {
 }
 
 // validateMorphToRelationship validates morphTo inverse polymorphic relationships
-func validateMorphToRelationship(t *testing.T, polymorph map[string]interface{}) {
+func validateMorphToRelationship(t *testing.T, polymorph map[string]any) {
 	// MorphTo should have multiple possible target types
-	if to, exists := polymorph["to"].(map[string]interface{}); exists {
-		if types, hasTypes := to["types"].([]interface{}); hasTypes {
+	if to, exists := polymorph["to"].(map[string]any); exists {
+		if types, hasTypes := to["types"].([]any); hasTypes {
 			if len(types) == 0 {
 				t.Error("MorphTo relationship should have target types")
 			}
-			
+
 			// Validate each target type structure
 			for _, typeItem := range types {
-				if typeMap, ok := typeItem.(map[string]interface{}); ok {
+				if typeMap, ok := typeItem.(map[string]any); ok {
 					if _, hasAlias := typeMap["alias"]; !hasAlias {
 						t.Error("MorphTo target type missing 'alias' field")
 					}
@@ -208,7 +208,7 @@ func validateMorphToRelationship(t *testing.T, polymorph map[string]interface{})
 	}
 
 	// Validate discriminator columns are present
-	if discriminator, exists := polymorph["discriminator"].(map[string]interface{}); exists {
+	if discriminator, exists := polymorph["discriminator"].(map[string]any); exists {
 		if typeCol, hasTypeCol := discriminator["typeColumn"].(string); hasTypeCol {
 			if typeCol == "" {
 				t.Error("MorphTo typeColumn should not be empty")
@@ -223,9 +223,9 @@ func validateMorphToRelationship(t *testing.T, polymorph map[string]interface{})
 }
 
 // validateMorphOneRelationship validates morphOne polymorphic relationships
-func validateMorphOneRelationship(t *testing.T, polymorph map[string]interface{}) {
+func validateMorphOneRelationship(t *testing.T, polymorph map[string]any) {
 	// MorphOne should specify the target model
-	if to, exists := polymorph["to"].(map[string]interface{}); exists {
+	if to, exists := polymorph["to"].(map[string]any); exists {
 		if model, hasModel := to["model"].(string); hasModel {
 			if model == "" {
 				t.Error("MorphOne relationship should specify target model")
@@ -242,9 +242,9 @@ func validateMorphOneRelationship(t *testing.T, polymorph map[string]interface{}
 }
 
 // validateMorphManyRelationship validates morphMany polymorphic relationships
-func validateMorphManyRelationship(t *testing.T, polymorph map[string]interface{}) {
+func validateMorphManyRelationship(t *testing.T, polymorph map[string]any) {
 	// MorphMany should specify the target model
-	if to, exists := polymorph["to"].(map[string]interface{}); exists {
+	if to, exists := polymorph["to"].(map[string]any); exists {
 		if model, hasModel := to["model"].(string); hasModel {
 			if model == "" {
 				t.Error("MorphMany relationship should specify target model")
@@ -260,10 +260,10 @@ func validateMorphManyRelationship(t *testing.T, polymorph map[string]interface{
 }
 
 // validateMorphToManyRelationship validates morphToMany polymorphic relationships
-func validateMorphToManyRelationship(t *testing.T, polymorph map[string]interface{}) {
+func validateMorphToManyRelationship(t *testing.T, polymorph map[string]any) {
 	// MorphToMany should have pivot table information
 	if pivotInfo, exists := polymorph["pivot"]; exists {
-		if pivot, ok := pivotInfo.(map[string]interface{}); ok {
+		if pivot, ok := pivotInfo.(map[string]any); ok {
 			if _, hasTable := pivot["table"]; !hasTable {
 				t.Error("MorphToMany relationship missing pivot table information")
 			}
@@ -272,8 +272,8 @@ func validateMorphToManyRelationship(t *testing.T, polymorph map[string]interfac
 }
 
 // validateDiscriminatorMappings validates global morph map definitions
-func validateDiscriminatorMappings(t *testing.T, result map[string]interface{}) {
-	polymorphicArray, ok := result["polymorphic"].([]interface{})
+func validateDiscriminatorMappings(t *testing.T, result map[string]any) {
+	polymorphicArray, ok := result["polymorphic"].([]any)
 	if !ok || len(polymorphicArray) == 0 {
 		t.Log("No polymorphic relationships to validate discriminator mappings for")
 		return
@@ -284,10 +284,10 @@ func validateDiscriminatorMappings(t *testing.T, result map[string]interface{}) 
 
 	// Look for global morph map definitions
 	for _, item := range polymorphicArray {
-		polymorph := item.(map[string]interface{})
-		
+		polymorph := item.(map[string]any)
+
 		if mappings, exists := polymorph["globalMorphMap"]; exists {
-			if mappingMap, ok := mappings.(map[string]interface{}); ok {
+			if mappingMap, ok := mappings.(map[string]any); ok {
 				globalMappings = make(map[string]string)
 				for alias, model := range mappingMap {
 					if modelStr, isStr := model.(string); isStr {
@@ -301,9 +301,9 @@ func validateDiscriminatorMappings(t *testing.T, result map[string]interface{}) 
 
 	if foundMappings > 0 {
 		t.Logf("Found %d global morph map definitions", foundMappings)
-		
+
 		// Validate mapping consistency
-		if globalMappings != nil && len(globalMappings) > 0 {
+		if len(globalMappings) > 0 {
 			for alias, model := range globalMappings {
 				if alias == "" {
 					t.Error("Global morph map contains empty alias")
@@ -322,8 +322,8 @@ func validateDiscriminatorMappings(t *testing.T, result map[string]interface{}) 
 }
 
 // validatePolymorphicChains validates complex polymorphic relationship chains
-func validatePolymorphicChains(t *testing.T, result map[string]interface{}) {
-	polymorphicArray, ok := result["polymorphic"].([]interface{})
+func validatePolymorphicChains(t *testing.T, result map[string]any) {
+	polymorphicArray, ok := result["polymorphic"].([]any)
 	if !ok || len(polymorphicArray) == 0 {
 		t.Log("No polymorphic chains to validate")
 		return
@@ -333,8 +333,8 @@ func validatePolymorphicChains(t *testing.T, result map[string]interface{}) {
 	maxDepth := 0
 
 	for _, item := range polymorphicArray {
-		polymorph := item.(map[string]interface{})
-		
+		polymorph := item.(map[string]any)
+
 		// Check if this relationship has depth information
 		if depth, exists := polymorph["depth"].(float64); exists {
 			depthInt := int(depth)
@@ -346,13 +346,13 @@ func validatePolymorphicChains(t *testing.T, result map[string]interface{}) {
 
 		// Look for chain references
 		if chain, exists := polymorph["chain"]; exists {
-			if chainSlice, ok := chain.([]interface{}); ok {
+			if chainSlice, ok := chain.([]any); ok {
 				chainLength := len(chainSlice)
 				t.Logf("Found polymorphic chain of length %d", chainLength)
-				
+
 				// Validate each step in the chain
 				for i, step := range chainSlice {
-					if stepMap, isMap := step.(map[string]interface{}); isMap {
+					if stepMap, isMap := step.(map[string]any); isMap {
 						if _, hasModel := stepMap["model"]; !hasModel {
 							t.Errorf("Chain step %d missing model information", i)
 						}
@@ -376,31 +376,31 @@ func validatePolymorphicChains(t *testing.T, result map[string]interface{}) {
 }
 
 // validateIntegrationWithOtherPatterns validates polymorphic patterns work with other matchers
-func validateIntegrationWithOtherPatterns(t *testing.T, result map[string]interface{}) {
+func validateIntegrationWithOtherPatterns(t *testing.T, result map[string]any) {
 	// Check that other pattern types are also detected alongside polymorphic patterns
 	patternTypes := []string{"controllers", "models", "pivots", "scopes", "attributes", "broadcast"}
-	
+
 	foundPatterns := make(map[string]int)
 	for _, patternType := range patternTypes {
 		if patterns, exists := result[patternType]; exists {
-			if patternSlice, ok := patterns.([]interface{}); ok {
+			if patternSlice, ok := patterns.([]any); ok {
 				foundPatterns[patternType] = len(patternSlice)
 			}
 		}
 	}
 
 	// Look for cross-references between polymorphic and other patterns
-	polymorphicArray, ok := result["polymorphic"].([]interface{})
+	polymorphicArray, ok := result["polymorphic"].([]any)
 	if !ok || len(polymorphicArray) == 0 {
 		return
 	}
 
 	// Check if models referenced in polymorphic relationships appear in models array
-	modelsArray, hasModels := result["models"].([]interface{})
+	modelsArray, hasModels := result["models"].([]any)
 	if hasModels {
 		modelNames := make(map[string]bool)
 		for _, model := range modelsArray {
-			if modelMap, ok := model.(map[string]interface{}); ok {
+			if modelMap, ok := model.(map[string]any); ok {
 				if name, hasName := modelMap["name"].(string); hasName {
 					modelNames[name] = true
 				}
@@ -409,9 +409,9 @@ func validateIntegrationWithOtherPatterns(t *testing.T, result map[string]interf
 
 		// Verify polymorphic relationships reference valid models
 		for _, item := range polymorphicArray {
-			polymorph := item.(map[string]interface{})
-			
-			if from, exists := polymorph["from"].(map[string]interface{}); exists {
+			polymorph := item.(map[string]any)
+
+			if from, exists := polymorph["from"].(map[string]any); exists {
 				if name, hasName := from["name"].(string); hasName {
 					if !modelNames[name] && len(modelNames) > 0 {
 						t.Logf("Polymorphic relationship references model '%s' not found in models array", name)
@@ -419,10 +419,10 @@ func validateIntegrationWithOtherPatterns(t *testing.T, result map[string]interf
 				}
 			}
 
-			if to, exists := polymorph["to"].(map[string]interface{}); exists {
-				if types, hasTypes := to["types"].([]interface{}); hasTypes {
+			if to, exists := polymorph["to"].(map[string]any); exists {
+				if types, hasTypes := to["types"].([]any); hasTypes {
 					for _, typeItem := range types {
-						if typeMap, ok := typeItem.(map[string]interface{}); ok {
+						if typeMap, ok := typeItem.(map[string]any); ok {
 							if model, hasModel := typeMap["model"].(string); hasModel {
 								modelName := extractModelName(model)
 								if !modelNames[modelName] && len(modelNames) > 0 {
@@ -458,15 +458,15 @@ func TestPolymorphicDeterministicOutput(t *testing.T) {
 	defer os.Remove(cliPath)
 
 	// Create test manifest
-	testManifest := map[string]interface{}{
-		"project": map[string]interface{}{
+	testManifest := map[string]any{
+		"project": map[string]any{
 			"root":     "../../",
 			"composer": "go.mod",
 		},
-		"scan": map[string]interface{}{
+		"scan": map[string]any{
 			"targets": []string{"test/fixtures/matchers/polymorphic"},
 		},
-		"features": map[string]interface{}{
+		"features": map[string]any{
 			"polymorphic": true,
 		},
 	}
@@ -508,16 +508,16 @@ func TestPolymorphicDeterministicOutput(t *testing.T) {
 	for i := 1; i < numRuns; i++ {
 		if hashes[i] != hashes[0] {
 			t.Errorf("Run %d produced different output than run 0", i)
-			
+
 			// Parse and compare JSON structures to identify differences
-			var result0, resultI map[string]interface{}
+			var result0, resultI map[string]any
 			json.Unmarshal([]byte(outputs[0]), &result0)
 			json.Unmarshal([]byte(outputs[i]), &resultI)
-			
+
 			// Compare polymorphic arrays specifically
 			if comparePolymorphicArrays(result0, resultI) {
 				t.Log("Polymorphic arrays are structurally identical despite hash difference (likely timestamp)")
-				
+
 				// Debug: print the first few characters of each output to identify differences
 				t.Logf("Output 0 (first 200 chars): %s", truncateString(outputs[0], 200))
 				t.Logf("Output %d (first 200 chars): %s", i, truncateString(outputs[i], 200))
@@ -535,27 +535,27 @@ func TestPolymorphicDeterministicOutput(t *testing.T) {
 }
 
 // comparePolymorphicArrays compares two polymorphic arrays ignoring order and timestamps
-func comparePolymorphicArrays(result1, result2 map[string]interface{}) bool {
-	poly1, ok1 := result1["polymorphic"].([]interface{})
-	poly2, ok2 := result2["polymorphic"].([]interface{})
-	
+func comparePolymorphicArrays(result1, result2 map[string]any) bool {
+	poly1, ok1 := result1["polymorphic"].([]any)
+	poly2, ok2 := result2["polymorphic"].([]any)
+
 	if !ok1 || !ok2 {
 		return ok1 == ok2 // Both should be missing or both present
 	}
-	
+
 	if len(poly1) != len(poly2) {
 		return false
 	}
-	
+
 	// Convert to normalized strings and sort for comparison
-	normalize := func(items []interface{}) []string {
+	normalize := func(items []any) []string {
 		var normalized []string
 		for _, item := range items {
-			if itemMap, ok := item.(map[string]interface{}); ok {
+			if itemMap, ok := item.(map[string]any); ok {
 				// Remove any timestamp fields before comparison
 				delete(itemMap, "timestamp")
 				delete(itemMap, "discoveredAt")
-				
+
 				bytes, _ := json.Marshal(itemMap)
 				normalized = append(normalized, string(bytes))
 			}
@@ -563,20 +563,20 @@ func comparePolymorphicArrays(result1, result2 map[string]interface{}) bool {
 		sort.Strings(normalized)
 		return normalized
 	}
-	
+
 	norm1 := normalize(poly1)
 	norm2 := normalize(poly2)
-	
+
 	if len(norm1) != len(norm2) {
 		return false
 	}
-	
+
 	for i := range norm1 {
 		if norm1[i] != norm2[i] {
 			return false
 		}
 	}
-	
+
 	return true
 }
 
@@ -595,20 +595,20 @@ func TestPolymorphicPerformanceBenchmark(t *testing.T) {
 	defer os.Remove(cliPath)
 
 	// Create performance test manifest
-	testManifest := map[string]interface{}{
-		"project": map[string]interface{}{
+	testManifest := map[string]any{
+		"project": map[string]any{
 			"root":     "../../",
 			"composer": "go.mod",
 		},
-		"scan": map[string]interface{}{
+		"scan": map[string]any{
 			"targets": []string{"test/fixtures/matchers"},
 		},
-		"features": map[string]interface{}{
-			"polymorphic": true,
-			"http_status": true,
+		"features": map[string]any{
+			"polymorphic":    true,
+			"http_status":    true,
 			"resource_usage": true,
-			"with_pivot": true,
-			"scopes_used": true,
+			"with_pivot":     true,
+			"scopes_used":    true,
 			"attribute_make": true,
 		},
 	}
@@ -644,7 +644,7 @@ func TestPolymorphicPerformanceBenchmark(t *testing.T) {
 
 		// Validate that we got reasonable output
 		output := stdout.String()
-		var result map[string]interface{}
+		var result map[string]any
 		if err := json.Unmarshal([]byte(output), &result); err != nil {
 			t.Fatalf("Invalid JSON output in performance run %d", i)
 		}
@@ -732,15 +732,15 @@ class BadModel extends Model
 	}
 
 	// Create test manifest pointing to malformed directory
-	testManifest := map[string]interface{}{
-		"project": map[string]interface{}{
+	testManifest := map[string]any{
+		"project": map[string]any{
 			"root":     tempDir,
 			"composer": "composer.json",
 		},
-		"scan": map[string]interface{}{
+		"scan": map[string]any{
 			"targets": []string{"malformed"},
 		},
-		"features": map[string]interface{}{
+		"features": map[string]any{
 			"polymorphic": true,
 		},
 	}
@@ -768,7 +768,7 @@ class BadModel extends Model
 	cmd.Stderr = &stderr
 
 	err = cmd.Run()
-	
+
 	// CLI should not crash on malformed patterns
 	if err != nil {
 		// Check if it's a parsing error or other expected error
@@ -786,13 +786,13 @@ class BadModel extends Model
 	// If CLI succeeded, check that output is valid JSON
 	output := stdout.String()
 	if output != "" {
-		var result map[string]interface{}
+		var result map[string]any
 		if err := json.Unmarshal([]byte(output), &result); err != nil {
 			t.Errorf("CLI produced invalid JSON despite malformed input: %v", err)
 		} else {
 			// Check that polymorphic array exists and is valid (even if empty)
 			if polymorphic, exists := result["polymorphic"]; exists {
-				if _, isArray := polymorphic.([]interface{}); !isArray {
+				if _, isArray := polymorphic.([]any); !isArray {
 					t.Error("Polymorphic field should be an array even with malformed input")
 				}
 			}
@@ -806,10 +806,10 @@ func TestPolymorphicFeatureFlagHandling(t *testing.T) {
 	defer os.Remove(cliPath)
 
 	testCases := []struct {
-		name                string
-		polymorphicEnabled  interface{}
-		expectPolymorphic   bool
-		description         string
+		name               string
+		polymorphicEnabled any
+		expectPolymorphic  bool
+		description        string
 	}{
 		{
 			name:               "polymorphic_enabled_true",
@@ -834,19 +834,19 @@ func TestPolymorphicFeatureFlagHandling(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create test manifest
-			testManifest := map[string]interface{}{
-				"project": map[string]interface{}{
+			testManifest := map[string]any{
+				"project": map[string]any{
 					"root":     "../../",
 					"composer": "go.mod",
 				},
-				"scan": map[string]interface{}{
+				"scan": map[string]any{
 					"targets": []string{"test/fixtures/matchers/polymorphic"},
 				},
 			}
 
 			// Add features section if needed
 			if tc.polymorphicEnabled != nil {
-				testManifest["features"] = map[string]interface{}{
+				testManifest["features"] = map[string]any{
 					"polymorphic": tc.polymorphicEnabled,
 				}
 			}
@@ -873,14 +873,14 @@ func TestPolymorphicFeatureFlagHandling(t *testing.T) {
 
 			// Parse output
 			output := stdout.String()
-			var result map[string]interface{}
+			var result map[string]any
 			if err := json.Unmarshal([]byte(output), &result); err != nil {
 				t.Fatalf("Invalid JSON output: %v", err)
 			}
 
 			// Check polymorphic array
-			polymorphicArray, hasPolymorphic := result["polymorphic"].([]interface{})
-			
+			polymorphicArray, hasPolymorphic := result["polymorphic"].([]any)
+
 			if tc.expectPolymorphic {
 				if !hasPolymorphic {
 					t.Error("Expected polymorphic array to exist when feature is enabled")
@@ -904,15 +904,15 @@ func TestPolymorphicGoldenFileComparison(t *testing.T) {
 	defer os.Remove(cliPath)
 
 	// Create test manifest
-	testManifest := map[string]interface{}{
-		"project": map[string]interface{}{
+	testManifest := map[string]any{
+		"project": map[string]any{
 			"root":     "../../",
 			"composer": "go.mod",
 		},
-		"scan": map[string]interface{}{
+		"scan": map[string]any{
 			"targets": []string{"test/fixtures/matchers/polymorphic"},
 		},
-		"features": map[string]interface{}{
+		"features": map[string]any{
 			"polymorphic": true,
 		},
 	}
@@ -945,9 +945,9 @@ func TestPolymorphicGoldenFileComparison(t *testing.T) {
 		// Golden file doesn't exist - create it for future comparisons
 		t.Logf("Golden file not found at %s", goldenFilePath)
 		t.Log("Current output can be used as baseline for future comparisons")
-		
+
 		// Validate that current output is well-formed JSON
-		var result map[string]interface{}
+		var result map[string]any
 		if err := json.Unmarshal([]byte(output), &result); err != nil {
 			t.Errorf("Output is not valid JSON: %v", err)
 		}
@@ -961,7 +961,7 @@ func TestPolymorphicGoldenFileComparison(t *testing.T) {
 	}
 
 	// Parse both outputs
-	var currentResult, goldenResult map[string]interface{}
+	var currentResult, goldenResult map[string]any
 	if err := json.Unmarshal([]byte(output), &currentResult); err != nil {
 		t.Fatalf("Current output is not valid JSON: %v", err)
 	}
@@ -980,29 +980,29 @@ func TestPolymorphicGoldenFileComparison(t *testing.T) {
 
 // calculateCanonicalHash creates a deterministic hash of JSON output by excluding volatile fields
 func calculateCanonicalHash(jsonOutput string) string {
-	var data map[string]interface{}
+	var data map[string]any
 	if err := json.Unmarshal([]byte(jsonOutput), &data); err != nil {
 		// If JSON parsing fails, fall back to raw hash
 		return fmt.Sprintf("%x", sha256.Sum256([]byte(jsonOutput)))
 	}
-	
+
 	// Exclude volatile fields from meta
-	if meta, exists := data["meta"].(map[string]interface{}); exists {
-		if stats, exists := meta["stats"].(map[string]interface{}); exists {
+	if meta, exists := data["meta"].(map[string]any); exists {
+		if stats, exists := meta["stats"].(map[string]any); exists {
 			// Remove timing-related fields
 			delete(stats, "durationMs")
 		}
 		// Remove timestamp field
 		delete(meta, "generatedAt")
 	}
-	
+
 	// Re-marshal and hash
 	canonical, err := json.Marshal(data)
 	if err != nil {
 		// If re-marshaling fails, fall back to raw hash
 		return fmt.Sprintf("%x", sha256.Sum256([]byte(jsonOutput)))
 	}
-	
+
 	return fmt.Sprintf("%x", sha256.Sum256(canonical))
 }
 

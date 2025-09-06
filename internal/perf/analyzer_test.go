@@ -12,12 +12,12 @@ import (
 
 func TestPerformanceAnalyzer_AnalyzeProfiles(t *testing.T) {
 	tests := []struct {
-		name           string
-		config         *AnalyzerConfig
-		dataset        *ProfileDataset
-		expectHotspots int
+		name                  string
+		config                *AnalyzerConfig
+		dataset               *ProfileDataset
+		expectHotspots        int
 		expectRecommendations int
-		expectError    bool
+		expectError           bool
 	}{
 		{
 			name:   "empty_dataset",
@@ -27,7 +27,7 @@ func TestPerformanceAnalyzer_AnalyzeProfiles(t *testing.T) {
 			},
 			expectHotspots:        0,
 			expectRecommendations: 0,
-			expectError:          false,
+			expectError:           false,
 		},
 		{
 			name:   "single_scenario_with_hotspots",
@@ -39,9 +39,9 @@ func TestPerformanceAnalyzer_AnalyzeProfiles(t *testing.T) {
 						Metrics: &bench.PerformanceMetrics{
 							TotalDuration: 15 * time.Second, // Exceeds 10s target
 							PhaseDurations: bench.PhaseTimings{
-								Parsing:  8 * time.Second,  // 53% of total - should be hotspot
-								Matching: 4 * time.Second,  // 27% of total - should be hotspot
-								Indexing: 2 * time.Second,  // 13% of total - should be hotspot
+								Parsing:   8 * time.Second, // 53% of total - should be hotspot
+								Matching:  4 * time.Second, // 27% of total - should be hotspot
+								Indexing:  2 * time.Second, // 13% of total - should be hotspot
 								Inference: 1 * time.Second, // 7% of total - below threshold
 							},
 							MemoryStats: bench.MemoryProfile{
@@ -54,7 +54,7 @@ func TestPerformanceAnalyzer_AnalyzeProfiles(t *testing.T) {
 			},
 			expectHotspots:        6, // 4 timing (parsing, matching, indexing, inference) + 2 memory (peak + GC pressure)
 			expectRecommendations: 3, // One per component: timing/parser, timing/matchers, memory
-			expectError:          false,
+			expectError:           false,
 		},
 		{
 			name:   "memory_pressure_scenario",
@@ -84,7 +84,7 @@ func TestPerformanceAnalyzer_AnalyzeProfiles(t *testing.T) {
 			},
 			expectHotspots:        3, // Peak memory + growth rate + GC pressure
 			expectRecommendations: 2, // Peak memory + GC pressure (growth_rate metric not handled in switch)
-			expectError:          false,
+			expectError:           false,
 		},
 		{
 			name:   "concurrency_inefficiency",
@@ -96,8 +96,8 @@ func TestPerformanceAnalyzer_AnalyzeProfiles(t *testing.T) {
 						Metrics: &bench.PerformanceMetrics{
 							TotalDuration: 8 * time.Second,
 							ProcessingStats: &stats.ProcessingStats{
-								FilesParsed:        100,
-								DurationMs:         8000, // 8 seconds in milliseconds
+								FilesParsed: 100,
+								DurationMs:  8000, // 8 seconds in milliseconds
 							},
 						},
 					},
@@ -105,7 +105,7 @@ func TestPerformanceAnalyzer_AnalyzeProfiles(t *testing.T) {
 			},
 			expectHotspots:        0, // No hotspots since concurrency analysis is disabled
 			expectRecommendations: 0,
-			expectError:          false,
+			expectError:           false,
 		},
 	}
 
@@ -282,7 +282,7 @@ func TestPerformanceAnalyzer_RecommendationGeneration(t *testing.T) {
 	for i := 1; i < len(results.Recommendations); i++ {
 		prev := results.Recommendations[i-1]
 		curr := results.Recommendations[i]
-		
+
 		// Higher priority should come first
 		if prev.Priority == PriorityLow && curr.Priority == PriorityHigh {
 			t.Error("Recommendations should be sorted by priority")
@@ -292,8 +292,8 @@ func TestPerformanceAnalyzer_RecommendationGeneration(t *testing.T) {
 
 func TestPerformanceAnalyzer_TargetEvaluation(t *testing.T) {
 	tests := []struct {
-		name             string
-		metrics          *bench.PerformanceMetrics
+		name              string
+		metrics           *bench.PerformanceMetrics
 		expectDurationMet bool
 		expectMemoryMet   bool
 	}{
@@ -420,7 +420,7 @@ func TestPerformanceAnalyzer_RegressionDetection(t *testing.T) {
 		if regression.Scenario != "test_scenario" {
 			t.Errorf("Expected scenario 'test_scenario', got '%s'", regression.Scenario)
 		}
-		
+
 		if regression.RegressionRatio <= 1.0 {
 			t.Errorf("Regression ratio should be > 1.0, got %.2f", regression.RegressionRatio)
 		}
@@ -461,7 +461,7 @@ func TestPerformanceAnalyzer_DeterministicOutput(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	
+
 	results1, err := analyzer1.AnalyzeProfiles(ctx, dataset)
 	if err != nil {
 		t.Fatalf("First analysis failed: %v", err)
@@ -486,12 +486,12 @@ func TestPerformanceAnalyzer_DeterministicOutput(t *testing.T) {
 		if i >= len(results2.Hotspots) {
 			break
 		}
-		
+
 		h1 := results1.Hotspots[i]
 		h2 := results2.Hotspots[i]
-		
+
 		if h1.Component != h2.Component || h1.Phase != h2.Phase {
-			t.Errorf("Hotspot order differs at index %d: %s/%s vs %s/%s", 
+			t.Errorf("Hotspot order differs at index %d: %s/%s vs %s/%s",
 				i, h1.Component, h1.Phase, h2.Component, h2.Phase)
 		}
 	}
@@ -578,11 +578,11 @@ func TestPerformanceAnalyzer_ConfigValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := NewPerformanceAnalyzer(tt.config)
-			
+
 			if tt.expectErr && err == nil {
 				t.Error("Expected error but got none")
 			}
-			
+
 			if !tt.expectErr && err != nil {
 				t.Errorf("Unexpected error: %v", err)
 			}
@@ -696,4 +696,3 @@ func TestPerformanceAnalyzer_ConcurrentAccess(t *testing.T) {
 		t.Error("Expected recommendations to be generated")
 	}
 }
-

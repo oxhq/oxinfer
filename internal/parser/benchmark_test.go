@@ -44,14 +44,14 @@ class UserController extends Controller
 			description: "Small Laravel controller with 2 methods",
 		},
 		{
-			name: "MediumModel",
-			phpCode: generateMediumPHPModel(),
+			name:        "MediumModel",
+			phpCode:     generateMediumPHPModel(),
 			targetTime:  200 * time.Microsecond,
 			description: "Medium Laravel model with relationships",
 		},
 		{
-			name: "LargeClass",
-			phpCode: generateLargePHPClass(),
+			name:        "LargeClass",
+			phpCode:     generateLargePHPClass(),
 			targetTime:  500 * time.Microsecond,
 			description: "Large PHP class with many methods",
 		},
@@ -75,17 +75,17 @@ class UserController extends Controller
 				if err != nil {
 					b.Fatalf("Parse failed: %v", err)
 				}
-				
+
 				// Ensure we actually used the tree
 				if tree == nil || tree.Root == nil {
 					b.Fatal("Invalid parse result")
 				}
-				
+
 				// Calculate actual parse time and validate against target
 				elapsedNs := b.Elapsed().Nanoseconds()
 				avgNs := elapsedNs / int64(i+1)
 				avgDuration := time.Duration(avgNs)
-				
+
 				if i == b.N-1 && avgDuration > tc.targetTime {
 					b.Errorf("Parse time %v exceeds target %v for %s", avgDuration, tc.targetTime, tc.description)
 				}
@@ -135,7 +135,7 @@ func BenchmarkASTExtraction(b *testing.B) {
 			if err != nil {
 				b.Fatalf("Failed to create query engine: %v", err)
 			}
-			
+
 			extractor := NewPHPConstructExtractor(queryEngine, nil)
 
 			b.ResetTimer()
@@ -160,11 +160,11 @@ func BenchmarkASTExtraction(b *testing.B) {
 // BenchmarkConcurrentParsingPerformance tests T4.3 concurrent parsing performance
 func BenchmarkConcurrentParsingPerformance(b *testing.B) {
 	testCases := []struct {
-		name          string
-		numFiles      int
-		numWorkers    int
+		name             string
+		numFiles         int
+		numWorkers       int
 		targetThroughput int64 // files per second
-		description   string
+		description      string
 	}{
 		{
 			name:             "SmallConcurrent",
@@ -174,7 +174,7 @@ func BenchmarkConcurrentParsingPerformance(b *testing.B) {
 			description:      "Small concurrent workload",
 		},
 		{
-			name:             "MediumConcurrent", 
+			name:             "MediumConcurrent",
 			numFiles:         50,
 			numWorkers:       4,
 			targetThroughput: 500,
@@ -192,9 +192,9 @@ func BenchmarkConcurrentParsingPerformance(b *testing.B) {
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
 			concurrent, err := NewConcurrentPHPParser(tc.numWorkers, nil)
-		if err != nil {
-			b.Fatal(err)
-		}
+			if err != nil {
+				b.Fatal(err)
+			}
 			defer concurrent.Shutdown(context.Background())
 
 			// Generate test files
@@ -205,7 +205,7 @@ func BenchmarkConcurrentParsingPerformance(b *testing.B) {
 
 			for i := 0; i < b.N; i++ {
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				
+
 				results, err := concurrent.ParseConcurrently(ctx, files)
 				if err != nil {
 					cancel()
@@ -232,7 +232,7 @@ func BenchmarkConcurrentParsingPerformance(b *testing.B) {
 			throughput := int64(float64(totalFiles) / elapsedSeconds)
 
 			if throughput < tc.targetThroughput {
-				b.Errorf("Throughput %d files/sec below target %d files/sec for %s", 
+				b.Errorf("Throughput %d files/sec below target %d files/sec for %s",
 					throughput, tc.targetThroughput, tc.description)
 			}
 		})
@@ -249,7 +249,7 @@ func BenchmarkEndToEndProjectAnalysis(b *testing.B) {
 		description  string
 	}{
 		{
-			name:         "LaravelStarter", 
+			name:         "LaravelStarter",
 			fileCount:    45,
 			targetTime:   2 * time.Second,
 			targetMemory: 50 * 1024 * 1024, // 50MB
@@ -275,23 +275,23 @@ func BenchmarkEndToEndProjectAnalysis(b *testing.B) {
 		b.Run(project.name, func(b *testing.B) {
 			// Create mock Laravel project structure
 			files := generateMockLaravelProject(project.fileCount)
-			
+
 			// Set up memory monitoring
 			var startMem, peakMem runtime.MemStats
 			runtime.GC()
 			runtime.ReadMemStats(&startMem)
 
 			concurrent, err := NewConcurrentPHPParser(8, nil)
-		if err != nil {
-			b.Fatal(err)
-		}
+			if err != nil {
+				b.Fatal(err)
+			}
 			defer concurrent.Shutdown(context.Background())
 
 			b.ResetTimer()
-			
+
 			for i := 0; i < b.N; i++ {
 				ctx, cancel := context.WithTimeout(context.Background(), project.targetTime*2)
-				
+
 				startTime := time.Now()
 				results, err := concurrent.ParseConcurrently(ctx, files)
 				if err != nil {
@@ -306,15 +306,12 @@ func BenchmarkEndToEndProjectAnalysis(b *testing.B) {
 						successCount++
 					}
 				}
-				
+
 				elapsed := time.Since(startTime)
 				cancel()
 
 				// Measure peak memory usage
 				runtime.ReadMemStats(&peakMem)
-				if peakMem.Alloc > uint64(peakMem.Alloc) {
-					peakMem.Alloc = peakMem.Alloc
-				}
 
 				// Validate performance targets
 				if elapsed > project.targetTime {
@@ -323,7 +320,7 @@ func BenchmarkEndToEndProjectAnalysis(b *testing.B) {
 
 				memoryUsed := int64(peakMem.Alloc - startMem.Alloc)
 				if memoryUsed > project.targetMemory {
-					b.Errorf("Memory usage %d bytes exceeds target %d bytes for %s", 
+					b.Errorf("Memory usage %d bytes exceeds target %d bytes for %s",
 						memoryUsed, project.targetMemory, project.description)
 				}
 
@@ -338,10 +335,10 @@ func BenchmarkEndToEndProjectAnalysis(b *testing.B) {
 // BenchmarkMemoryUsage specifically tests memory efficiency
 func BenchmarkMemoryUsage(b *testing.B) {
 	testCases := []struct {
-		name         string
-		fileCount    int
-		maxMemory    int64 // Maximum allowed memory in bytes
-		description  string
+		name        string
+		fileCount   int
+		maxMemory   int64 // Maximum allowed memory in bytes
+		description string
 	}{
 		{
 			name:        "MemoryEfficiencySmall",
@@ -353,24 +350,24 @@ func BenchmarkMemoryUsage(b *testing.B) {
 			name:        "MemoryEfficiencyMedium",
 			fileCount:   200,
 			maxMemory:   100 * 1024 * 1024, // 100MB
-			description: "Memory efficiency for medium projects", 
+			description: "Memory efficiency for medium projects",
 		},
 	}
 
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
 			var m1, m2 runtime.MemStats
-			
+
 			// Get baseline memory
 			runtime.GC()
 			runtime.ReadMemStats(&m1)
-			
+
 			// Create parser with memory optimizer
 			optimizer := NewMemoryOptimizer()
 			concurrent, err := NewConcurrentPHPParser(4, nil)
-		if err != nil {
-			b.Fatal(err)
-		}
+			if err != nil {
+				b.Fatal(err)
+			}
 			defer concurrent.Shutdown(context.Background())
 
 			files := generateTestParseJobs(tc.fileCount)
@@ -379,7 +376,7 @@ func BenchmarkMemoryUsage(b *testing.B) {
 
 			for i := 0; i < b.N; i++ {
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				
+
 				results, err := concurrent.ParseConcurrently(ctx, files)
 				if err != nil {
 					cancel()
@@ -401,7 +398,7 @@ func BenchmarkMemoryUsage(b *testing.B) {
 			// Validate memory usage
 			memoryUsed := int64(m2.Alloc - m1.Alloc)
 			if memoryUsed > tc.maxMemory {
-				b.Errorf("Memory usage %d bytes exceeds limit %d bytes for %s", 
+				b.Errorf("Memory usage %d bytes exceeds limit %d bytes for %s",
 					memoryUsed, tc.maxMemory, tc.description)
 			}
 		})
@@ -411,7 +408,7 @@ func BenchmarkMemoryUsage(b *testing.B) {
 // BenchmarkParserPoolEfficiency tests parser pool resource management
 func BenchmarkParserPoolEfficiency(b *testing.B) {
 	poolSizes := []int{2, 4, 8, 16}
-	
+
 	for _, poolSize := range poolSizes {
 		b.Run(fmt.Sprintf("PoolSize%d", poolSize), func(b *testing.B) {
 			pool, err := NewParserPool(poolSize, nil)
@@ -432,18 +429,18 @@ func BenchmarkParserPoolEfficiency(b *testing.B) {
 					wg.Add(1)
 					go func() {
 						defer wg.Done()
-						
+
 						ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 						defer cancel()
-						
+
 						parser, err := pool.AcquireParser(ctx)
 						if err != nil {
 							return // Timeout is expected under contention
 						}
-						
+
 						// Simulate parsing work
 						time.Sleep(time.Microsecond * 100)
-						
+
 						pool.ReleaseParser(parser)
 					}()
 				}
@@ -463,9 +460,9 @@ func BenchmarkFullIntegration(b *testing.B) {
 	b.Run("FullIntegrationPerformance", func(b *testing.B) {
 		// This would integrate with actual system components
 		// For now we simulate the integration points
-		
+
 		files := generateTestParseJobs(100)
-		
+
 		concurrent, err := NewConcurrentPHPParser(6, nil)
 		if err != nil {
 			b.Fatal(err)
@@ -476,17 +473,17 @@ func BenchmarkFullIntegration(b *testing.B) {
 
 		for i := 0; i < b.N; i++ {
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-			
+
 			startTime := time.Now()
-			
+
 			// Phase 1: File Discovery (indexer simulation)
 			discoveryTime := time.Millisecond * 100
 			time.Sleep(discoveryTime)
-			
+
 			// Phase 2: PSR-4 Resolution (resolver simulation)
 			resolutionTime := time.Millisecond * 50
 			time.Sleep(resolutionTime)
-			
+
 			// Phase 3: Concurrent Parsing (parser)
 			results, err := concurrent.ParseConcurrently(ctx, files)
 			if err != nil {
@@ -500,7 +497,7 @@ func BenchmarkFullIntegration(b *testing.B) {
 					successCount++
 				}
 			}
-			
+
 			totalTime := time.Since(startTime)
 			cancel()
 
@@ -510,7 +507,7 @@ func BenchmarkFullIntegration(b *testing.B) {
 			maxAllowedOverhead := expectedBaselineTime / 2 // 50% overhead limit
 
 			if parsingOverhead > maxAllowedOverhead {
-				b.Errorf("Parser overhead %v exceeds 50%% limit %v", 
+				b.Errorf("Parser overhead %v exceeds 50%% limit %v",
 					parsingOverhead, maxAllowedOverhead)
 			}
 
@@ -639,13 +636,13 @@ class UserApiController extends BaseController
 
 func generateTestParseJobs(count int) []ParseJob {
 	jobs := make([]ParseJob, count)
-	
+
 	phpTemplates := []string{
 		generateSimplePHPFile(),
 		generateMediumPHPModel(),
 		generateComplexPHPFile(),
 	}
-	
+
 	for i := 0; i < count; i++ {
 		template := phpTemplates[i%len(phpTemplates)]
 		jobs[i] = ParseJob{
@@ -658,22 +655,22 @@ func generateTestParseJobs(count int) []ParseJob {
 			Deadline:    time.Now().Add(30 * time.Second),
 		}
 	}
-	
+
 	return jobs
 }
 
 func generateMockLaravelProject(fileCount int) []ParseJob {
 	jobs := make([]ParseJob, fileCount)
-	
+
 	// Distribute files across Laravel structure
 	controllers := fileCount / 4
-	models := fileCount / 4  
+	models := fileCount / 4
 	requests := fileCount / 6
 	resources := fileCount / 6
 	_ = fileCount - controllers - models - requests - resources // other files
 
 	jobIndex := 0
-	
+
 	// Generate controllers
 	for i := 0; i < controllers; i++ {
 		jobs[jobIndex] = ParseJob{
@@ -683,7 +680,7 @@ func generateMockLaravelProject(fileCount int) []ParseJob {
 		}
 		jobIndex++
 	}
-	
+
 	// Generate models
 	for i := 0; i < models; i++ {
 		jobs[jobIndex] = ParseJob{
@@ -693,7 +690,7 @@ func generateMockLaravelProject(fileCount int) []ParseJob {
 		}
 		jobIndex++
 	}
-	
+
 	// Generate other files
 	for i := jobIndex; i < fileCount; i++ {
 		jobs[i] = ParseJob{
@@ -702,6 +699,6 @@ func generateMockLaravelProject(fileCount int) []ParseJob {
 			Content:  []byte(generateSimplePHPFile()),
 		}
 	}
-	
+
 	return jobs
 }

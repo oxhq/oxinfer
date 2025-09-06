@@ -2,10 +2,10 @@
 package matchers
 
 import (
-    "context"
-    "fmt"
-    "strings"
-    "regexp"
+	"context"
+	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/garaekz/oxinfer/internal/parser"
 	sitter "github.com/smacker/go-tree-sitter"
@@ -26,7 +26,7 @@ func NewRequestUsageMatcher(language *sitter.Language, config *MatcherConfig) (*
 	if language == nil {
 		return nil, fmt.Errorf("language cannot be nil")
 	}
-	
+
 	if config == nil {
 		config = DefaultMatcherConfig()
 	}
@@ -52,7 +52,7 @@ func (m *DefaultRequestUsageMatcher) initialize() error {
 	if err != nil {
 		return fmt.Errorf("failed to compile request usage queries: %w", err)
 	}
-	
+
 	m.queries = queries
 	m.initialized = true
 	return nil
@@ -73,16 +73,16 @@ func (m *DefaultRequestUsageMatcher) Match(ctx context.Context, tree *parser.Syn
 		return nil, fmt.Errorf("invalid syntax tree provided")
 	}
 
-    var allResults []*MatchResult
-    confSum := 0.0
-    confCount := 0
-	
+	var allResults []*MatchResult
+	confSum := 0.0
+	confCount := 0
+
 	// Track request usage patterns across the file
 	requestUsage := &RequestUsageMatch{
 		ContentTypes: make([]string, 0),
-		Body:         make(map[string]interface{}),
-		Query:        make(map[string]interface{}),
-		Files:        make(map[string]interface{}),
+		Body:         make(map[string]any),
+		Query:        make(map[string]any),
+		Files:        make(map[string]any),
 		Methods:      make([]string, 0),
 	}
 
@@ -95,7 +95,7 @@ func (m *DefaultRequestUsageMatcher) Match(ctx context.Context, tree *parser.Syn
 		}
 
 		queryDef := m.queryDefs[i]
-		
+
 		// Convert SyntaxTree back to tree-sitter node for querying
 		sitterNode, sitterTree, err := m.convertToSitterNode(tree)
 		if err != nil {
@@ -106,49 +106,47 @@ func (m *DefaultRequestUsageMatcher) Match(ctx context.Context, tree *parser.Syn
 		cursor := sitter.NewQueryCursor()
 		cursor.Exec(query, sitterNode)
 
-        // Process matches
-        for {
-            match, ok := cursor.NextMatch()
-            if !ok {
-                break
-            }
+		// Process matches
+		for {
+			match, ok := cursor.NextMatch()
+			if !ok {
+				break
+			}
 
-            // Process captures based on query type
-            m.processRequestMatch(match, query, queryDef, tree, filePath, requestUsage, &allResults)
-            // Count this matched query for confidence aggregation
-            if len(match.Captures) > 0 {
-                confSum += queryDef.Confidence
-                confCount++
-            }
-        }
+			// Process captures based on query type
+			m.processRequestMatch(match, query, queryDef, tree, filePath, requestUsage, &allResults)
+			// Count this matched query for confidence aggregation
+			if len(match.Captures) > 0 {
+				confSum += queryDef.Confidence
+				confCount++
+			}
+		}
 		cursor.Close()
 		// Tree cleanup handled by defer statement
 	}
 
 	// Consolidate request usage into final results
-	if len(requestUsage.Methods) > 0 || len(requestUsage.Body) > 0 || 
-	   len(requestUsage.Query) > 0 || len(requestUsage.Files) > 0 {
-		
+	if len(requestUsage.Methods) > 0 || len(requestUsage.Body) > 0 ||
+		len(requestUsage.Query) > 0 || len(requestUsage.Files) > 0 {
+
 		// Infer content types based on usage patterns
 		m.inferContentTypes(requestUsage)
-		
-        overallConf := 0.8
-        if confCount > 0 {
-            overallConf = confSum / float64(confCount)
-        }
 
-        result := &MatchResult{
-            Type:       PatternTypeRequestUsage,
-            Position:   parser.Point{Row: 0, Column: 0}, // File-level match
-            Content:    fmt.Sprintf("Request usage: %d methods", len(requestUsage.Methods)),
-            Confidence: overallConf,
-            Data:       requestUsage,
-            Context: &MatchContext{
-                FilePath: filePath,
-                Explicit: len(requestUsage.Files) > 0, // File methods are explicit
-            },
-        }
-		
+		// Calculate overall confidence using existing results
+		overallConf := m.calculateOverallConfidence(allResults)
+
+		result := &MatchResult{
+			Type:       PatternTypeRequestUsage,
+			Position:   parser.Point{Row: 0, Column: 0}, // File-level match
+			Content:    fmt.Sprintf("Request usage: %d methods", len(requestUsage.Methods)),
+			Confidence: overallConf,
+			Data:       requestUsage,
+			Context: &MatchContext{
+				FilePath: filePath,
+				Explicit: len(requestUsage.Files) > 0, // File methods are explicit
+			},
+		}
+
 		allResults = append(allResults, result)
 	}
 
@@ -191,7 +189,7 @@ func (m *DefaultRequestUsageMatcher) Close() error {
 	if m.compiler != nil {
 		m.compiler.Close()
 	}
-	
+
 	m.initialized = false
 	m.queries = nil
 	return nil
@@ -207,62 +205,62 @@ func (m *DefaultRequestUsageMatcher) processRequestMatch(
 	requestUsage *RequestUsageMatch,
 	allResults *[]*MatchResult,
 ) {
-    for _, capture := range match.Captures {
-        captureName := query.CaptureNameForId(capture.Index)
-        
-        switch captureName {
+	for _, capture := range match.Captures {
+		captureName := query.CaptureNameForId(capture.Index)
+
+		switch captureName {
 		case "request":
 			// Track that we found a request object
 			continue
 		case "method":
 			methodNode := capture.Node
 			methodName := string(methodNode.Content(tree.Source))
-			
+
 			// Add method to tracking
 			if !contains(requestUsage.Methods, methodName) {
 				requestUsage.Methods = append(requestUsage.Methods, methodName)
 			}
-			
+
 			// Process specific method types
 			m.processMethodByType(queryDef.Name, methodName, requestUsage, methodNode, tree)
-			
-        case "parameter":
-            paramNode := capture.Node
-            paramText := string(paramNode.Content(tree.Source))
-            
-            // Clean parameter text (remove quotes)
-            paramText = strings.Trim(paramText, `"'`)
-            
-            // Add to appropriate collection based on method type
-            m.addParameterByMethod(queryDef.Name, paramText, requestUsage)
-        case "arr":
-            // Extract string literals from array argument for only/except
-            arrText := string(capture.Node.Content(tree.Source))
-            for _, lit := range extractStringLiterals(arrText) {
-                m.addParameterByMethod(queryDef.Name, lit, requestUsage)
-            }
-        }
-    }
+
+		case "parameter":
+			paramNode := capture.Node
+			paramText := string(paramNode.Content(tree.Source))
+
+			// Clean parameter text (remove quotes)
+			paramText = strings.Trim(paramText, `"'`)
+
+			// Add to appropriate collection based on method type
+			m.addParameterByMethod(queryDef.Name, paramText, requestUsage)
+		case "arr":
+			// Extract string literals from array argument for only/except
+			arrText := string(capture.Node.Content(tree.Source))
+			for _, lit := range extractStringLiterals(arrText) {
+				m.addParameterByMethod(queryDef.Name, lit, requestUsage)
+			}
+		}
+	}
 }
 
 // extractStringLiterals finds simple quoted string literals in a snippet like ['a','b']
 var strLitRe = regexp.MustCompile(`'([^']*)'|"([^"]*)"`)
 
 func extractStringLiterals(s string) []string {
-    matches := strLitRe.FindAllStringSubmatch(s, -1)
-    out := make([]string, 0, len(matches))
-    for _, m := range matches {
-        if len(m) >= 2 {
-            val := m[1]
-            if val == "" && len(m) >= 3 {
-                val = m[2]
-            }
-            if val != "" {
-                out = append(out, val)
-            }
-        }
-    }
-    return out
+	matches := strLitRe.FindAllStringSubmatch(s, -1)
+	out := make([]string, 0, len(matches))
+	for _, m := range matches {
+		if len(m) >= 2 {
+			val := m[1]
+			if val == "" && len(m) >= 3 {
+				val = m[2]
+			}
+			if val != "" {
+				out = append(out, val)
+			}
+		}
+	}
+	return out
 }
 
 // processMethodByType processes different request method types.
@@ -280,7 +278,7 @@ func (m *DefaultRequestUsageMatcher) processMethodByType(
 		// File methods imply multipart content type
 		m.addContentType(requestUsage, "multipart/form-data")
 		// Add generic file parameter
-		requestUsage.Files["upload"] = map[string]interface{}{}
+		requestUsage.Files["upload"] = map[string]any{}
 	case "request_all":
 		// All method could be any content type
 		m.addContentType(requestUsage, "application/x-www-form-urlencoded")
@@ -296,13 +294,13 @@ func (m *DefaultRequestUsageMatcher) addParameterByMethod(queryName, paramName s
 	switch queryName {
 	case "request_input":
 		// Input parameters go to body
-		requestUsage.Body[paramName] = map[string]interface{}{}
+		requestUsage.Body[paramName] = map[string]any{}
 	case "request_only", "request_except":
 		// Only/except parameters go to body
-		requestUsage.Body[paramName] = map[string]interface{}{}
+		requestUsage.Body[paramName] = map[string]any{}
 	default:
 		// Default to body parameters
-		requestUsage.Body[paramName] = map[string]interface{}{}
+		requestUsage.Body[paramName] = map[string]any{}
 	}
 }
 
@@ -329,14 +327,14 @@ func (m *DefaultRequestUsageMatcher) inferContentTypes(requestUsage *RequestUsag
 // calculateOverallConfidence calculates average confidence across all matches.
 func (m *DefaultRequestUsageMatcher) calculateOverallConfidence(results []*MatchResult) float64 {
 	if len(results) == 0 {
-		return 0.8 // Default confidence for consolidated request usage
+		return 0.85 // Default confidence for consolidated request usage
 	}
-	
+
 	totalConfidence := 0.0
 	for _, result := range results {
 		totalConfidence += result.Confidence
 	}
-	
+
 	return totalConfidence / float64(len(results))
 }
 
@@ -349,7 +347,7 @@ func (m *DefaultRequestUsageMatcher) convertToSitterNode(tree *parser.SyntaxTree
 	}
 
 	tempParser.SetLanguage(m.compiler.language)
-	
+
 	sitterTree, err := tempParser.ParseCtx(context.Background(), nil, tree.Source)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to re-parse content: %w", err)
@@ -395,7 +393,7 @@ func (m *DefaultRequestUsageMatcher) deduplicateResults(results []*MatchResult) 
 	for _, result := range results {
 		// Create a unique key based on content and data
 		key := fmt.Sprintf("%s:%v", result.Content, result.Data)
-		
+
 		if !seen[key] {
 			seen[key] = true
 			deduplicated = append(deduplicated, result)
@@ -419,7 +417,7 @@ func contains(slice []string, item string) bool {
 func GetSupportedContentTypes() []string {
 	return []string{
 		"application/json",
-		"multipart/form-data", 
+		"multipart/form-data",
 		"application/x-www-form-urlencoded",
 	}
 }

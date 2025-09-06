@@ -117,29 +117,29 @@ func TestNewPHPParser(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			parser, err := NewPHPParser(tt.config)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Error("expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			if parser == nil {
 				t.Error("parser should not be nil")
 				return
 			}
-			
+
 			// Verify parser is initialized
 			if !parser.IsInitialized() {
 				t.Error("parser should be initialized")
 			}
-			
+
 			// Clean up
 			err = parser.Close()
 			if err != nil {
@@ -189,35 +189,35 @@ func TestParseContent(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := parser.ParseContent([]byte(tt.content))
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Error("expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			if result == nil {
 				t.Error("result should not be nil")
 				return
 			}
-			
+
 			// Verify syntax tree structure
 			if result.Root == nil {
 				t.Error("syntax tree root should not be nil")
 			}
-			
+
 			if result.Language != "php" {
 				t.Errorf("expected language 'php', got '%s'", result.Language)
 			}
-			
+
 			if len(result.Source) != len(tt.content) {
-				t.Errorf("source length mismatch: expected %d, got %d", 
+				t.Errorf("source length mismatch: expected %d, got %d",
 					len(tt.content), len(result.Source))
 			}
 		})
@@ -235,7 +235,7 @@ func TestParseFile(t *testing.T) {
 	// Create temporary test file
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.php")
-	
+
 	err = os.WriteFile(testFile, []byte(validPHPClass), 0644)
 	if err != nil {
 		t.Fatalf("failed to create test file: %v", err)
@@ -262,19 +262,19 @@ func TestParseFile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
 			result, err := parser.ParseFile(ctx, tt.filePath)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Error("expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			if result == nil {
 				t.Error("result should not be nil")
 			}
@@ -287,7 +287,7 @@ func TestParseFileTimeout(t *testing.T) {
 	// Create parser with short timeout
 	config := DefaultParserConfig()
 	config.MaxParseTime = 10 * time.Millisecond // Short timeout for testing
-	
+
 	parser, err := NewPHPParser(config)
 	if err != nil {
 		t.Fatalf("failed to create parser: %v", err)
@@ -297,13 +297,13 @@ func TestParseFileTimeout(t *testing.T) {
 	// Create large PHP file that might timeout
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "large.php")
-	
+
 	// Create much larger content to increase timeout chance
 	largeContent := largePHPContent
 	for i := 0; i < 10; i++ {
 		largeContent += largePHPContent
 	}
-	
+
 	err = os.WriteFile(testFile, []byte(largeContent), 0644)
 	if err != nil {
 		t.Fatalf("failed to create test file: %v", err)
@@ -311,7 +311,7 @@ func TestParseFileTimeout(t *testing.T) {
 
 	ctx := context.Background()
 	_, err = parser.ParseFile(ctx, testFile)
-	
+
 	// Note: Timeout may not always occur due to fast parsing
 	// This test verifies timeout mechanism works, not that it always triggers
 	if err != nil {
@@ -332,9 +332,9 @@ func TestParserConcurrency(t *testing.T) {
 
 	const numGoroutines = 10
 	const numParsesPerGoroutine = 5
-	
+
 	results := make(chan error, numGoroutines*numParsesPerGoroutine)
-	
+
 	// Launch concurrent parsing operations
 	for i := 0; i < numGoroutines; i++ {
 		go func(id int) {
@@ -344,7 +344,7 @@ func TestParserConcurrency(t *testing.T) {
 			}
 		}(i)
 	}
-	
+
 	// Collect results
 	var errors []error
 	for i := 0; i < numGoroutines*numParsesPerGoroutine; i++ {
@@ -352,7 +352,7 @@ func TestParserConcurrency(t *testing.T) {
 			errors = append(errors, err)
 		}
 	}
-	
+
 	if len(errors) > 0 {
 		t.Errorf("concurrent parsing had %d errors: %v", len(errors), errors[0])
 	}
@@ -364,35 +364,35 @@ func TestParserLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create parser: %v", err)
 	}
-	
+
 	// Verify initial state
 	if !parser.IsInitialized() {
 		t.Error("new parser should be initialized")
 	}
-	
+
 	// Test parsing while initialized
 	_, err = parser.ParseContent([]byte(validPHPFunction))
 	if err != nil {
 		t.Errorf("parsing should work when initialized: %v", err)
 	}
-	
+
 	// Close parser
 	err = parser.Close()
 	if err != nil {
 		t.Errorf("error closing parser: %v", err)
 	}
-	
+
 	// Verify closed state
 	if parser.IsInitialized() {
 		t.Error("closed parser should not be initialized")
 	}
-	
+
 	// Test parsing after close should fail
 	_, err = parser.ParseContent([]byte(validPHPFunction))
 	if err == nil {
 		t.Error("parsing should fail after close")
 	}
-	
+
 	// Multiple closes should be safe
 	err = parser.Close()
 	if err != nil {
@@ -409,10 +409,10 @@ func TestErrorHandling(t *testing.T) {
 	defer parser.Close()
 
 	tests := []struct {
-		name         string
-		content      string
-		expectErr    bool
-		recoverable  bool
+		name        string
+		content     string
+		expectErr   bool
+		recoverable bool
 	}{
 		{
 			name:        "syntax error is recoverable",
@@ -427,21 +427,21 @@ func TestErrorHandling(t *testing.T) {
 			recoverable: true, // Empty content error is recoverable
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := parser.ParseContent([]byte(tt.content))
-			
+
 			if tt.expectErr && err == nil {
 				t.Error("expected error but got none")
 				return
 			}
-			
+
 			if !tt.expectErr && err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			if err != nil {
 				if IsRecoverableError(err) != tt.recoverable {
 					t.Errorf("error recoverability mismatch: expected %v, got %v",
@@ -465,23 +465,23 @@ func TestParserMetrics(t *testing.T) {
 	if metrics.TotalParseJobs != 0 {
 		t.Error("initial parse jobs should be 0")
 	}
-	
+
 	// Parse some content
 	_, err = parser.ParseContent([]byte(validPHPClass))
 	if err != nil {
 		t.Errorf("parsing failed: %v", err)
 	}
-	
+
 	// Check updated metrics
 	metrics = parser.GetMetrics()
 	if metrics.TotalParseJobs != 1 {
 		t.Errorf("expected 1 parse job, got %d", metrics.TotalParseJobs)
 	}
-	
+
 	if metrics.SuccessfulParses != 1 {
 		t.Errorf("expected 1 successful parse, got %d", metrics.SuccessfulParses)
 	}
-	
+
 	if metrics.AverageParseTime <= 0 {
 		t.Error("average parse time should be positive")
 	}
@@ -491,7 +491,7 @@ func TestParserMetrics(t *testing.T) {
 func TestLargePHPFile(t *testing.T) {
 	config := DefaultParserConfig()
 	config.MaxFileSize = 1024 * 1024 // 1MB limit
-	
+
 	parser, err := NewPHPParser(config)
 	if err != nil {
 		t.Fatalf("failed to create parser: %v", err)
@@ -503,11 +503,11 @@ func TestLargePHPFile(t *testing.T) {
 	if err != nil {
 		t.Errorf("parsing large content failed: %v", err)
 	}
-	
+
 	if result == nil {
 		t.Error("result should not be nil for large content")
 	}
-	
+
 	// Test content exceeding limits
 	config.MaxFileSize = 100 // Very small limit
 	parser2, err := NewPHPParser(config)
@@ -515,7 +515,7 @@ func TestLargePHPFile(t *testing.T) {
 		t.Fatalf("failed to create parser with small limit: %v", err)
 	}
 	defer parser2.Close()
-	
+
 	_, err = parser2.ParseContent([]byte(largePHPContent))
 	if err == nil {
 		t.Error("expected error for content exceeding size limit")
@@ -567,15 +567,15 @@ func TestConfigValidation(t *testing.T) {
 			expectError: false,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateConfig(tt.config)
-			
+
 			if tt.expectError && err == nil {
 				t.Error("expected validation error but got none")
 			}
-			
+
 			if !tt.expectError && err != nil {
 				t.Errorf("unexpected validation error: %v", err)
 			}
@@ -592,10 +592,10 @@ func BenchmarkParseContent(b *testing.B) {
 	defer parser.Close()
 
 	content := []byte(validPHPClass)
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, err := parser.ParseContent(content)
 		if err != nil {
@@ -615,17 +615,17 @@ func BenchmarkParseFile(b *testing.B) {
 	// Create temporary test file
 	tmpDir := b.TempDir()
 	testFile := filepath.Join(tmpDir, "benchmark.php")
-	
+
 	err = os.WriteFile(testFile, []byte(validPHPClass), 0644)
 	if err != nil {
 		b.Fatalf("failed to create test file: %v", err)
 	}
 
 	ctx := context.Background()
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, err := parser.ParseFile(ctx, testFile)
 		if err != nil {
@@ -643,7 +643,7 @@ func BenchmarkConcurrentParsing(b *testing.B) {
 	defer parser.Close()
 
 	content := []byte(validPHPClass)
-	
+
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {

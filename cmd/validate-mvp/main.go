@@ -599,34 +599,6 @@ func runCommand(cmd string) error {
 	command := exec.Command(parts[0], parts[1:]...)
 	command.Stdout = nil // Suppress output to keep validation clean
 	command.Stderr = nil // Suppress error output too
-	
-	return command.Run()
-}
 
-// runCommandWithOutput executes a shell command and returns output and error.
-func runCommandWithOutput(cmd string) ([]byte, error) {
-	parts := strings.Fields(cmd)
-	if len(parts) == 0 {
-		return nil, fmt.Errorf("empty command")
-	}
-
-	command := exec.Command(parts[0], parts[1:]...)
-	return command.CombinedOutput()
-}
-
-// runCommandWithTimeout executes a shell command with a timeout.
-func runCommandWithTimeout(cmd string, timeout time.Duration) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	parts := strings.Fields(cmd)
-	if len(parts) == 0 {
-		return fmt.Errorf("empty command")
-	}
-
-	command := exec.CommandContext(ctx, parts[0], parts[1:]...)
-	command.Stdout = nil
-	command.Stderr = nil
-	
 	return command.Run()
 }

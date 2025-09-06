@@ -1,4 +1,4 @@
-// Package integration provides meaningful integration tests that validate actual functionality.  
+// Package integration provides meaningful integration tests that validate actual functionality.
 package integration
 
 import (
@@ -24,18 +24,18 @@ func TestMatcherIntegration_HTTPStatusValidation(t *testing.T) {
 			controllerCode: `public function index() {
 				return response()->json($data, 200);
 			}`,
-			wantStatus:  200,
+			wantStatus:   200,
 			wantExplicit: true,
-			wantMatches: 1,
+			wantMatches:  1,
 		},
 		{
 			name: "implicit_success_status",
 			controllerCode: `public function show() {
 				return response()->json($data);
 			}`,
-			wantStatus:  200,
+			wantStatus:   200,
 			wantExplicit: false,
-			wantMatches: 1,
+			wantMatches:  1,
 		},
 		{
 			name: "validation_error_status",
@@ -45,9 +45,9 @@ func TestMatcherIntegration_HTTPStatusValidation(t *testing.T) {
 				}
 				return response()->json($data, 201);
 			}`,
-			wantStatus:  422,  // Should capture first explicit status
+			wantStatus:   422, // Should capture first explicit status
 			wantExplicit: true,
-			wantMatches: 2,    // Both 422 and 201
+			wantMatches:  2, // Both 422 and 201
 		},
 	}
 
@@ -161,7 +161,7 @@ func TestEmitterIntegration_DeterministicJSON(t *testing.T) {
 	// Generate JSON multiple times
 	const iterations = 5
 	hashes := make([]string, iterations)
-	
+
 	for i := 0; i < iterations; i++ {
 		jsonBytes, err := emitterInstance.MarshalDeterministic(delta)
 		if err != nil {
@@ -169,7 +169,7 @@ func TestEmitterIntegration_DeterministicJSON(t *testing.T) {
 		}
 
 		// Validate JSON is well-formed
-		var temp interface{}
+		var temp any
 		if err := json.Unmarshal(jsonBytes, &temp); err != nil {
 			t.Fatalf("Generated JSON is invalid on iteration %d: %v", i, err)
 		}
@@ -189,7 +189,7 @@ func TestEmitterIntegration_DeterministicJSON(t *testing.T) {
 	}
 
 	// Validate specific JSON structure contains expected elements
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal([]byte(firstHash), &result); err != nil {
 		t.Fatalf("Failed to unmarshal result: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestEmitterIntegration_DeterministicJSON(t *testing.T) {
 	}
 
 	// Validate controllers are sorted
-	controllers, ok := result["controllers"].([]interface{})
+	controllers, ok := result["controllers"].([]any)
 	if !ok {
 		t.Fatal("Controllers should be an array")
 	}
@@ -212,7 +212,7 @@ func TestEmitterIntegration_DeterministicJSON(t *testing.T) {
 	}
 
 	// First controller should be PostController (alphabetical by method)
-	firstController := controllers[0].(map[string]interface{})
+	firstController := controllers[0].(map[string]any)
 	if firstController["method"] != "store" {
 		t.Errorf("Controllers not sorted: expected 'store' first, got %v", firstController["method"])
 	}
@@ -222,10 +222,10 @@ func TestEmitterIntegration_DeterministicJSON(t *testing.T) {
 // correctly identifies collection vs single resource patterns.
 func TestResourceMatching_ValidationLogic(t *testing.T) {
 	tests := []struct {
-		name           string
-		resourceClass  string
-		isCollection   bool
-		shouldBeValid  bool
+		name          string
+		resourceClass string
+		isCollection  bool
+		shouldBeValid bool
 	}{
 		{
 			name:          "collection_resource",
@@ -322,7 +322,7 @@ func TestPolymorphicIntegration_DiscriminatorMapping(t *testing.T) {
 
 	// Validate morph info consistency
 	if polymorphic.Discriminator.PropertyName != polymorphic.Morph.TypeColumn {
-		t.Errorf("PropertyName '%s' should match TypeColumn '%s'", 
+		t.Errorf("PropertyName '%s' should match TypeColumn '%s'",
 			polymorphic.Discriminator.PropertyName, polymorphic.Morph.TypeColumn)
 	}
 
@@ -339,7 +339,7 @@ func TestPolymorphicIntegration_DiscriminatorMapping(t *testing.T) {
 
 	// Validate round-trip preserves data
 	if unmarshaled.Parent != polymorphic.Parent {
-		t.Errorf("Parent lost in round-trip: got '%s', want '%s'", 
+		t.Errorf("Parent lost in round-trip: got '%s', want '%s'",
 			unmarshaled.Parent, polymorphic.Parent)
 	}
 
@@ -353,10 +353,10 @@ func TestPolymorphicIntegration_DiscriminatorMapping(t *testing.T) {
 // channel parameter extraction works correctly.
 func TestBroadcastIntegration_ParameterExtraction(t *testing.T) {
 	tests := []struct {
-		name        string
-		channel     string
-		wantParams  []string
-		wantCount   int
+		name       string
+		channel    string
+		wantParams []string
+		wantCount  int
 	}{
 		{
 			name:       "no_parameters",

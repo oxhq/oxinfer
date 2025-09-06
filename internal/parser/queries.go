@@ -16,9 +16,9 @@ import (
 // DefaultQueryEngine implements the QueryEngine interface using tree-sitter queries.
 // Provides high-level extraction of PHP language constructs with compiled query caching.
 type DefaultQueryEngine struct {
-	language *sitter.Language  // PHP language grammar
+	language *sitter.Language         // PHP language grammar
 	queries  map[string]*sitter.Query // Compiled query cache
-	mu       sync.RWMutex      // Thread safety for query cache
+	mu       sync.RWMutex             // Thread safety for query cache
 }
 
 // Tree-sitter query patterns for PHP constructs
@@ -99,7 +99,7 @@ func (q *DefaultQueryEngine) compileQueries() error {
 	for name, pattern := range queries {
 		query, err := sitter.NewQuery([]byte(pattern), q.language)
 		if err != nil {
-			return NewInternalError("query_compiler", 
+			return NewInternalError("query_compiler",
 				fmt.Sprintf("failed to compile %s query", name), err)
 		}
 		q.queries[name] = query
@@ -152,7 +152,7 @@ func (q *DefaultQueryEngine) ExtractNamespaces(tree *SyntaxTree) ([]PHPNamespace
 		if !ok {
 			break
 		}
-		
+
 		namespace, err := q.extractNamespaceFromCaptures(match.Captures, tree.Source)
 		if err != nil {
 			// Log error but continue processing other namespaces
@@ -196,7 +196,7 @@ func (q *DefaultQueryEngine) ExtractClasses(tree *SyntaxTree) ([]PHPClass, error
 		if !ok {
 			break
 		}
-		
+
 		class, err := q.extractClassFromCaptures(match.Captures, tree.Source)
 		if err != nil {
 			// Continue processing other classes on error
@@ -248,7 +248,7 @@ func (q *DefaultQueryEngine) ExtractMethods(tree *SyntaxTree) ([]PHPMethod, erro
 		if !ok {
 			break
 		}
-		
+
 		method, err := q.extractMethodFromCaptures(match.Captures, tree.Source)
 		if err != nil {
 			continue
@@ -294,7 +294,7 @@ func (q *DefaultQueryEngine) ExtractTraits(tree *SyntaxTree) ([]PHPTrait, error)
 		if !ok {
 			break
 		}
-		
+
 		trait, err := q.extractTraitFromCaptures(match.Captures, tree.Source)
 		if err != nil {
 			continue
@@ -337,7 +337,7 @@ func (q *DefaultQueryEngine) ExtractFunctions(tree *SyntaxTree) ([]PHPFunction, 
 		if !ok {
 			break
 		}
-		
+
 		function, err := q.extractFunctionFromCaptures(match.Captures, tree.Source)
 		if err != nil {
 			continue
@@ -383,7 +383,7 @@ func (q *DefaultQueryEngine) ExtractInterfaces(tree *SyntaxTree) ([]PHPInterface
 		if !ok {
 			break
 		}
-		
+
 		iface, err := q.extractInterfaceFromCaptures(match.Captures, tree.Source)
 		if err != nil {
 			continue
@@ -399,6 +399,49 @@ func (q *DefaultQueryEngine) ExtractInterfaces(tree *SyntaxTree) ([]PHPInterface
 	return interfaces, nil
 }
 
+// ExtractUseStatements finds all use/import statements in the syntax tree.
+func (q *DefaultQueryEngine) ExtractUseStatements(tree *SyntaxTree) ([]PHPUseStatement, error) {
+	if tree == nil || tree.Root == nil {
+		return nil, NewParserError("syntax tree is nil", ErrInvalidPHPContent)
+	}
+
+	query, err := q.getQuery("use")
+	if err != nil {
+		return nil, err
+	}
+
+	rootNode, err := q.convertSyntaxNodeToSitterNode(tree)
+	if err != nil {
+		return nil, err
+	}
+
+	cursor := sitter.NewQueryCursor()
+	defer cursor.Close()
+
+	cursor.Exec(query, rootNode)
+	var useStatements []PHPUseStatement
+
+	for {
+		match, ok := cursor.NextMatch()
+		if !ok {
+			break
+		}
+
+		useStmt, err := q.extractUseStatementFromCaptures(match.Captures, tree.Source)
+		if err != nil {
+			continue
+		}
+		useStatements = append(useStatements, useStmt)
+	}
+
+	// Sort use statements deterministically by fully qualified name
+	sort.Slice(useStatements, func(i, j int) bool {
+		return useStatements[i].FullyQualifiedName < useStatements[j].FullyQualifiedName
+	})
+
+	return useStatements, nil
+}
+
 // Helper methods for extracting constructs from query captures
 
 // convertSyntaxNodeToSitterNode converts our SyntaxNode back to tree-sitter node.
@@ -412,7 +455,7 @@ func (q *DefaultQueryEngine) convertSyntaxNodeToSitterNode(tree *SyntaxTree) (*s
 	}
 
 	parser.SetLanguage(q.language)
-	
+
 	sitterTree, err := parser.ParseCtx(context.Background(), nil, tree.Source)
 	if err != nil {
 		return nil, WrapTreeSitterError("temporary parse", err)
@@ -439,13 +482,13 @@ func (q *DefaultQueryEngine) extractNamespaceFromCaptures(captures []sitter.Quer
 		if capture.Node.Type() != "namespace_definition" {
 			continue
 		}
-		
+
 		// Find namespace name from child nodes
 		nameNode := q.findChildByType(capture.Node, "namespace_name")
 		if nameNode != nil {
 			namespace.Name = strings.TrimSpace(string(nameNode.Content(source)))
 		}
-		
+
 		namespace.Position = SourcePosition{
 			StartLine:   int(capture.Node.StartPoint().Row) + 1,
 			StartColumn: int(capture.Node.StartPoint().Column) + 1,
@@ -461,6 +504,70 @@ func (q *DefaultQueryEngine) extractNamespaceFromCaptures(captures []sitter.Quer
 	}
 
 	return namespace, nil
+}
+
+// extractUseStatementFromCaptures extracts use statement information from query captures.
+func (q *DefaultQueryEngine) extractUseStatementFromCaptures(captures []sitter.QueryCapture, source []byte) (PHPUseStatement, error) {
+	var useStmt PHPUseStatement
+
+	for _, capture := range captures {
+		if capture.Node.Type() != "namespace_use_declaration" {
+			continue
+		}
+
+		// Find use clause from child nodes
+		useClause := q.findChildByType(capture.Node, "namespace_use_clause")
+		if useClause == nil {
+			continue
+		}
+
+		// Extract the qualified name (fully qualified name)
+		qualifiedName := q.findChildByType(useClause, "qualified_name")
+		if qualifiedName == nil {
+			continue
+		}
+		
+		fullyQualifiedName := strings.TrimSpace(string(qualifiedName.Content(source)))
+		// Remove leading backslash if present
+		fullyQualifiedName = strings.TrimPrefix(fullyQualifiedName, "\\")
+		
+		useStmt.FullyQualifiedName = fullyQualifiedName
+		useStmt.Type = "class" // Default type
+
+		// Check for alias
+		aliasClause := q.findChildByType(useClause, "namespace_aliasing_clause")
+		if aliasClause != nil {
+			aliasIdentifier := q.findChildByType(aliasClause, "name")
+			if aliasIdentifier != nil {
+				useStmt.Alias = strings.TrimSpace(string(aliasIdentifier.Content(source)))
+			}
+		}
+
+		// If no alias, use the last part of the namespace as the implicit alias
+		if useStmt.Alias == "" {
+			parts := strings.Split(fullyQualifiedName, "\\")
+			if len(parts) > 0 {
+				useStmt.Alias = parts[len(parts)-1]
+			}
+		}
+
+		useStmt.Position = SourcePosition{
+			StartLine:   int(capture.Node.StartPoint().Row) + 1,
+			StartColumn: int(capture.Node.StartPoint().Column) + 1,
+			EndLine:     int(capture.Node.EndPoint().Row) + 1,
+			EndColumn:   int(capture.Node.EndPoint().Column) + 1,
+			StartByte:   int(capture.Node.StartByte()),
+			EndByte:     int(capture.Node.EndByte()),
+		}
+		
+		break // Only process first valid use statement per capture
+	}
+
+	if useStmt.FullyQualifiedName == "" {
+		return useStmt, fmt.Errorf("use statement name not found in captures")
+	}
+
+	return useStmt, nil
 }
 
 // findChildByType finds the first child node with the specified type.
@@ -513,17 +620,17 @@ func (q *DefaultQueryEngine) extractClassFromCaptures(captures []sitter.QueryCap
 		if capture.Node.Type() != "class_declaration" {
 			continue
 		}
-		
+
 		// Extract class name
 		nameNode := q.findChildByType(capture.Node, "name")
 		if nameNode != nil {
 			class.Name = q.getNodeText(nameNode, source)
 		}
-		
+
 		// Check for abstract/final modifiers
 		class.IsAbstract = q.hasKeyword(capture.Node, source, "abstract")
 		class.IsFinal = q.hasKeyword(capture.Node, source, "final")
-		
+
 		// Extract extends clause
 		baseClause := q.findChildByType(capture.Node, "base_clause")
 		if baseClause != nil {
@@ -535,7 +642,7 @@ func (q *DefaultQueryEngine) extractClassFromCaptures(captures []sitter.QueryCap
 				class.Extends = q.getNodeText(qualifiedName, source)
 			}
 		}
-		
+
 		// Extract implements clause
 		interfaceClause := q.findChildByType(capture.Node, "class_interface_clause")
 		if interfaceClause != nil {
@@ -544,7 +651,7 @@ func (q *DefaultQueryEngine) extractClassFromCaptures(captures []sitter.QueryCap
 				class.Implements = append(class.Implements, q.getNodeText(interfaceName, source))
 			}
 		}
-		
+
 		class.Position = SourcePosition{
 			StartLine:   int(capture.Node.StartPoint().Row) + 1,
 			StartColumn: int(capture.Node.StartPoint().Column) + 1,
@@ -561,10 +668,10 @@ func (q *DefaultQueryEngine) extractClassFromCaptures(captures []sitter.QueryCap
 
 	// Set default visibility
 	class.Visibility = "public"
-	
+
 	// Sort implements for deterministic output
 	sort.Strings(class.Implements)
-	
+
 	// Build fully qualified name (will be updated with namespace context later)
 	class.FullyQualifiedName = class.Name
 
@@ -579,13 +686,13 @@ func (q *DefaultQueryEngine) extractMethodFromCaptures(captures []sitter.QueryCa
 		if capture.Node.Type() != "method_declaration" {
 			continue
 		}
-		
+
 		// Extract method name
 		nameNode := q.findChildByType(capture.Node, "name")
 		if nameNode != nil {
 			method.Name = q.getNodeText(nameNode, source)
 		}
-		
+
 		// Extract visibility modifier
 		visibilityNode := q.findChildByType(capture.Node, "visibility_modifier")
 		if visibilityNode != nil {
@@ -593,12 +700,12 @@ func (q *DefaultQueryEngine) extractMethodFromCaptures(captures []sitter.QueryCa
 		} else {
 			method.Visibility = "public" // Default visibility
 		}
-		
+
 		// Check for modifiers
 		method.IsStatic = q.hasKeyword(capture.Node, source, "static")
 		method.IsAbstract = q.hasKeyword(capture.Node, source, "abstract")
 		method.IsFinal = q.hasKeyword(capture.Node, source, "final")
-		
+
 		// Extract return type - look for : type_name pattern
 		for i := 0; i < int(capture.Node.ChildCount()); i++ {
 			child := capture.Node.Child(i)
@@ -614,7 +721,7 @@ func (q *DefaultQueryEngine) extractMethodFromCaptures(captures []sitter.QueryCa
 				break
 			}
 		}
-		
+
 		method.Position = SourcePosition{
 			StartLine:   int(capture.Node.StartPoint().Row) + 1,
 			StartColumn: int(capture.Node.StartPoint().Column) + 1,
@@ -647,14 +754,14 @@ func (q *DefaultQueryEngine) extractTraitFromCaptures(captures []sitter.QueryCap
 		if capture.Node.Type() != "trait_declaration" {
 			continue
 		}
-		
+
 		// Extract trait name
 		nameNode := q.findChildByType(capture.Node, "name")
 		if nameNode != nil {
 			trait.Name = q.getNodeText(nameNode, source)
 			trait.FullyQualifiedName = trait.Name
 		}
-		
+
 		trait.Position = SourcePosition{
 			StartLine:   int(capture.Node.StartPoint().Row) + 1,
 			StartColumn: int(capture.Node.StartPoint().Column) + 1,
@@ -680,19 +787,19 @@ func (q *DefaultQueryEngine) extractFunctionFromCaptures(captures []sitter.Query
 		if capture.Node.Type() != "function_definition" {
 			continue
 		}
-		
+
 		// Extract function name
 		nameNode := q.findChildByType(capture.Node, "name")
 		if nameNode != nil {
 			function.Name = q.getNodeText(nameNode, source)
 		}
-		
+
 		// Extract return type
 		returnTypeNode := q.findChildByType(capture.Node, "return_type")
 		if returnTypeNode != nil {
 			function.ReturnType = q.getNodeText(returnTypeNode, source)
 		}
-		
+
 		function.Position = SourcePosition{
 			StartLine:   int(capture.Node.StartPoint().Row) + 1,
 			StartColumn: int(capture.Node.StartPoint().Column) + 1,
@@ -718,14 +825,14 @@ func (q *DefaultQueryEngine) extractInterfaceFromCaptures(captures []sitter.Quer
 		if capture.Node.Type() != "interface_declaration" {
 			continue
 		}
-		
+
 		// Extract interface name
 		nameNode := q.findChildByType(capture.Node, "name")
 		if nameNode != nil {
 			iface.Name = q.getNodeText(nameNode, source)
 			iface.FullyQualifiedName = iface.Name
 		}
-		
+
 		// Extract extends clause - find base_clause node
 		baseClause := q.findChildByType(capture.Node, "base_clause")
 		if baseClause != nil {
@@ -737,7 +844,7 @@ func (q *DefaultQueryEngine) extractInterfaceFromCaptures(captures []sitter.Quer
 				}
 			}
 		}
-		
+
 		iface.Position = SourcePosition{
 			StartLine:   int(capture.Node.StartPoint().Row) + 1,
 			StartColumn: int(capture.Node.StartPoint().Column) + 1,

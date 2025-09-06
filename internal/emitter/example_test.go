@@ -8,21 +8,21 @@ import (
 // ExampleJSONEmitter_EmitStub demonstrates the basic usage
 func ExampleJSONEmitter_EmitStub() {
 	emitter := NewJSONEmitter()
-	
+
 	// Generate a stub delta (empty but schema-valid)
 	delta, err := emitter.EmitStub()
 	if err != nil {
 		panic(err)
 	}
-	
+
 	// Marshal to JSON with deterministic ordering
 	jsonData, err := emitter.MarshalDeterministic(delta)
 	if err != nil {
 		panic(err)
 	}
-	
+
 	fmt.Println(string(jsonData))
-	
+
 	// Output:
 	// {"meta":{"partial":false,"stats":{"filesParsed":0,"skipped":0,"durationMs":0}},"controllers":[],"models":[],"polymorphic":[],"broadcast":[]}
 }
@@ -30,7 +30,7 @@ func ExampleJSONEmitter_EmitStub() {
 // ExampleJSONEmitter_WriteJSON demonstrates writing JSON to a writer
 func ExampleJSONEmitter_WriteJSON() {
 	emitter := NewJSONEmitter()
-	
+
 	// Create a simple delta
 	delta := &Delta{
 		Meta: MetaInfo{
@@ -51,16 +51,16 @@ func ExampleJSONEmitter_WriteJSON() {
 		Polymorphic: []Polymorphic{},
 		Broadcast:   []Broadcast{},
 	}
-	
+
 	// Write to buffer (could be any io.Writer like os.Stdout)
 	var buf bytes.Buffer
 	err := emitter.WriteJSON(&buf, delta)
 	if err != nil {
 		panic(err)
 	}
-	
+
 	fmt.Println(buf.String())
-	
+
 	// Output:
 	// {"meta":{"partial":false,"stats":{"filesParsed":5,"skipped":1,"durationMs":250}},"controllers":[{"fqcn":"App\\Http\\Controllers\\ApiController","method":"index"}],"models":[],"polymorphic":[],"broadcast":[]}
 }
@@ -85,10 +85,10 @@ func ExampleDelta_structure() {
 					Status:   &[]int{200}[0],
 					Explicit: &[]bool{true}[0],
 				},
-            Request: &RequestInfo{
-                ContentTypes: []string{"application/json"},
-                Body:         NewOrderedObjectFromMap(map[string]interface{}{"id": map[string]interface{}{}}),
-            },
+				Request: &RequestInfo{
+					ContentTypes: []string{"application/json"},
+					Body:         NewOrderedObjectFromMap(map[string]any{"id": map[string]any{}}),
+				},
 				Resources: []Resource{
 					{Class: "UserResource", Collection: false},
 				},
@@ -135,17 +135,17 @@ func ExampleDelta_structure() {
 			},
 		},
 	}
-	
+
 	emitter := NewJSONEmitter()
 	jsonData, err := emitter.MarshalDeterministic(delta)
 	if err != nil {
 		panic(err)
 	}
-	
-	fmt.Printf("Delta contains %d controllers, %d models, %d polymorphic, %d broadcast\n", 
+
+	fmt.Printf("Delta contains %d controllers, %d models, %d polymorphic, %d broadcast\n",
 		len(delta.Controllers), len(delta.Models), len(delta.Polymorphic), len(delta.Broadcast))
 	fmt.Printf("JSON length: %d bytes\n", len(jsonData))
-	
+
 	// Output:
 	// Delta contains 1 controllers, 1 models, 1 polymorphic, 1 broadcast
 	// JSON length: 821 bytes

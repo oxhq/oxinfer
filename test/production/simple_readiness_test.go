@@ -24,8 +24,8 @@ func TestSimpleMVPReadiness(t *testing.T) {
 	// Track results
 	results := &SimpleMVPResults{
 		TestResults: make(map[string]bool),
-		Issues:     make([]string, 0),
-		StartTime:  time.Now(),
+		Issues:      make([]string, 0),
+		StartTime:   time.Now(),
 	}
 
 	// Test 1: CLI Basic Functionality
@@ -79,14 +79,14 @@ func TestSimpleMVPReadiness(t *testing.T) {
 
 // SimpleMVPResults tracks the results of MVP validation.
 type SimpleMVPResults struct {
-	TestResults   map[string]bool
-	Issues        []string
-	Score         int
-	PassingTests  int
-	TotalTests    int
-	StartTime     time.Time
-	EndTime       time.Time
-	Duration      time.Duration
+	TestResults  map[string]bool
+	Issues       []string
+	Score        int
+	PassingTests int
+	TotalTests   int
+	StartTime    time.Time
+	EndTime      time.Time
+	Duration     time.Duration
 }
 
 func (r *SimpleMVPResults) calculateScore() {
@@ -96,7 +96,7 @@ func (r *SimpleMVPResults) calculateScore() {
 			r.PassingTests++
 		}
 	}
-	
+
 	if r.TotalTests > 0 {
 		r.Score = int(float64(r.PassingTests) / float64(r.TotalTests) * 100)
 	}
@@ -126,7 +126,7 @@ func testCLIHelp(t *testing.T, cliPath string) bool {
 
 	cmd := exec.Command(cliPath, "--help")
 	output, err := cmd.Output()
-	
+
 	if err != nil {
 		t.Logf("CLI help failed: %v", err)
 		return false
@@ -148,7 +148,7 @@ func testCLIVersion(t *testing.T, cliPath string) bool {
 	// Try --version flag (might not be implemented)
 	cmd := exec.Command(cliPath, "--version")
 	_, err := cmd.Output()
-	
+
 	// Version might not be implemented, so just log the result
 	if err != nil {
 		t.Logf("CLI version not implemented or failed: %v", err)
@@ -165,7 +165,7 @@ func testValidManifestHandling(t *testing.T, cliPath string) bool {
 
 	// Create a minimal valid test project
 	tempDir := t.TempDir()
-	
+
 	// Create project structure
 	appDir := filepath.Join(tempDir, "app")
 	if err := os.MkdirAll(appDir, 0755); err != nil {
@@ -201,7 +201,7 @@ func testValidManifestHandling(t *testing.T, cliPath string) bool {
 			"max_files": 100
 		}
 	}`, tempDir)
-	
+
 	manifestPath := filepath.Join(tempDir, "manifest.json")
 	if err := os.WriteFile(manifestPath, []byte(manifestContent), 0644); err != nil {
 		t.Logf("Failed to create manifest: %v", err)
@@ -218,9 +218,9 @@ func testValidManifestHandling(t *testing.T, cliPath string) bool {
 		if exitError, ok := err.(*exec.ExitError); ok {
 			stderr := string(exitError.Stderr)
 			// Check if it's a manifest validation error
-			if strings.Contains(strings.ToLower(stderr), "manifest") && 
-			   (strings.Contains(strings.ToLower(stderr), "invalid") || 
-			    strings.Contains(strings.ToLower(stderr), "validation")) {
+			if strings.Contains(strings.ToLower(stderr), "manifest") &&
+				(strings.Contains(strings.ToLower(stderr), "invalid") ||
+					strings.Contains(strings.ToLower(stderr), "validation")) {
 				t.Logf("Manifest validation failed: %s", stderr)
 				return false
 			}
@@ -242,7 +242,7 @@ func testInvalidManifestHandling(t *testing.T, cliPath string) bool {
 	// Test with nonexistent manifest
 	cmd := exec.Command(cliPath, "--manifest", "nonexistent.json")
 	_, err := cmd.Output()
-	
+
 	// Should fail gracefully
 	if err == nil {
 		t.Logf("CLI should have failed with nonexistent manifest")
@@ -300,7 +300,7 @@ func testMalformedJSONHandling(t *testing.T, cliPath string) bool {
 
 	tempDir := t.TempDir()
 	malformedPath := filepath.Join(tempDir, "malformed.json")
-	
+
 	// Create truly malformed JSON
 	malformedContent := `{
 		"project": {
@@ -312,7 +312,7 @@ func testMalformedJSONHandling(t *testing.T, cliPath string) bool {
 		// This comment makes it invalid JSON
 		"extra_field": "invalid"
 	}`
-	
+
 	if err := os.WriteFile(malformedPath, []byte(malformedContent), 0644); err != nil {
 		t.Logf("Failed to create malformed JSON: %v", err)
 		return false
@@ -491,12 +491,12 @@ func createMinimalTestManifest(t *testing.T, tempDir string) string {
 }
 
 func normalizeAndCompareJSON(json1, json2 []byte) bool {
-	var obj1, obj2 interface{}
-	
+	var obj1, obj2 any
+
 	if err := json.Unmarshal(json1, &obj1); err != nil {
 		return false
 	}
-	
+
 	if err := json.Unmarshal(json2, &obj2); err != nil {
 		return false
 	}
@@ -518,7 +518,7 @@ func reportSimpleResults(t *testing.T, results *SimpleMVPResults) {
 	t.Logf("\n=== MVP PRODUCTION READINESS REPORT ===")
 	t.Logf("Duration: %v", results.Duration)
 	t.Logf("Score: %d/100 (%d/%d tests passing)", results.Score, results.PassingTests, results.TotalTests)
-	
+
 	t.Logf("\nTest Results:")
 	for testName, passed := range results.TestResults {
 		status := "✓ PASS"

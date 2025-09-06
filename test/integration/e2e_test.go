@@ -86,7 +86,7 @@ func runIntegrationTest(t *testing.T, cliPath string, test IntegrationTest) {
 		t.Fatalf("Failed to read golden file %s: %v", goldenPath, err)
 	}
 
-	var expectedResult map[string]interface{}
+	var expectedResult map[string]any
 	if err := json.Unmarshal(goldenData, &expectedResult); err != nil {
 		t.Fatalf("Golden file contains invalid JSON: %v", err)
 	}
@@ -101,7 +101,7 @@ func runIntegrationTest(t *testing.T, cliPath string, test IntegrationTest) {
 
 	if err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
-			t.Fatalf("CLI execution failed with exit code %d: %v\nStderr: %s", 
+			t.Fatalf("CLI execution failed with exit code %d: %v\nStderr: %s",
 				exitError.ExitCode(), err, string(exitError.Stderr))
 		}
 		t.Fatalf("CLI execution failed: %v", err)
@@ -114,7 +114,7 @@ func runIntegrationTest(t *testing.T, cliPath string, test IntegrationTest) {
 	t.Logf("Execution completed in %v", duration)
 
 	// Parse actual output
-	var actualResult map[string]interface{}
+	var actualResult map[string]any
 	if err := json.Unmarshal(output, &actualResult); err != nil {
 		t.Fatalf("CLI output is not valid JSON: %v\nOutput: %s", err, string(output))
 	}
@@ -127,12 +127,12 @@ func runIntegrationTest(t *testing.T, cliPath string, test IntegrationTest) {
 }
 
 // validateOutputStructure compares actual output against expected golden file structure
-func validateOutputStructure(t *testing.T, testName string, expected, actual map[string]interface{}) {
+func validateOutputStructure(t *testing.T, testName string, expected, actual map[string]any) {
 	t.Helper()
 
 	// Remove dynamic fields that vary between runs
-	if actualMeta, ok := actual["meta"].(map[string]interface{}); ok {
-		if actualStats, ok := actualMeta["stats"].(map[string]interface{}); ok {
+	if actualMeta, ok := actual["meta"].(map[string]any); ok {
+		if actualStats, ok := actualMeta["stats"].(map[string]any); ok {
 			// Keep durationMs for performance validation but allow some variance
 			if duration, ok := actualStats["durationMs"].(float64); ok {
 				if duration > 30000 { // 30 seconds is too long
@@ -144,8 +144,8 @@ func validateOutputStructure(t *testing.T, testName string, expected, actual map
 		}
 	}
 
-	if expectedMeta, ok := expected["meta"].(map[string]interface{}); ok {
-		if expectedStats, ok := expectedMeta["stats"].(map[string]interface{}); ok {
+	if expectedMeta, ok := expected["meta"].(map[string]any); ok {
+		if expectedStats, ok := expectedMeta["stats"].(map[string]any); ok {
 			delete(expectedStats, "durationMs")
 		}
 	}
@@ -173,10 +173,10 @@ func validateOutputStructure(t *testing.T, testName string, expected, actual map
 }
 
 // validateMetaStructure validates the meta section structure
-func validateMetaStructure(t *testing.T, expected, actual map[string]interface{}) {
+func validateMetaStructure(t *testing.T, expected, actual map[string]any) {
 	t.Helper()
 
-	actualMeta, ok := actual["meta"].(map[string]interface{})
+	actualMeta, ok := actual["meta"].(map[string]any)
 	if !ok {
 		t.Error("Meta field should be an object")
 		return
@@ -192,7 +192,7 @@ func validateMetaStructure(t *testing.T, expected, actual map[string]interface{}
 	// Check stats structure
 	if stats, exists := actualMeta["stats"]; !exists {
 		t.Error("Meta missing stats field")
-	} else if statsObj, ok := stats.(map[string]interface{}); ok {
+	} else if statsObj, ok := stats.(map[string]any); ok {
 		requiredStatsFields := []string{"filesParsed", "skipped"}
 		for _, field := range requiredStatsFields {
 			if _, exists := statsObj[field]; !exists {
@@ -205,11 +205,11 @@ func validateMetaStructure(t *testing.T, expected, actual map[string]interface{}
 }
 
 // validateMinimalLaravelOutput validates output for minimal Laravel fixture
-func validateMinimalLaravelOutput(t *testing.T, expected, actual map[string]interface{}) {
+func validateMinimalLaravelOutput(t *testing.T, expected, actual map[string]any) {
 	t.Helper()
 
 	// Check controllers array
-	if controllers, ok := actual["controllers"].([]interface{}); ok {
+	if controllers, ok := actual["controllers"].([]any); ok {
 		if len(controllers) == 0 {
 			t.Log("No controllers found - this may be expected if parsing is not yet implemented")
 			return
@@ -217,7 +217,7 @@ func validateMinimalLaravelOutput(t *testing.T, expected, actual map[string]inte
 
 		// Validate controller structure if present
 		for i, controller := range controllers {
-			ctrl, ok := controller.(map[string]interface{})
+			ctrl, ok := controller.(map[string]any)
 			if !ok {
 				t.Errorf("Controller %d should be an object", i)
 				continue
@@ -235,7 +235,7 @@ func validateMinimalLaravelOutput(t *testing.T, expected, actual map[string]inte
 	}
 
 	// Check models array
-	if models, ok := actual["models"].([]interface{}); ok {
+	if models, ok := actual["models"].([]any); ok {
 		if len(models) == 0 {
 			t.Log("No models found - this may be expected if parsing is not yet implemented")
 			return
@@ -243,7 +243,7 @@ func validateMinimalLaravelOutput(t *testing.T, expected, actual map[string]inte
 
 		// Validate model structure if present
 		for i, model := range models {
-			mdl, ok := model.(map[string]interface{})
+			mdl, ok := model.(map[string]any)
 			if !ok {
 				t.Errorf("Model %d should be an object", i)
 				continue
@@ -262,16 +262,16 @@ func validateMinimalLaravelOutput(t *testing.T, expected, actual map[string]inte
 }
 
 // validateApiProjectOutput validates output for API project fixture
-func validateApiProjectOutput(t *testing.T, expected, actual map[string]interface{}) {
+func validateApiProjectOutput(t *testing.T, expected, actual map[string]any) {
 	t.Helper()
 
 	// Check for resource usage patterns
-	if controllers, ok := actual["controllers"].([]interface{}); ok && len(controllers) > 0 {
+	if controllers, ok := actual["controllers"].([]any); ok && len(controllers) > 0 {
 		foundResourceUsage := false
 		for _, controller := range controllers {
-			if ctrl, ok := controller.(map[string]interface{}); ok {
+			if ctrl, ok := controller.(map[string]any); ok {
 				if resources, exists := ctrl["resources"]; exists {
-					if resourcesArray, ok := resources.([]interface{}); ok && len(resourcesArray) > 0 {
+					if resourcesArray, ok := resources.([]any); ok && len(resourcesArray) > 0 {
 						foundResourceUsage = true
 						break
 					}
@@ -285,12 +285,12 @@ func validateApiProjectOutput(t *testing.T, expected, actual map[string]interfac
 	}
 
 	// Check for pivot relationships
-	if models, ok := actual["models"].([]interface{}); ok && len(models) > 0 {
+	if models, ok := actual["models"].([]any); ok && len(models) > 0 {
 		foundPivot := false
 		for _, model := range models {
-			if mdl, ok := model.(map[string]interface{}); ok {
+			if mdl, ok := model.(map[string]any); ok {
 				if withPivot, exists := mdl["withPivot"]; exists {
-					if pivotArray, ok := withPivot.([]interface{}); ok && len(pivotArray) > 0 {
+					if pivotArray, ok := withPivot.([]any); ok && len(pivotArray) > 0 {
 						foundPivot = true
 						break
 					}
@@ -305,17 +305,17 @@ func validateApiProjectOutput(t *testing.T, expected, actual map[string]interfac
 }
 
 // validateComplexAppOutput validates output for complex app fixture
-func validateComplexAppOutput(t *testing.T, expected, actual map[string]interface{}) {
+func validateComplexAppOutput(t *testing.T, expected, actual map[string]any) {
 	t.Helper()
 
 	// Check for polymorphic relationships
-	if polymorphic, ok := actual["polymorphic"].([]interface{}); ok {
+	if polymorphic, ok := actual["polymorphic"].([]any); ok {
 		if len(polymorphic) == 0 {
 			t.Log("No polymorphic relationships found - this may be expected if polymorphic pattern matching is not yet implemented")
 		} else {
 			// Validate polymorphic structure
 			for i, poly := range polymorphic {
-				polyObj, ok := poly.(map[string]interface{})
+				polyObj, ok := poly.(map[string]any)
 				if !ok {
 					t.Errorf("Polymorphic %d should be an object", i)
 					continue
@@ -334,13 +334,13 @@ func validateComplexAppOutput(t *testing.T, expected, actual map[string]interfac
 	}
 
 	// Check for broadcast channels
-	if broadcast, ok := actual["broadcast"].([]interface{}); ok {
+	if broadcast, ok := actual["broadcast"].([]any); ok {
 		if len(broadcast) == 0 {
 			t.Log("No broadcast channels found - this may be expected if broadcast pattern matching is not yet implemented")
 		} else {
 			// Validate broadcast structure
 			for i, channel := range broadcast {
-				channelObj, ok := channel.(map[string]interface{})
+				channelObj, ok := channel.(map[string]any)
 				if !ok {
 					t.Errorf("Broadcast channel %d should be an object", i)
 					continue
@@ -359,12 +359,12 @@ func validateComplexAppOutput(t *testing.T, expected, actual map[string]interfac
 	}
 
 	// Check for scope usage
-	if controllers, ok := actual["controllers"].([]interface{}); ok && len(controllers) > 0 {
+	if controllers, ok := actual["controllers"].([]any); ok && len(controllers) > 0 {
 		foundScopes := false
 		for _, controller := range controllers {
-			if ctrl, ok := controller.(map[string]interface{}); ok {
+			if ctrl, ok := controller.(map[string]any); ok {
 				if scopesUsed, exists := ctrl["scopesUsed"]; exists {
-					if scopes, ok := scopesUsed.([]interface{}); ok && len(scopes) > 0 {
+					if scopes, ok := scopesUsed.([]any); ok && len(scopes) > 0 {
 						foundScopes = true
 						break
 					}
@@ -391,20 +391,20 @@ func validateDeterministicOutput(t *testing.T, cliPath, manifestPath, originalOu
 		}
 
 		// Parse JSON to normalize for comparison (handles potential whitespace differences)
-		var originalResult, currentResult map[string]interface{}
-		
+		var originalResult, currentResult map[string]any
+
 		if err := json.Unmarshal([]byte(originalOutput), &originalResult); err != nil {
 			t.Fatalf("Failed to parse original output as JSON: %v", err)
 		}
-		
+
 		if err := json.Unmarshal(output, &currentResult); err != nil {
 			t.Fatalf("Failed to parse current output as JSON: %v", err)
 		}
 
 		// Remove dynamic fields that are allowed to vary
-		removeDynamicFields := func(result map[string]interface{}) {
-			if meta, ok := result["meta"].(map[string]interface{}); ok {
-				if stats, ok := meta["stats"].(map[string]interface{}); ok {
+		removeDynamicFields := func(result map[string]any) {
+			if meta, ok := result["meta"].(map[string]any); ok {
+				if stats, ok := meta["stats"].(map[string]any); ok {
 					delete(stats, "durationMs") // Duration can vary
 				}
 			}
@@ -485,7 +485,7 @@ func validateFixture(t *testing.T, fixturePath, description string) {
 	// Validate composer.json structure
 	composerPath := filepath.Join(fixturePath, "composer.json")
 	if composerData, err := os.ReadFile(composerPath); err == nil {
-		var composer map[string]interface{}
+		var composer map[string]any
 		if err := json.Unmarshal(composerData, &composer); err != nil {
 			t.Errorf("Invalid composer.json: %v", err)
 		} else {
@@ -502,7 +502,7 @@ func validateFixture(t *testing.T, fixturePath, description string) {
 	// Validate manifest.json structure
 	manifestPath := filepath.Join(fixturePath, "manifest.json")
 	if manifestData, err := os.ReadFile(manifestPath); err == nil {
-		var manifest map[string]interface{}
+		var manifest map[string]any
 		if err := json.Unmarshal(manifestData, &manifest); err != nil {
 			t.Errorf("Invalid manifest.json: %v", err)
 		} else {
@@ -556,7 +556,7 @@ func TestGoldenFileIntegrity(t *testing.T) {
 	goldenDir := "../../test/golden"
 	goldenFiles := []string{
 		"minimal-laravel.json",
-		"api-project.json", 
+		"api-project.json",
 		"complex-app.json",
 	}
 
@@ -583,7 +583,7 @@ func TestGoldenFileIntegrity(t *testing.T) {
 	for _, filename := range goldenFiles {
 		t.Run(filename, func(t *testing.T) {
 			filePath := filepath.Join(goldenDir, filename)
-			
+
 			// Check file exists
 			if _, err := os.Stat(filePath); os.IsNotExist(err) {
 				t.Fatalf("Golden file does not exist: %s", filename)
@@ -595,7 +595,7 @@ func TestGoldenFileIntegrity(t *testing.T) {
 				t.Fatalf("Failed to read golden file: %v", err)
 			}
 
-			var result map[string]interface{}
+			var result map[string]any
 			if err := json.Unmarshal(data, &result); err != nil {
 				t.Fatalf("Golden file contains invalid JSON: %v", err)
 			}

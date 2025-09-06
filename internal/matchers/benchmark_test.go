@@ -75,7 +75,7 @@ class ComplexController extends Controller {
 			},
 		},
 		{
-			name: "LargeController",
+			name:       "LargeController",
 			phpContent: generateLargeController(50), // Generate a controller with 50 methods
 			matchers: []func(*sitter.Language, *MatcherConfig) (PatternMatcher, error){
 				func(lang *sitter.Language, cfg *MatcherConfig) (PatternMatcher, error) {
@@ -117,7 +117,7 @@ class ComplexController extends Controller {
 				b.Run(matcherName, func(b *testing.B) {
 					ctx := context.Background()
 					b.ResetTimer()
-					
+
 					for i := 0; i < b.N; i++ {
 						_, err := matcher.Match(ctx, syntaxTree, "benchmark.php")
 						if err != nil {
@@ -146,7 +146,7 @@ func BenchmarkQueryCompilation(b *testing.B) {
 			queries: HTTPStatusQueries,
 		},
 		{
-			name:    "RequestUsageQueries", 
+			name:    "RequestUsageQueries",
 			queries: RequestUsageQueries,
 		},
 		{
@@ -158,12 +158,12 @@ func BenchmarkQueryCompilation(b *testing.B) {
 	for _, qt := range queryTests {
 		b.Run(qt.name, func(b *testing.B) {
 			compiler := NewQueryCompiler(language)
-			
+
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				// Clear cache to test fresh compilation
 				compiler.ClearCache()
-				
+
 				_, err := compiler.CompileQueries(qt.queries)
 				if err != nil {
 					b.Fatalf("Failed to compile queries: %v", err)
@@ -209,11 +209,11 @@ class TestController extends Controller {
 }`,
 		},
 		{
-			name: "MediumController",
+			name:       "MediumController",
 			phpContent: generateMediumController(),
 		},
 		{
-			name: "LargeController", 
+			name:       "LargeController",
 			phpContent: generateLargeController(20),
 		},
 	}
@@ -289,7 +289,7 @@ class ProcessorBenchmark extends Controller {
 			if err != nil {
 				b.Fatalf("Processor failed: %v", err)
 			}
-			
+
 			// Include conversion in benchmark
 			_, err = processor.ConvertToEmitterFormat(patterns)
 			if err != nil {
@@ -303,10 +303,10 @@ class ProcessorBenchmark extends Controller {
 func BenchmarkMemoryUsage(b *testing.B) {
 	language := php.GetLanguage()
 	config := DefaultMatcherConfig()
-	
+
 	// Test with large controller
 	phpContent := generateLargeController(100)
-	
+
 	tree, err := parsePHPContent(phpContent, language)
 	if err != nil {
 		b.Fatalf("Failed to parse PHP content: %v", err)
@@ -321,7 +321,7 @@ func BenchmarkMemoryUsage(b *testing.B) {
 	b.Run("HTTPStatusMatcher", func(b *testing.B) {
 		matcher, _ := NewHTTPStatusMatcher(language, config)
 		b.ResetTimer()
-		
+
 		for i := 0; i < b.N; i++ {
 			ctx := context.Background()
 			_, err := matcher.Match(ctx, syntaxTree, "benchmark.php")
@@ -330,11 +330,11 @@ func BenchmarkMemoryUsage(b *testing.B) {
 			}
 		}
 	})
-	
+
 	b.Run("AllMatchers", func(b *testing.B) {
 		processor, _ := NewPatternMatchingProcessor(language, config)
 		b.ResetTimer()
-		
+
 		for i := 0; i < b.N; i++ {
 			ctx := context.Background()
 			_, err := processor.ProcessFile(ctx, syntaxTree, "benchmark.php")
@@ -401,12 +401,12 @@ func BenchmarkRealWorldScenarios(b *testing.B) {
 	}
 
 	scenarios := []struct {
-		name         string
-		methodCount  int
+		name           string
+		methodCount    int
 		patternDensity string // "light", "medium", "heavy"
 	}{
 		{"SmallController", 5, "light"},
-		{"MediumController", 15, "medium"}, 
+		{"MediumController", 15, "medium"},
 		{"LargeController", 30, "heavy"},
 		{"VeryLargeController", 50, "heavy"},
 	}
@@ -414,7 +414,7 @@ func BenchmarkRealWorldScenarios(b *testing.B) {
 	for _, scenario := range scenarios {
 		b.Run(scenario.name, func(b *testing.B) {
 			phpContent := generateControllerWithPatterns(scenario.methodCount, scenario.patternDensity)
-			
+
 			tree, err := parsePHPContent(phpContent, language)
 			if err != nil {
 				b.Fatalf("Failed to parse PHP content: %v", err)
@@ -431,11 +431,11 @@ func BenchmarkRealWorldScenarios(b *testing.B) {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				patterns, err := processor.ProcessFile(ctx, syntaxTree, "benchmark.php")
 				cancel()
-				
+
 				if err != nil {
 					b.Fatalf("Processor failed: %v", err)
 				}
-				
+
 				if patterns == nil {
 					b.Fatal("Expected patterns result")
 				}
@@ -523,9 +523,9 @@ class PatternController extends Controller {`
 
 	for i := 0; i < methodCount; i++ {
 		methodName := "method" + string(rune('A'+i%26))
-		
+
 		content += "\n    public function " + methodName + "(Request $request) {\n"
-		
+
 		switch density {
 		case "light":
 			content += `        $data = $request->all();
@@ -543,7 +543,7 @@ class PatternController extends Controller {`
         $user = User::create($validated);
         return response()->json(UserResource::collection([$user]), 201);`
 		}
-		
+
 		content += "\n    }"
 	}
 

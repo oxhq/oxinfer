@@ -26,7 +26,7 @@ func NewAttributeMatcher(language *sitter.Language, config *MatcherConfig) (*Def
 	if language == nil {
 		return nil, fmt.Errorf("language cannot be nil")
 	}
-	
+
 	if config == nil {
 		config = DefaultMatcherConfig()
 	}
@@ -52,7 +52,7 @@ func (m *DefaultAttributeMatcher) initialize() error {
 	if err != nil {
 		return fmt.Errorf("failed to compile attribute queries: %w", err)
 	}
-	
+
 	m.queries = queries
 	m.initialized = true
 	return nil
@@ -84,7 +84,7 @@ func (m *DefaultAttributeMatcher) Match(ctx context.Context, tree *parser.Syntax
 		}
 
 		queryDef := m.queryDefs[i]
-		
+
 		// Convert SyntaxTree back to tree-sitter node for querying
 		sitterNode, sitterTree, err := m.convertToSitterNode(tree)
 		if err != nil {
@@ -158,7 +158,7 @@ func (m *DefaultAttributeMatcher) Close() error {
 	if m.compiler != nil {
 		m.compiler.Close()
 	}
-	
+
 	m.initialized = false
 	m.queries = nil
 	return nil
@@ -181,7 +181,7 @@ func (m *DefaultAttributeMatcher) processAttributeMatch(
 	// Extract captures
 	for _, capture := range match.Captures {
 		captureName := query.CaptureNameForId(capture.Index)
-		
+
 		switch captureName {
 		case "method_name":
 			methodNode := capture.Node
@@ -224,9 +224,9 @@ func (m *DefaultAttributeMatcher) processAttributeMatch(
 
 // processModernAttributeMethod processes modern attribute methods with return type Attribute.
 func (m *DefaultAttributeMatcher) processModernAttributeMethod(
-	methodName, returnType string, 
-	position parser.Point, 
-	queryDef QueryDefinition, 
+	methodName, returnType string,
+	position parser.Point,
+	queryDef QueryDefinition,
 	filePath string,
 ) *MatchResult {
 	if methodName == "" || returnType != "Attribute" {
@@ -274,7 +274,7 @@ func (m *DefaultAttributeMatcher) processAttributeMakeCall(
 ) *MatchResult {
 	// Extract arguments from Attribute::make() call
 	castType := m.extractCastTypeFromArgs(argsNode, tree)
-	
+
 	attributeMatch := &AttributeMatch{
 		Name:     "unknown", // Will be inferred from context if possible
 		CastType: castType,
@@ -512,7 +512,7 @@ func (m *DefaultAttributeMatcher) extractCastMappings(castArray *sitter.Node, tr
 		// Extract key and value
 		key := ""
 		value := ""
-		
+
 		for j := uint32(0); j < child.ChildCount(); j++ {
 			grandchild := child.Child(int(j))
 			if grandchild == nil {
@@ -548,15 +548,15 @@ func (m *DefaultAttributeMatcher) camelToSnake(s string) string {
 // cleanStringLiteral removes quotes from string literals.
 func (m *DefaultAttributeMatcher) cleanStringLiteral(str string) string {
 	str = strings.TrimSpace(str)
-	
+
 	// Remove single or double quotes
 	if len(str) >= 2 {
-		if (str[0] == '"' && str[len(str)-1] == '"') || 
-		   (str[0] == '\'' && str[len(str)-1] == '\'') {
+		if (str[0] == '"' && str[len(str)-1] == '"') ||
+			(str[0] == '\'' && str[len(str)-1] == '\'') {
 			return str[1 : len(str)-1]
 		}
 	}
-	
+
 	return str
 }
 
@@ -565,14 +565,14 @@ func (m *DefaultAttributeMatcher) getArgsDisplay(argsNode *sitter.Node, tree *pa
 	if argsNode == nil {
 		return ""
 	}
-	
+
 	// Extract and format arguments
 	content := strings.TrimSpace(string(argsNode.Content(tree.Source)))
 	// Remove outer parentheses if present
 	if strings.HasPrefix(content, "(") && strings.HasSuffix(content, ")") {
 		content = content[1 : len(content)-1]
 	}
-	
+
 	return content
 }
 
@@ -585,7 +585,7 @@ func (m *DefaultAttributeMatcher) convertToSitterNode(tree *parser.SyntaxTree) (
 	}
 
 	tempParser.SetLanguage(m.compiler.language)
-	
+
 	sitterTree, err := tempParser.ParseCtx(context.Background(), nil, tree.Source)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to re-parse content: %w", err)
@@ -632,7 +632,7 @@ func (m *DefaultAttributeMatcher) deduplicateResults(results []*MatchResult) []*
 			// Create unique key based on position (row/column for method location)
 			// This will group matches from the same method together
 			posKey := fmt.Sprintf("%d:%d", result.Position.Row, result.Position.Column)
-			
+
 			if existing, exists := seen[posKey]; exists {
 				// Prefer modern_attribute_method matches over attribute_make_call matches
 				existingMatch := existing.Data.(*AttributeMatch)
@@ -664,8 +664,8 @@ func (m *DefaultAttributeMatcher) sortResultsByPosition(results []*MatchResult) 
 	// Sort by row first, then by column
 	for i := 0; i < len(results)-1; i++ {
 		for j := i + 1; j < len(results); j++ {
-			if results[i].Position.Row > results[j].Position.Row || 
-			   (results[i].Position.Row == results[j].Position.Row && results[i].Position.Column > results[j].Position.Column) {
+			if results[i].Position.Row > results[j].Position.Row ||
+				(results[i].Position.Row == results[j].Position.Row && results[i].Position.Column > results[j].Position.Column) {
 				results[i], results[j] = results[j], results[i]
 			}
 		}
@@ -691,7 +691,7 @@ func GetAttributeMethodConventions() map[string]string {
 		"modern_accessor": "public function {name}(): Attribute with return Attribute::make()",
 		"legacy_accessor": "public function get{Name}Attribute($value) method pattern",
 		"legacy_mutator":  "public function set{Name}Attribute($value) method pattern",
-		"casts":          "protected $casts property for automatic type casting",
+		"casts":           "protected $casts property for automatic type casting",
 	}
 }
 
@@ -705,6 +705,6 @@ func ValidateAttributeMethodCall(methodName string, isModern bool) bool {
 	// Legacy attributes must follow get{Name}Attribute or set{Name}Attribute pattern
 	legacyGetPattern := regexp.MustCompile(`^get[A-Z][a-zA-Z0-9]*Attribute$`)
 	legacySetPattern := regexp.MustCompile(`^set[A-Z][a-zA-Z0-9]*Attribute$`)
-	
+
 	return legacyGetPattern.MatchString(methodName) || legacySetPattern.MatchString(methodName)
 }

@@ -4,6 +4,7 @@ package matchers
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -64,10 +65,88 @@ func (m *DefaultBroadcastMatcher) GetType() PatternType {
 	return PatternTypeBroadcast
 }
 
+// isBroadcastFile checks if the file should be processed for broadcast channels.
+// Only processes files in routes/channels.php or routes/channels/ directory
+func (m *DefaultBroadcastMatcher) isBroadcastFile(filePath string) bool {
+	// Normalize path for consistent comparison
+	normalized := filepath.ToSlash(strings.ToLower(filePath))
+	
+	// Valid patterns for broadcast channel files
+	validPatterns := []string{
+		"routes/channels.php",        // Main channels file
+		"routes/channels/",            // Channels subdirectory
+		"routes/broadcasting.php",    // Alternative naming
+	}
+	
+	for _, pattern := range validPatterns {
+		if strings.Contains(normalized, pattern) {
+			return true
+		}
+	}
+	
+	return false
+}
+
+// isQueryBuilderMethod checks if a method name is a query builder method
+// that should be filtered out from broadcast detection
+func (m *DefaultBroadcastMatcher) isQueryBuilderMethod(methodName string) bool {
+	queryBuilderMethods := map[string]bool{
+		"where":        true,
+		"whereIn":      true,
+		"whereNotIn":   true,
+		"whereBetween": true,
+		"whereNull":    true,
+		"whereNotNull": true,
+		"whereHas":     true,
+		"get":          true,
+		"first":        true,
+		"firstOrFail":  true,
+		"find":         true,
+		"findOrFail":   true,
+		"all":          true,
+		"orderBy":      true,
+		"groupBy":      true,
+		"having":       true,
+		"select":       true,
+		"distinct":     true,
+		"join":         true,
+		"leftJoin":     true,
+		"rightJoin":    true,
+		"limit":        true,
+		"take":         true,
+		"skip":         true,
+		"offset":       true,
+		"count":        true,
+		"sum":          true,
+		"avg":          true,
+		"min":          true,
+		"max":          true,
+		"pluck":        true,
+		"exists":       true,
+		"doesntExist":  true,
+		"with":         true,
+		"withCount":    true,
+		"load":         true,
+		"latest":       true,
+		"oldest":       true,
+		"chunk":        true,
+		"chunkById":    true,
+		"cursor":       true,
+		"lazy":         true,
+	}
+	
+	return queryBuilderMethods[methodName]
+}
+
 // Match finds all Laravel broadcast channel patterns in the syntax tree.
 func (m *DefaultBroadcastMatcher) Match(ctx context.Context, tree *parser.SyntaxTree, filePath string) ([]*MatchResult, error) {
 	if !m.initialized {
 		return nil, fmt.Errorf("broadcast matcher not initialized")
+	}
+
+	// CRITICAL: Only process broadcast channel files
+	if !m.isBroadcastFile(filePath) {
+		return []*MatchResult{}, nil // Return empty results, not an error
 	}
 
 	if tree == nil || tree.Root == nil {
@@ -106,12 +185,19 @@ func (m *DefaultBroadcastMatcher) Match(ctx context.Context, tree *parser.Syntax
 			// Process broadcast matches
 			result := m.processBroadcastMatch(match, query, queryDef, tree, filePath)
 			if result != nil {
+				// Filter out query builder methods
+				if broadcastMatch, ok := result.Data.(*BroadcastMatch); ok {
+					if m.isQueryBuilderMethod(broadcastMatch.Method) {
+						continue // Skip query builder methods
+					}
+				}
+				
 				allResults = append(allResults, result)
 
 				// Respect match limits
 				if len(allResults) >= m.config.MaxMatchesPerFile {
 					cursor.Close()
-					return m.deduplicateResults(allResults), nil
+					return m.sortAndDeduplicate(allResults), nil
 				}
 			}
 		}
@@ -119,11 +205,41 @@ func (m *DefaultBroadcastMatcher) Match(ctx context.Context, tree *parser.Syntax
 		// Tree cleanup handled by defer statement
 	}
 
-	// Apply confidence filtering and deduplication
+	// Apply confidence filtering, sorting, and deduplication
 	filteredResults := m.filterByConfidence(allResults)
-	finalResults := m.deduplicateResults(filteredResults)
+	finalResults := m.sortAndDeduplicate(filteredResults)
 
 	return finalResults, nil
+}
+
+// sortAndDeduplicate sorts results deterministically and removes duplicates
+func (m *DefaultBroadcastMatcher) sortAndDeduplicate(results []*MatchResult) []*MatchResult {
+	// First, sort for deterministic ordering
+	sort.Slice(results, func(i, j int) bool {
+		// Sort by file path first
+		if results[i].Context.FilePath != results[j].Context.FilePath {
+			return results[i].Context.FilePath < results[j].Context.FilePath
+		}
+		
+		// Then by position (line, column)
+		if results[i].Position.Row != results[j].Position.Row {
+			return results[i].Position.Row < results[j].Position.Row
+		}
+		
+		if results[i].Position.Column != results[j].Position.Column {
+			return results[i].Position.Column < results[j].Position.Column
+		}
+		
+		// Finally by content for complete determinism
+		return results[i].Content < results[j].Content
+	})
+	
+	// Then deduplicate if enabled
+	if m.config.DeduplicateMatches {
+		return m.deduplicateResults(results)
+	}
+	
+	return results
 }
 
 // MatchBroadcast finds Laravel broadcast channel patterns.
@@ -319,13 +435,13 @@ func (m *DefaultBroadcastMatcher) detectPayloadLiterals(tree *parser.SyntaxTree,
 	// This is a simplified implementation
 	// In a full implementation, you might analyze the callback closure for literal return values
 	sourceLines := strings.Split(string(tree.Source), "\n")
-	
+
 	// Check surrounding lines for literal returns
 	for lineOffset := 0; lineOffset <= 3; lineOffset++ {
 		lineIndex := position.Row + lineOffset
 		if lineIndex >= 0 && lineIndex < len(sourceLines) {
 			line := strings.ToLower(sourceLines[lineIndex])
-			
+
 			// Look for literal values in returns
 			if strings.Contains(line, "return true") ||
 				strings.Contains(line, "return false") ||
@@ -345,7 +461,7 @@ func (m *DefaultBroadcastMatcher) buildDisplayContent(methodName, channelName st
 	if methodName == "" {
 		return fmt.Sprintf("channel('%s')", channelName)
 	}
-	
+
 	return fmt.Sprintf("Broadcast::%s('%s')", methodName, channelName)
 }
 

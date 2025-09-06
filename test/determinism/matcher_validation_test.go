@@ -8,7 +8,6 @@ import (
 	"github.com/garaekz/oxinfer/internal/emitter"
 )
 
-
 // TestEmitterDeterminism_SortingStability validates that the emitter's
 // sorting algorithms are stable and produce consistent results.
 func TestEmitterDeterminism_SortingStability(t *testing.T) {
@@ -71,7 +70,7 @@ func TestMatcherDeterminism_OrderingInvariance(t *testing.T) {
 	// Create delta representing analysis results from files processed in different orders
 	createDeltaFromFileOrder := func(fileOrder []string) *emitter.Delta {
 		controllers := make([]emitter.Controller, len(fileOrder))
-		
+
 		for i, fileName := range fileOrder {
 			controllers[i] = emitter.Controller{
 				FQCN:   fmt.Sprintf("App\\Http\\Controllers\\%sController", fileName),
@@ -101,17 +100,17 @@ func TestMatcherDeterminism_OrderingInvariance(t *testing.T) {
 
 	// Test different file processing orders
 	baseFiles := []string{"User", "Post", "Comment", "Product", "Order"}
-	
+
 	// Forward order
 	delta1 := createDeltaFromFileOrder(baseFiles)
-	
+
 	// Reverse order
 	reverseFiles := make([]string, len(baseFiles))
 	for i, file := range baseFiles {
 		reverseFiles[len(baseFiles)-1-i] = file
 	}
 	delta2 := createDeltaFromFileOrder(reverseFiles)
-	
+
 	// Random order
 	randomFiles := []string{"Comment", "Order", "User", "Product", "Post"}
 	delta3 := createDeltaFromFileOrder(randomFiles)
@@ -128,7 +127,7 @@ func TestMatcherDeterminism_OrderingInvariance(t *testing.T) {
 	if !hashResult.AllIdentical {
 		t.Error("File processing order affects deterministic output")
 		logHashDetails(t, hashResult)
-		
+
 		// Debug: show the actual structures to identify ordering issues
 		for i, delta := range deltas {
 			t.Logf("Delta %d controllers:", i)
@@ -145,18 +144,18 @@ func TestMatcherDeterminism_OrderingInvariance(t *testing.T) {
 
 func logHashDetails(t *testing.T, hashResult *determinism.MultiHashResult) {
 	t.Helper()
-	
+
 	t.Logf("Hash comparison details:")
 	t.Logf("  All identical: %v", hashResult.AllIdentical)
 	t.Logf("  All canonical: %v", hashResult.AllCanonical)
 	t.Logf("  Unique hashes: %d", len(hashResult.UniqueHashes))
-	
+
 	for i, hash := range hashResult.Hashes {
 		if hash != nil {
 			t.Logf("  Hash %d: %s (size: %d)", i, hash.SHA256[:16]+"...", hash.Size)
 		}
 	}
-	
+
 	if len(hashResult.Errors) > 0 {
 		t.Logf("  Errors: %v", hashResult.Errors)
 	}

@@ -413,7 +413,7 @@ func (g *DefaultScenarioGenerator) GenerateScenario(ctx context.Context, scenari
 	// Create Laravel project structure
 	dirs := []string{
 		"app/Http/Controllers",
-		"app/Models", 
+		"app/Models",
 		"routes",
 		"database/migrations",
 		"app/Http/Middleware",
@@ -537,7 +537,7 @@ class %s extends Model
     {
         return $this->%s(%s::class);
     }
-`, strings.ToLower(relModel), relType, strings.Title(relModel))
+`, strings.ToLower(relModel), relType, strings.ToUpper(relModel[:1])+relModel[1:])
 		}
 	}
 
@@ -548,7 +548,7 @@ class %s extends Model
     {
         return $query->where('status', '%s');
     }
-`, strings.Title(scope), scope)
+`, strings.ToUpper(scope[:1])+scope[1:], scope)
 	}
 
 	modelContent += "}\n"
@@ -565,7 +565,7 @@ use Illuminate\Support\Facades\Route;
 `
 
 	for _, route := range routes {
-		routeContent += fmt.Sprintf("Route::%s('%s', '%s@%s');\n", 
+		routeContent += fmt.Sprintf("Route::%s('%s', '%s@%s');\n",
 			strings.ToLower(route.Method), route.URI, route.Controller, route.Action)
 	}
 

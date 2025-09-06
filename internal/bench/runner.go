@@ -19,12 +19,11 @@ import (
 
 // BenchmarkRunner orchestrates performance testing across realistic scenarios.
 type BenchmarkRunner struct {
-	config           *RunnerConfig
-	scenarios        []*BenchmarkScenario
-	generator        ScenarioGenerator
-	orchestrator     pipeline.PipelineOrchestrator
-	metricsCollector *MetricsCollector
-	baselineMetrics  map[string]*PerformanceMetrics
+	config          *RunnerConfig
+	scenarios       []*BenchmarkScenario
+	generator       ScenarioGenerator
+	orchestrator    pipeline.PipelineOrchestrator
+	baselineMetrics map[string]*PerformanceMetrics
 
 	// State management
 	mu              sync.RWMutex
@@ -625,12 +624,12 @@ func (br *BenchmarkRunner) clearCache(testDir string) error {
 			return fmt.Errorf("failed to remove cache directory: %w", err)
 		}
 	}
-	
+
 	// Reset orchestrator's internal caches
 	if br.orchestrator != nil {
 		br.orchestrator.ClearCaches()
 	}
-	
+
 	return nil
 }
 
@@ -931,7 +930,7 @@ func convertPipelineStatsToProcessingStats(pipelineStats *pipeline.PipelineStats
 	}
 
 	processingStats := stats.NewProcessingStats()
-	
+
 	// Convert pipeline stats to processing stats
 	if pipelineStats.FilesProcessed > 0 {
 		processingStats.FilesParsed = int64(pipelineStats.FilesProcessed)

@@ -14,28 +14,28 @@ import (
 // TestPipelineIntegration tests the complete T1-T12 pipeline integration
 func TestPipelineIntegration(t *testing.T) {
 	tests := []struct {
-		name            string
-		fixture         string
+		name             string
+		fixture          string
 		expectedFeatures []string
-		description     string
+		description      string
 	}{
 		{
-			name:            "basic_pipeline",
-			fixture:         "minimal-laravel",
+			name:             "basic_pipeline",
+			fixture:          "minimal-laravel",
 			expectedFeatures: []string{"http_status", "request_usage"},
-			description:     "Basic pipeline with HTTP status and request validation patterns",
+			description:      "Basic pipeline with HTTP status and request validation patterns",
 		},
 		{
-			name:            "advanced_pipeline", 
-			fixture:         "api-project",
+			name:             "advanced_pipeline",
+			fixture:          "api-project",
 			expectedFeatures: []string{"http_status", "request_usage", "resource_usage", "with_pivot", "scopes_used"},
-			description:     "Advanced pipeline with resource patterns, pivot relationships, and scopes",
+			description:      "Advanced pipeline with resource patterns, pivot relationships, and scopes",
 		},
 		{
-			name:            "complete_pipeline",
-			fixture:         "complex-app",
+			name:             "complete_pipeline",
+			fixture:          "complex-app",
 			expectedFeatures: []string{"http_status", "request_usage", "resource_usage", "with_pivot", "scopes_used", "polymorphic", "broadcast_channels"},
-			description:     "Complete pipeline with all T5-T11 patterns including polymorphic and broadcasting",
+			description:      "Complete pipeline with all T5-T11 patterns including polymorphic and broadcasting",
 		},
 	}
 
@@ -58,14 +58,14 @@ func testPipelineExecution(t *testing.T, fixtureName string, expectedFeatures []
 
 	// Prepare manifest path
 	manifestPath := filepath.Join("../../test/fixtures/integration", fixtureName, "manifest.json")
-	
+
 	// Verify manifest exists and load it
 	manifestData, err := os.ReadFile(manifestPath)
 	if err != nil {
 		t.Fatalf("Failed to read manifest: %v", err)
 	}
 
-	var manifestConfig map[string]interface{}
+	var manifestConfig map[string]any
 	if err := json.Unmarshal(manifestData, &manifestConfig); err != nil {
 		t.Fatalf("Invalid manifest JSON: %v", err)
 	}
@@ -92,7 +92,7 @@ func testPipelineExecution(t *testing.T, fixtureName string, expectedFeatures []
 		t.Fatal("Pipeline produced no output")
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal([]byte(output), &result); err != nil {
 		t.Fatalf("Pipeline output is not valid JSON: %v\nOutput: %s", err, output)
 	}
@@ -105,16 +105,16 @@ func testPipelineExecution(t *testing.T, fixtureName string, expectedFeatures []
 }
 
 // validatePipelineComponents validates that each pipeline component produced expected results
-func validatePipelineComponents(t *testing.T, result map[string]interface{}, expectedFeatures []string, fixtureName string) {
+func validatePipelineComponents(t *testing.T, result map[string]any, expectedFeatures []string, fixtureName string) {
 	t.Helper()
 
 	// T1: Manifest validation (implicit - if we got here, validation passed)
 	t.Log("✓ T1: Manifest validation completed")
 
 	// T2: PSR-4 resolution (implicit in class name resolution)
-	controllers, hasControllers := result["controllers"].([]interface{})
-	models, hasModels := result["models"].([]interface{})
-	
+	controllers, hasControllers := result["controllers"].([]any)
+	models, hasModels := result["models"].([]any)
+
 	if hasControllers && len(controllers) > 0 {
 		t.Log("✓ T2: PSR-4 class resolution working (controllers found)")
 	} else {
@@ -122,8 +122,8 @@ func validatePipelineComponents(t *testing.T, result map[string]interface{}, exp
 	}
 
 	// T3: File indexing and caching (implicit - files were processed)
-	if meta, ok := result["meta"].(map[string]interface{}); ok {
-		if stats, ok := meta["stats"].(map[string]interface{}); ok {
+	if meta, ok := result["meta"].(map[string]any); ok {
+		if stats, ok := meta["stats"].(map[string]any); ok {
 			if filesParsed, ok := stats["filesParsed"].(float64); ok && filesParsed > 0 {
 				t.Logf("✓ T3: File indexing completed (%v files parsed)", filesParsed)
 			} else {
@@ -147,7 +147,7 @@ func validatePipelineComponents(t *testing.T, result map[string]interface{}, exp
 		validateResourceMatching(t, controllers)
 	}
 
-	// T7-T8: Pivot & Scopes matchers  
+	// T7-T8: Pivot & Scopes matchers
 	if contains(expectedFeatures, "with_pivot") {
 		validatePivotMatching(t, models)
 	}
@@ -171,17 +171,17 @@ func validatePipelineComponents(t *testing.T, result map[string]interface{}, exp
 }
 
 // validateHttpStatusMatching validates T5 HTTP status pattern matching
-func validateHttpStatusMatching(t *testing.T, controllers []interface{}) {
+func validateHttpStatusMatching(t *testing.T, controllers []any) {
 	t.Helper()
 
 	foundHttpStatus := false
 	for _, controller := range controllers {
-		if ctrl, ok := controller.(map[string]interface{}); ok {
-			if methods, ok := ctrl["methods"].([]interface{}); ok {
+		if ctrl, ok := controller.(map[string]any); ok {
+			if methods, ok := ctrl["methods"].([]any); ok {
 				for _, method := range methods {
-					if methodObj, ok := method.(map[string]interface{}); ok {
+					if methodObj, ok := method.(map[string]any); ok {
 						if httpStatus, exists := methodObj["httpStatus"]; exists {
-							if statusArray, ok := httpStatus.([]interface{}); ok && len(statusArray) > 0 {
+							if statusArray, ok := httpStatus.([]any); ok && len(statusArray) > 0 {
 								foundHttpStatus = true
 								t.Logf("✓ T5: HTTP status patterns detected in %s", ctrl["class"])
 								return
@@ -199,17 +199,17 @@ func validateHttpStatusMatching(t *testing.T, controllers []interface{}) {
 }
 
 // validateResourceMatching validates T6 resource pattern matching
-func validateResourceMatching(t *testing.T, controllers []interface{}) {
+func validateResourceMatching(t *testing.T, controllers []any) {
 	t.Helper()
 
 	foundResourceUsage := false
 	for _, controller := range controllers {
-		if ctrl, ok := controller.(map[string]interface{}); ok {
-			if methods, ok := ctrl["methods"].([]interface{}); ok {
+		if ctrl, ok := controller.(map[string]any); ok {
+			if methods, ok := ctrl["methods"].([]any); ok {
 				for _, method := range methods {
-					if methodObj, ok := method.(map[string]interface{}); ok {
+					if methodObj, ok := method.(map[string]any); ok {
 						if resourceUsage, exists := methodObj["resourceUsage"]; exists {
-							if resourceArray, ok := resourceUsage.([]interface{}); ok && len(resourceArray) > 0 {
+							if resourceArray, ok := resourceUsage.([]any); ok && len(resourceArray) > 0 {
 								foundResourceUsage = true
 								t.Logf("✓ T6: Resource patterns detected in %s", ctrl["class"])
 								return
@@ -227,15 +227,15 @@ func validateResourceMatching(t *testing.T, controllers []interface{}) {
 }
 
 // validatePivotMatching validates T7 pivot relationship matching
-func validatePivotMatching(t *testing.T, models []interface{}) {
+func validatePivotMatching(t *testing.T, models []any) {
 	t.Helper()
 
 	foundPivot := false
 	for _, model := range models {
-		if mdl, ok := model.(map[string]interface{}); ok {
-			if relationships, ok := mdl["relationships"].([]interface{}); ok {
+		if mdl, ok := model.(map[string]any); ok {
+			if relationships, ok := mdl["relationships"].([]any); ok {
 				for _, rel := range relationships {
-					if relObj, ok := rel.(map[string]interface{}); ok {
+					if relObj, ok := rel.(map[string]any); ok {
 						if _, exists := relObj["withPivot"]; exists {
 							foundPivot = true
 							t.Logf("✓ T7: Pivot relationships detected in %s", mdl["class"])
@@ -252,18 +252,18 @@ func validatePivotMatching(t *testing.T, models []interface{}) {
 	}
 }
 
-// validateScopeMatching validates T8 scope pattern matching  
-func validateScopeMatching(t *testing.T, controllers []interface{}) {
+// validateScopeMatching validates T8 scope pattern matching
+func validateScopeMatching(t *testing.T, controllers []any) {
 	t.Helper()
 
 	foundScopes := false
 	for _, controller := range controllers {
-		if ctrl, ok := controller.(map[string]interface{}); ok {
-			if methods, ok := ctrl["methods"].([]interface{}); ok {
+		if ctrl, ok := controller.(map[string]any); ok {
+			if methods, ok := ctrl["methods"].([]any); ok {
 				for _, method := range methods {
-					if methodObj, ok := method.(map[string]interface{}); ok {
+					if methodObj, ok := method.(map[string]any); ok {
 						if scopesUsed, exists := methodObj["scopesUsed"]; exists {
-							if scopeArray, ok := scopesUsed.([]interface{}); ok && len(scopeArray) > 0 {
+							if scopeArray, ok := scopesUsed.([]any); ok && len(scopeArray) > 0 {
 								foundScopes = true
 								t.Logf("✓ T8: Scope patterns detected in %s", ctrl["class"])
 								return
@@ -281,16 +281,16 @@ func validateScopeMatching(t *testing.T, controllers []interface{}) {
 }
 
 // validatePolymorphicMatching validates T9 polymorphic relationship matching
-func validatePolymorphicMatching(t *testing.T, result map[string]interface{}) {
+func validatePolymorphicMatching(t *testing.T, result map[string]any) {
 	t.Helper()
 
-	if polymorphic, ok := result["polymorphic"].([]interface{}); ok {
+	if polymorphic, ok := result["polymorphic"].([]any); ok {
 		if len(polymorphic) > 0 {
 			t.Logf("✓ T9: Polymorphic relationships detected (%d patterns)", len(polymorphic))
-			
+
 			// Validate structure
 			for i, poly := range polymorphic {
-				if polyObj, ok := poly.(map[string]interface{}); ok {
+				if polyObj, ok := poly.(map[string]any); ok {
 					requiredFields := []string{"parent", "morph", "discriminator"}
 					for _, field := range requiredFields {
 						if _, exists := polyObj[field]; !exists {
@@ -306,16 +306,16 @@ func validatePolymorphicMatching(t *testing.T, result map[string]interface{}) {
 }
 
 // validateBroadcastMatching validates T10 broadcast channel matching
-func validateBroadcastMatching(t *testing.T, result map[string]interface{}) {
+func validateBroadcastMatching(t *testing.T, result map[string]any) {
 	t.Helper()
 
-	if broadcast, ok := result["broadcast"].([]interface{}); ok {
+	if broadcast, ok := result["broadcast"].([]any); ok {
 		if len(broadcast) > 0 {
 			t.Logf("✓ T10: Broadcast channels detected (%d channels)", len(broadcast))
-			
+
 			// Validate structure
 			for i, channel := range broadcast {
-				if channelObj, ok := channel.(map[string]interface{}); ok {
+				if channelObj, ok := channel.(map[string]any); ok {
 					requiredFields := []string{"channel", "params", "visibility"}
 					for _, field := range requiredFields {
 						if _, exists := channelObj[field]; !exists {
@@ -331,7 +331,7 @@ func validateBroadcastMatching(t *testing.T, result map[string]interface{}) {
 }
 
 // validateShapeInference validates T11 shape inference
-func validateShapeInference(t *testing.T, result map[string]interface{}) {
+func validateShapeInference(t *testing.T, result map[string]any) {
 	t.Helper()
 
 	// Check that output follows expected schema structure
@@ -351,8 +351,8 @@ func validateShapeInference(t *testing.T, result map[string]interface{}) {
 	}
 
 	// Validate meta structure
-	if meta, ok := result["meta"].(map[string]interface{}); ok {
-		if stats, ok := meta["stats"].(map[string]interface{}); ok {
+	if meta, ok := result["meta"].(map[string]any); ok {
+		if stats, ok := meta["stats"].(map[string]any); ok {
 			expectedStatsFields := []string{"filesParsed", "skipped"}
 			for _, field := range expectedStatsFields {
 				if _, exists := stats[field]; !exists {
@@ -364,7 +364,7 @@ func validateShapeInference(t *testing.T, result map[string]interface{}) {
 }
 
 // validatePipelinePerformance validates pipeline execution performance
-func validatePipelinePerformance(t *testing.T, result map[string]interface{}, duration time.Duration, fixtureName string) {
+func validatePipelinePerformance(t *testing.T, result map[string]any, duration time.Duration, fixtureName string) {
 	t.Helper()
 
 	// Performance thresholds by fixture complexity
@@ -386,11 +386,11 @@ func validatePipelinePerformance(t *testing.T, result map[string]interface{}, du
 	}
 
 	// Validate internal duration reporting
-	if meta, ok := result["meta"].(map[string]interface{}); ok {
-		if stats, ok := meta["stats"].(map[string]interface{}); ok {
+	if meta, ok := result["meta"].(map[string]any); ok {
+		if stats, ok := meta["stats"].(map[string]any); ok {
 			if durationMs, ok := stats["durationMs"].(float64); ok {
 				internalDuration := time.Duration(durationMs) * time.Millisecond
-				
+
 				// Internal duration should be reasonably close to measured duration
 				// (allowing for CLI startup overhead)
 				if internalDuration > duration {
@@ -443,14 +443,14 @@ func testComponentIntegration(t *testing.T, components []string, description str
 	defer os.Remove(cliPath)
 
 	manifestPath := filepath.Join("../../test/fixtures/integration/complex-app/manifest.json")
-	
+
 	cmd := exec.Command(cliPath, "--manifest", manifestPath)
 	output, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("Component integration test failed: %v", err)
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(output, &result); err != nil {
 		t.Fatalf("Output is not valid JSON: %v", err)
 	}
@@ -460,7 +460,7 @@ func testComponentIntegration(t *testing.T, components []string, description str
 	case "T1_T2_T3_T4":
 		// Validate that manifest → parsing pipeline works
 		validateManifestParsingIntegration(t, result)
-	case "T4_T5_T6": 
+	case "T4_T5_T6":
 		// Validate that parsing → basic matching works
 		validateParsingMatchingIntegration(t, result)
 	case "T5_T6_T7_T8_T9_T10_T11_T12":
@@ -472,19 +472,19 @@ func testComponentIntegration(t *testing.T, components []string, description str
 }
 
 // validateManifestParsingIntegration validates T1-T4 integration
-func validateManifestParsingIntegration(t *testing.T, result map[string]interface{}) {
+func validateManifestParsingIntegration(t *testing.T, result map[string]any) {
 	t.Helper()
 
 	// If we get valid output, manifest validation worked (T1)
-	if meta, ok := result["meta"].(map[string]interface{}); ok {
+	if meta, ok := result["meta"].(map[string]any); ok {
 		if partial, ok := meta["partial"].(bool); ok && !partial {
 			t.Log("✓ T1→T4: Manifest validation to parsing integration working")
 		}
 	}
 
 	// Check that files were found and parsed (T2→T4)
-	if meta, ok := result["meta"].(map[string]interface{}); ok {
-		if stats, ok := meta["stats"].(map[string]interface{}); ok {
+	if meta, ok := result["meta"].(map[string]any); ok {
+		if stats, ok := meta["stats"].(map[string]any); ok {
 			if filesParsed, ok := stats["filesParsed"].(float64); ok && filesParsed > 0 {
 				t.Logf("✓ T2→T4: File discovery to parsing (%v files)", filesParsed)
 			} else {
@@ -495,22 +495,22 @@ func validateManifestParsingIntegration(t *testing.T, result map[string]interfac
 }
 
 // validateParsingMatchingIntegration validates T4-T6 integration
-func validateParsingMatchingIntegration(t *testing.T, result map[string]interface{}) {
+func validateParsingMatchingIntegration(t *testing.T, result map[string]any) {
 	t.Helper()
 
 	// Check that parsed PHP files led to pattern detection
-	if controllers, ok := result["controllers"].([]interface{}); ok && len(controllers) > 0 {
+	if controllers, ok := result["controllers"].([]any); ok && len(controllers) > 0 {
 		foundPatterns := false
 		for _, controller := range controllers {
-			if ctrl, ok := controller.(map[string]interface{}); ok {
-				if methods, ok := ctrl["methods"].([]interface{}); ok && len(methods) > 0 {
+			if ctrl, ok := controller.(map[string]any); ok {
+				if methods, ok := ctrl["methods"].([]any); ok && len(methods) > 0 {
 					foundPatterns = true
 					t.Log("✓ T4→T6: PHP parsing to pattern matching integration working")
 					break
 				}
 			}
 		}
-		
+
 		if !foundPatterns {
 			t.Log("- T4→T6: Parsing successful but no patterns detected")
 		}
@@ -520,15 +520,15 @@ func validateParsingMatchingIntegration(t *testing.T, result map[string]interfac
 }
 
 // validateMatchingEmissionIntegration validates T5-T12 integration
-func validateMatchingEmissionIntegration(t *testing.T, result map[string]interface{}) {
+func validateMatchingEmissionIntegration(t *testing.T, result map[string]any) {
 	t.Helper()
 
 	// Check that pattern matching results are properly structured in output
 	sectionsWithContent := 0
 	sections := []string{"controllers", "models", "polymorphic", "broadcast"}
-	
+
 	for _, section := range sections {
-		if arr, ok := result[section].([]interface{}); ok && len(arr) > 0 {
+		if arr, ok := result[section].([]any); ok && len(arr) > 0 {
 			sectionsWithContent++
 		}
 	}
@@ -560,14 +560,14 @@ func validateMatchingEmissionIntegration(t *testing.T, result map[string]interfa
 func TestErrorHandlingIntegration(t *testing.T) {
 	errorTests := []struct {
 		name           string
-		modifyManifest func(map[string]interface{})
+		modifyManifest func(map[string]any)
 		expectedExit   int
 		description    string
 	}{
 		{
 			name: "invalid_project_root",
-			modifyManifest: func(m map[string]interface{}) {
-				if project, ok := m["project"].(map[string]interface{}); ok {
+			modifyManifest: func(m map[string]any) {
+				if project, ok := m["project"].(map[string]any); ok {
 					project["root"] = "/nonexistent/directory"
 				}
 			},
@@ -576,8 +576,8 @@ func TestErrorHandlingIntegration(t *testing.T) {
 		},
 		{
 			name: "missing_composer_file",
-			modifyManifest: func(m map[string]interface{}) {
-				if project, ok := m["project"].(map[string]interface{}); ok {
+			modifyManifest: func(m map[string]any) {
+				if project, ok := m["project"].(map[string]any); ok {
 					project["composer"] = "nonexistent.json"
 				}
 			},
@@ -600,7 +600,7 @@ func TestErrorHandlingIntegration(t *testing.T) {
 				t.Fatalf("Failed to read base manifest: %v", err)
 			}
 
-			var manifest map[string]interface{}
+			var manifest map[string]any
 			if err := json.Unmarshal(manifestData, &manifest); err != nil {
 				t.Fatalf("Failed to parse base manifest: %v", err)
 			}
@@ -649,7 +649,7 @@ func TestErrorHandlingIntegration(t *testing.T) {
 				t.Error("Expected error output on stderr")
 			} else {
 				// Should be JSON error for structured error handling
-				var errorObj map[string]interface{}
+				var errorObj map[string]any
 				if err := json.Unmarshal([]byte(stderrStr), &errorObj); err != nil {
 					t.Logf("Error output: %s", stderrStr)
 				} else {

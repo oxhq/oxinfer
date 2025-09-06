@@ -36,36 +36,36 @@ const (
 
 // TestAnalysis represents the analysis of a single test.
 type TestAnalysis struct {
-	FilePath     string
-	TestName     string
-	Category     TestCategory
-	Quality      TestQuality
-	LineCount    int
-	MockUsage    int
-	Assertions   int
-	RealIO       bool
-	BusinessLogic bool
-	Issues       []string
+	FilePath        string
+	TestName        string
+	Category        TestCategory
+	Quality         TestQuality
+	LineCount       int
+	MockUsage       int
+	Assertions      int
+	RealIO          bool
+	BusinessLogic   bool
+	Issues          []string
 	Recommendations []string
 }
 
 // QualityAudit represents the complete test quality audit.
 type QualityAudit struct {
-	TestFiles       []string
-	TestAnalyses    []*TestAnalysis
-	QualityBreakdown map[TestQuality]int
+	TestFiles         []string
+	TestAnalyses      []*TestAnalysis
+	QualityBreakdown  map[TestQuality]int
 	CategoryBreakdown map[TestCategory]int
-	TotalTests      int
-	MeaningfulTests int
-	ArtificialTests int
-	Coverage        float64
-	Recommendations []string
+	TotalTests        int
+	MeaningfulTests   int
+	ArtificialTests   int
+	Coverage          float64
+	Recommendations   []string
 }
 
 // AuditTestQuality performs a comprehensive audit of all tests in the project.
 func AuditTestQuality(projectRoot string) (*QualityAudit, error) {
 	audit := &QualityAudit{
-		QualityBreakdown: make(map[TestQuality]int),
+		QualityBreakdown:  make(map[TestQuality]int),
 		CategoryBreakdown: make(map[TestCategory]int),
 	}
 
@@ -135,9 +135,9 @@ func isTestFunction(fn *ast.FuncDecl) bool {
 	}
 
 	name := fn.Name.Name
-	return strings.HasPrefix(name, "Test") || 
-		   strings.HasPrefix(name, "Benchmark") ||
-		   strings.HasPrefix(name, "Example")
+	return strings.HasPrefix(name, "Test") ||
+		strings.HasPrefix(name, "Benchmark") ||
+		strings.HasPrefix(name, "Example")
 }
 
 // analyzeTestFunction analyzes a single test function.
@@ -176,14 +176,14 @@ func determineTestCategory(testName, filePath string) TestCategory {
 		return TestCategoryExample
 	}
 
-	if strings.Contains(filePath, "integration") || 
-	   strings.Contains(filePath, "e2e") {
+	if strings.Contains(filePath, "integration") ||
+		strings.Contains(filePath, "e2e") {
 		return TestCategoryIntegration
 	}
 
 	if strings.Contains(testName, "Integration") ||
-	   strings.Contains(testName, "E2E") ||
-	   strings.Contains(testName, "EndToEnd") {
+		strings.Contains(testName, "E2E") ||
+		strings.Contains(testName, "EndToEnd") {
 		return TestCategoryIntegration
 	}
 
@@ -200,9 +200,9 @@ func analyzeTestBody(analysis *TestAnalysis, body *ast.BlockStmt) {
 			if node.Kind == token.STRING {
 				// Check for file paths, indicating real I/O
 				value := strings.Trim(node.Value, `"'`)
-				if strings.Contains(value, ".php") || 
-				   strings.Contains(value, ".json") ||
-				   strings.Contains(value, "/tmp/") {
+				if strings.Contains(value, ".php") ||
+					strings.Contains(value, ".json") ||
+					strings.Contains(value, "/tmp/") {
 					analysis.RealIO = true
 				}
 			}
@@ -240,8 +240,8 @@ func analyzeCallExpression(analysis *TestAnalysis, call *ast.CallExpr) {
 			analysis.Assertions++
 		}
 
-		if strings.Contains(funcName, "Mock") || 
-		   strings.Contains(funcName, "Stub") {
+		if strings.Contains(funcName, "Mock") ||
+			strings.Contains(funcName, "Stub") {
 			analysis.MockUsage++
 		}
 	}
@@ -308,16 +308,16 @@ func determineTestQuality(analysis *TestAnalysis) TestQuality {
 	}
 
 	// Artificial tests: high mock usage, no real I/O or business logic
-	if analysis.MockUsage > analysis.Assertions && 
-	   !analysis.RealIO && 
-	   !analysis.BusinessLogic {
+	if analysis.MockUsage > analysis.Assertions &&
+		!analysis.RealIO &&
+		!analysis.BusinessLogic {
 		analysis.Issues = append(analysis.Issues, "High mock usage without testing real functionality")
 		return TestQualityArtificial
 	}
 
 	// Marginal tests: some value but could be improved
-	if analysis.Assertions < 3 || 
-	   (analysis.MockUsage > 0 && !analysis.BusinessLogic) {
+	if analysis.Assertions < 3 ||
+		(analysis.MockUsage > 0 && !analysis.BusinessLogic) {
 		if analysis.Assertions < 3 {
 			analysis.Issues = append(analysis.Issues, "Few assertions may not catch regressions")
 		}
@@ -348,8 +348,8 @@ func (audit *QualityAudit) calculateStatistics() {
 			audit.MeaningfulTests++
 		}
 
-		if analysis.Quality == TestQualityArtificial || 
-		   analysis.Quality == TestQualityStub {
+		if analysis.Quality == TestQualityArtificial ||
+			analysis.Quality == TestQualityStub {
 			audit.ArtificialTests++
 		}
 	}
@@ -420,8 +420,8 @@ func (audit *QualityAudit) PrintReport() {
 	fmt.Println("\n=== TEST QUALITY AUDIT REPORT ===")
 	fmt.Printf("Total Tests: %d\n", audit.TotalTests)
 	fmt.Printf("Meaningful Tests: %d (%.1f%%)\n", audit.MeaningfulTests, audit.Coverage)
-	fmt.Printf("Artificial/Stub Tests: %d (%.1f%%)\n", 
-		audit.ArtificialTests, 
+	fmt.Printf("Artificial/Stub Tests: %d (%.1f%%)\n",
+		audit.ArtificialTests,
 		float64(audit.ArtificialTests)/float64(audit.TotalTests)*100)
 
 	fmt.Println("\n=== QUALITY BREAKDOWN ===")
@@ -467,10 +467,10 @@ func (audit *QualityAudit) PrintReport() {
 	fmt.Println("\n=== PROBLEMATIC TESTS ===")
 	problemTests := 0
 	for _, analysis := range audit.TestAnalyses {
-		if analysis.Quality == TestQualityArtificial || 
-		   analysis.Quality == TestQualityStub ||
-		   len(analysis.Issues) > 0 {
-			
+		if analysis.Quality == TestQualityArtificial ||
+			analysis.Quality == TestQualityStub ||
+			len(analysis.Issues) > 0 {
+
 			if problemTests == 0 {
 				fmt.Println("Tests that need improvement:")
 			}
@@ -517,10 +517,10 @@ func (audit *QualityAudit) PrintReport() {
 // GetArtificialTests returns a list of artificial/stub tests that should be removed.
 func (audit *QualityAudit) GetArtificialTests() []*TestAnalysis {
 	var artificial []*TestAnalysis
-	
+
 	for _, analysis := range audit.TestAnalyses {
-		if analysis.Quality == TestQualityArtificial || 
-		   analysis.Quality == TestQualityStub {
+		if analysis.Quality == TestQualityArtificial ||
+			analysis.Quality == TestQualityStub {
 			artificial = append(artificial, analysis)
 		}
 	}
@@ -531,7 +531,7 @@ func (audit *QualityAudit) GetArtificialTests() []*TestAnalysis {
 // GetMeaningfulTests returns a list of meaningful tests that provide real value.
 func (audit *QualityAudit) GetMeaningfulTests() []*TestAnalysis {
 	var meaningful []*TestAnalysis
-	
+
 	for _, analysis := range audit.TestAnalyses {
 		if analysis.Quality == TestQualityMeaningful {
 			meaningful = append(meaningful, analysis)

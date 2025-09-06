@@ -19,7 +19,7 @@ type MemoryOptimizer struct {
 	pools     *ObjectPools
 	allocator *ManagedAllocator
 	monitor   *MemoryMonitor
-	
+
 	// State tracking
 	optimizations []string
 	metrics       *MemoryMetrics
@@ -29,35 +29,35 @@ type MemoryOptimizer struct {
 // MemoryConfig contains configuration for memory optimization.
 type MemoryConfig struct {
 	// Pool sizes
-	StringBuilderPoolSize int   `json:"stringBuilderPoolSize"`
-	SlicePoolSize         int   `json:"slicePoolSize"`
-	ASTNodePoolSize       int   `json:"astNodePoolSize"`
-	
+	StringBuilderPoolSize int `json:"stringBuilderPoolSize"`
+	SlicePoolSize         int `json:"slicePoolSize"`
+	ASTNodePoolSize       int `json:"astNodePoolSize"`
+
 	// Memory limits
-	MaxHeapSizeMB         int64 `json:"maxHeapSizeMB"`
-	GCTargetPercent       int   `json:"gcTargetPercent"`
-	
+	MaxHeapSizeMB   int64 `json:"maxHeapSizeMB"`
+	GCTargetPercent int   `json:"gcTargetPercent"`
+
 	// Optimization thresholds
-	PoolReuseThreshold    int   `json:"poolReuseThreshold"`    // Minimum allocations to use pooling
-	StreamingThresholdMB  int64 `json:"streamingThresholdMB"`  // File size to trigger streaming
-	
+	PoolReuseThreshold   int   `json:"poolReuseThreshold"`   // Minimum allocations to use pooling
+	StreamingThresholdMB int64 `json:"streamingThresholdMB"` // File size to trigger streaming
+
 	// GC tuning
-	EnableGCTuning        bool  `json:"enableGCTuning"`
-	GCCollectionInterval  time.Duration `json:"gcCollectionIntervalMs"`
+	EnableGCTuning       bool          `json:"enableGCTuning"`
+	GCCollectionInterval time.Duration `json:"gcCollectionIntervalMs"`
 }
 
 // DefaultMemoryConfig returns optimized default memory configuration.
 func DefaultMemoryConfig() *MemoryConfig {
 	return &MemoryConfig{
 		StringBuilderPoolSize: 100,
-		SlicePoolSize:        200,
-		ASTNodePoolSize:      500,
-		MaxHeapSizeMB:        400, // MVP target: <500MB
-		GCTargetPercent:      70,  // Slightly aggressive GC
-		PoolReuseThreshold:   50,  // Use pools after 50 allocations
-		StreamingThresholdMB: 10,  // Stream files >10MB
-		EnableGCTuning:       true,
-		GCCollectionInterval: 2 * time.Second,
+		SlicePoolSize:         200,
+		ASTNodePoolSize:       500,
+		MaxHeapSizeMB:         400, // MVP target: <500MB
+		GCTargetPercent:       70,  // Slightly aggressive GC
+		PoolReuseThreshold:    50,  // Use pools after 50 allocations
+		StreamingThresholdMB:  10,  // Stream files >10MB
+		EnableGCTuning:        true,
+		GCCollectionInterval:  2 * time.Second,
 	}
 }
 
@@ -66,21 +66,19 @@ type ObjectPools struct {
 	// String processing pools
 	stringBuilders sync.Pool
 	stringSlices   sync.Pool
-	
+
 	// Data structure pools
-	intSlices     sync.Pool
-	byteSlices    sync.Pool
-	nodeSlices    sync.Pool
-	
+	intSlices  sync.Pool
+	byteSlices sync.Pool
+
 	// Tree-sitter specific pools
-	astNodes      sync.Pool
-	parseResults  sync.Pool
-	
+	astNodes sync.Pool
+
 	// Metrics
-	getCount      int64
-	putCount      int64
-	missCount     int64
-	
+	getCount  int64
+	putCount  int64
+	missCount int64
+
 	mu sync.RWMutex
 }
 
@@ -89,7 +87,7 @@ type ManagedAllocator struct {
 	config    *MemoryConfig
 	allocated int64
 	limit     int64
-	
+
 	// Allocation tracking
 	allocations map[string]*AllocationTracker
 	mu          sync.RWMutex
@@ -107,48 +105,47 @@ type AllocationTracker struct {
 
 // MemoryMonitor continuously monitors memory usage and triggers optimizations.
 type MemoryMonitor struct {
-	optimizer    *MemoryOptimizer
-	monitoring   bool
-	interval     time.Duration
-	
+	optimizer  *MemoryOptimizer
+	monitoring bool
+	interval   time.Duration
+
 	// Thresholds
 	warningThreshold  float64 // Percentage of limit to trigger warning
 	criticalThreshold float64 // Percentage of limit to trigger aggressive GC
-	
+
 	// State
-	lastGC        time.Time
-	gcCount       int64
-	forceGCCount  int64
-	
+	lastGC       time.Time
+	forceGCCount int64
+
 	mu sync.RWMutex
 }
 
 // MemoryMetrics tracks comprehensive memory usage metrics.
 type MemoryMetrics struct {
 	// Current usage
-	HeapUsedMB     int64   `json:"heapUsedMB"`
-	HeapAllocMB    int64   `json:"heapAllocMB"`
-	StackUsedMB    int64   `json:"stackUsedMB"`
-	TotalUsedMB    int64   `json:"totalUsedMB"`
-	
+	HeapUsedMB  int64 `json:"heapUsedMB"`
+	HeapAllocMB int64 `json:"heapAllocMB"`
+	StackUsedMB int64 `json:"stackUsedMB"`
+	TotalUsedMB int64 `json:"totalUsedMB"`
+
 	// Pool statistics
-	PoolHitRate    float64 `json:"poolHitRate"`    // Pool hits / (hits + misses)
-	PoolMemorySaved int64  `json:"poolMemorySaved"` // Estimated memory saved by pooling
-	
+	PoolHitRate     float64 `json:"poolHitRate"`     // Pool hits / (hits + misses)
+	PoolMemorySaved int64   `json:"poolMemorySaved"` // Estimated memory saved by pooling
+
 	// GC statistics
 	GCCount        int64   `json:"gcCount"`
 	GCPauseTotalMs int64   `json:"gcPauseTotalMs"`
 	GCCPUPercent   float64 `json:"gcCPUPercent"`
-	
+
 	// Efficiency metrics
-	MemoryEfficiency float64 `json:"memoryEfficiency"` // Useful memory / total memory
+	MemoryEfficiency   float64 `json:"memoryEfficiency"`   // Useful memory / total memory
 	FragmentationRatio float64 `json:"fragmentationRatio"` // Fragmented / total
-	
+
 	// Streaming statistics
 	StreamingEnabled bool  `json:"streamingEnabled"`
 	StreamingFilesMB int64 `json:"streamingFilesMB"`
 	StreamingSavedMB int64 `json:"streamingSavedMB"`
-	
+
 	// Timestamps
 	LastUpdateTime time.Time `json:"lastUpdateTime"`
 }
@@ -158,11 +155,11 @@ func NewMemoryOptimizer(config *MemoryConfig) (*MemoryOptimizer, error) {
 	if config == nil {
 		config = DefaultMemoryConfig()
 	}
-	
+
 	if err := validateMemoryConfig(config); err != nil {
 		return nil, fmt.Errorf("invalid memory config: %w", err)
 	}
-	
+
 	optimizer := &MemoryOptimizer{
 		config:        config,
 		pools:         NewObjectPools(),
@@ -170,47 +167,47 @@ func NewMemoryOptimizer(config *MemoryConfig) (*MemoryOptimizer, error) {
 		optimizations: make([]string, 0),
 		metrics:       &MemoryMetrics{},
 	}
-	
+
 	optimizer.monitor = NewMemoryMonitor(optimizer, 1*time.Second)
-	
+
 	// Apply initial optimizations
 	optimizer.applyInitialOptimizations()
-	
+
 	return optimizer, nil
 }
 
 // NewObjectPools creates and initializes object pools.
 func NewObjectPools() *ObjectPools {
 	pools := &ObjectPools{}
-	
+
 	// Initialize string builder pool
-	pools.stringBuilders.New = func() interface{} {
+	pools.stringBuilders.New = func() any {
 		return &strings.Builder{}
 	}
-	
+
 	// Initialize string slice pool
-	pools.stringSlices.New = func() interface{} {
+	pools.stringSlices.New = func() any {
 		slice := make([]string, 0, 50) // Pre-allocate capacity
 		return &slice
 	}
-	
+
 	// Initialize int slice pool
-	pools.intSlices.New = func() interface{} {
+	pools.intSlices.New = func() any {
 		slice := make([]int, 0, 100)
 		return &slice
 	}
-	
+
 	// Initialize byte slice pool
-	pools.byteSlices.New = func() interface{} {
+	pools.byteSlices.New = func() any {
 		slice := make([]byte, 0, 8192) // 8KB initial capacity
 		return &slice
 	}
-	
+
 	// Initialize AST node pool
-	pools.astNodes.New = func() interface{} {
+	pools.astNodes.New = func() any {
 		return &OptimizedASTNode{}
 	}
-	
+
 	return pools
 }
 
@@ -237,10 +234,10 @@ func NewMemoryMonitor(optimizer *MemoryOptimizer, interval time.Duration) *Memor
 func (mo *MemoryOptimizer) Start(ctx context.Context) error {
 	// Start memory monitoring
 	go mo.monitor.start(ctx)
-	
+
 	// Apply runtime optimizations
 	mo.applyGCTuning()
-	
+
 	return nil
 }
 
@@ -248,13 +245,13 @@ func (mo *MemoryOptimizer) Start(ctx context.Context) error {
 func (mo *MemoryOptimizer) applyInitialOptimizations() {
 	mo.mu.Lock()
 	defer mo.mu.Unlock()
-	
+
 	// Pre-allocate commonly used slices
 	mo.optimizations = append(mo.optimizations, "pre_allocated_slices")
-	
+
 	// Configure object pools
 	mo.optimizations = append(mo.optimizations, "object_pools")
-	
+
 	// Enable streaming for large files
 	mo.optimizations = append(mo.optimizations, "streaming_enabled")
 }
@@ -264,11 +261,11 @@ func (mo *MemoryOptimizer) applyGCTuning() {
 	if !mo.config.EnableGCTuning {
 		return
 	}
-	
+
 	// Set GC target percentage
 	runtime.GC()
 	debug.SetGCPercent(mo.config.GCTargetPercent)
-	
+
 	mo.mu.Lock()
 	mo.optimizations = append(mo.optimizations, "gc_tuning")
 	mo.mu.Unlock()
@@ -276,17 +273,17 @@ func (mo *MemoryOptimizer) applyGCTuning() {
 
 // OptimizedASTNode represents an AST node optimized for memory usage.
 type OptimizedASTNode struct {
-	Type     uint16    // Use smaller integer type
-	StartPos uint32    // 32-bit position (supports files up to 4GB)
+	Type     uint16 // Use smaller integer type
+	StartPos uint32 // 32-bit position (supports files up to 4GB)
 	EndPos   uint32
-	Data     []byte    // Reuse byte slice from pool
+	Data     []byte              // Reuse byte slice from pool
 	Children []*OptimizedASTNode // Slice from pool
 }
 
 // GetStringBuilder retrieves a string builder from the pool.
 func (pools *ObjectPools) GetStringBuilder() *strings.Builder {
 	atomic.AddInt64(&pools.getCount, 1)
-	
+
 	sb := pools.stringBuilders.Get().(*strings.Builder)
 	sb.Reset() // Ensure clean state
 	return sb
@@ -295,7 +292,7 @@ func (pools *ObjectPools) GetStringBuilder() *strings.Builder {
 // PutStringBuilder returns a string builder to the pool.
 func (pools *ObjectPools) PutStringBuilder(sb *strings.Builder) {
 	atomic.AddInt64(&pools.putCount, 1)
-	
+
 	// Only pool if not too large to prevent memory bloat
 	if sb.Cap() <= 16384 { // 16KB cap limit
 		pools.stringBuilders.Put(sb)
@@ -305,7 +302,7 @@ func (pools *ObjectPools) PutStringBuilder(sb *strings.Builder) {
 // GetByteSlice retrieves a byte slice from the pool.
 func (pools *ObjectPools) GetByteSlice() *[]byte {
 	atomic.AddInt64(&pools.getCount, 1)
-	
+
 	slice := pools.byteSlices.Get().(*[]byte)
 	*slice = (*slice)[:0] // Reset length but keep capacity
 	return slice
@@ -314,7 +311,7 @@ func (pools *ObjectPools) GetByteSlice() *[]byte {
 // PutByteSlice returns a byte slice to the pool.
 func (pools *ObjectPools) PutByteSlice(slice *[]byte) {
 	atomic.AddInt64(&pools.putCount, 1)
-	
+
 	// Only pool reasonable sizes to prevent memory bloat
 	if cap(*slice) <= 65536 { // 64KB cap limit
 		pools.byteSlices.Put(slice)
@@ -324,7 +321,7 @@ func (pools *ObjectPools) PutByteSlice(slice *[]byte) {
 // GetStringSlice retrieves a string slice from the pool.
 func (pools *ObjectPools) GetStringSlice() *[]string {
 	atomic.AddInt64(&pools.getCount, 1)
-	
+
 	slice := pools.stringSlices.Get().(*[]string)
 	*slice = (*slice)[:0] // Reset length but keep capacity
 	return slice
@@ -333,13 +330,13 @@ func (pools *ObjectPools) GetStringSlice() *[]string {
 // PutStringSlice returns a string slice to the pool.
 func (pools *ObjectPools) PutStringSlice(slice *[]string) {
 	atomic.AddInt64(&pools.putCount, 1)
-	
+
 	// Clear slice elements to prevent memory leaks
 	for i := range *slice {
 		(*slice)[i] = ""
 	}
 	*slice = (*slice)[:0]
-	
+
 	if cap(*slice) <= 1000 { // Reasonable cap limit
 		pools.stringSlices.Put(slice)
 	}
@@ -348,28 +345,28 @@ func (pools *ObjectPools) PutStringSlice(slice *[]string) {
 // GetASTNode retrieves an AST node from the pool.
 func (pools *ObjectPools) GetASTNode() *OptimizedASTNode {
 	atomic.AddInt64(&pools.getCount, 1)
-	
+
 	node := pools.astNodes.Get().(*OptimizedASTNode)
-	
+
 	// Reset node state
 	node.Type = 0
 	node.StartPos = 0
 	node.EndPos = 0
 	node.Data = node.Data[:0]
 	node.Children = node.Children[:0]
-	
+
 	return node
 }
 
 // PutASTNode returns an AST node to the pool.
 func (pools *ObjectPools) PutASTNode(node *OptimizedASTNode) {
 	atomic.AddInt64(&pools.putCount, 1)
-	
+
 	// Clear children references to prevent memory leaks
 	for i := range node.Children {
 		node.Children[i] = nil
 	}
-	
+
 	// Only pool if not too large
 	if len(node.Children) <= 100 && len(node.Data) <= 1024 {
 		pools.astNodes.Put(node)
@@ -378,10 +375,10 @@ func (pools *ObjectPools) PutASTNode(node *OptimizedASTNode) {
 
 // StreamingFileProcessor provides memory-efficient processing for large files.
 type StreamingFileProcessor struct {
-	config      *MemoryConfig
-	bufferPool  sync.Pool
-	chunkSize   int
-	
+	config     *MemoryConfig
+	bufferPool sync.Pool
+	chunkSize  int
+
 	// Statistics
 	filesStreamed int64
 	bytesStreamed int64
@@ -394,12 +391,12 @@ func NewStreamingFileProcessor(config *MemoryConfig) *StreamingFileProcessor {
 		config:    config,
 		chunkSize: 64 * 1024, // 64KB chunks
 	}
-	
+
 	// Initialize buffer pool
-	processor.bufferPool.New = func() interface{} {
+	processor.bufferPool.New = func() any {
 		return make([]byte, processor.chunkSize)
 	}
-	
+
 	return processor
 }
 
@@ -410,32 +407,32 @@ func (sfp *StreamingFileProcessor) ProcessLargeFile(ctx context.Context, filePat
 		return fmt.Errorf("failed to open file: %w", err)
 	}
 	defer file.Close()
-	
+
 	// Get buffer from pool
 	buffer := sfp.bufferPool.Get().([]byte)
-	defer sfp.bufferPool.Put(buffer)
-	
+	defer func() { sfp.bufferPool.Put(buffer) }()
+
 	atomic.AddInt64(&sfp.filesStreamed, 1)
-	
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
 		}
-		
+
 		n, err := file.Read(buffer)
 		if n == 0 {
 			break
 		}
-		
+
 		chunk := buffer[:n]
 		if err := processor(chunk); err != nil {
 			return fmt.Errorf("chunk processing failed: %w", err)
 		}
-		
+
 		atomic.AddInt64(&sfp.bytesStreamed, int64(n))
-		
+
 		if err == io.EOF {
 			break
 		}
@@ -443,7 +440,7 @@ func (sfp *StreamingFileProcessor) ProcessLargeFile(ctx context.Context, filePat
 			return fmt.Errorf("file read error: %w", err)
 		}
 	}
-	
+
 	// Estimate memory saved by streaming
 	fileInfo, _ := file.Stat()
 	if fileInfo != nil {
@@ -452,7 +449,7 @@ func (sfp *StreamingFileProcessor) ProcessLargeFile(ctx context.Context, filePat
 			atomic.AddInt64(&sfp.memorySaved, memorySaved)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -460,12 +457,12 @@ func (sfp *StreamingFileProcessor) ProcessLargeFile(ctx context.Context, filePat
 func (ma *ManagedAllocator) Allocate(component string, size int64) (bool, error) {
 	ma.mu.Lock()
 	defer ma.mu.Unlock()
-	
+
 	// Check if allocation would exceed limit
 	if ma.allocated+size > ma.limit {
 		return false, fmt.Errorf("allocation would exceed memory limit: %d + %d > %d", ma.allocated, size, ma.limit)
 	}
-	
+
 	// Track allocation
 	tracker, exists := ma.allocations[component]
 	if !exists {
@@ -474,17 +471,17 @@ func (ma *ManagedAllocator) Allocate(component string, size int64) (bool, error)
 		}
 		ma.allocations[component] = tracker
 	}
-	
+
 	tracker.TotalBytes += size
 	tracker.TotalCount++
 	tracker.LastAllocation = time.Now()
-	
+
 	if tracker.TotalBytes > tracker.PeakBytes {
 		tracker.PeakBytes = tracker.TotalBytes
 	}
-	
+
 	tracker.AverageSize = float64(tracker.TotalBytes) / float64(tracker.TotalCount)
-	
+
 	ma.allocated += size
 	return true, nil
 }
@@ -493,7 +490,7 @@ func (ma *ManagedAllocator) Allocate(component string, size int64) (bool, error)
 func (ma *ManagedAllocator) Free(component string, size int64) {
 	ma.mu.Lock()
 	defer ma.mu.Unlock()
-	
+
 	tracker, exists := ma.allocations[component]
 	if exists {
 		tracker.TotalBytes -= size
@@ -501,7 +498,7 @@ func (ma *ManagedAllocator) Free(component string, size int64) {
 			tracker.TotalBytes = 0
 		}
 	}
-	
+
 	ma.allocated -= size
 	if ma.allocated < 0 {
 		ma.allocated = 0
@@ -513,7 +510,7 @@ func (mm *MemoryMonitor) start(ctx context.Context) {
 	mm.monitoring = true
 	ticker := time.NewTicker(mm.interval)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -529,17 +526,17 @@ func (mm *MemoryMonitor) start(ctx context.Context) {
 func (mm *MemoryMonitor) checkMemoryUsage() {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
-	
+
 	currentUsage := int64(memStats.HeapInuse)
 	limit := mm.optimizer.config.MaxHeapSizeMB * 1024 * 1024
 	utilizationRatio := float64(currentUsage) / float64(limit)
-	
+
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
-	
+
 	// Update metrics
 	mm.optimizer.updateMemoryMetrics(&memStats)
-	
+
 	// Check thresholds
 	if utilizationRatio >= mm.criticalThreshold {
 		mm.triggerAggressiveGC()
@@ -551,15 +548,15 @@ func (mm *MemoryMonitor) checkMemoryUsage() {
 // triggerAggressiveGC forces garbage collection when memory is critical.
 func (mm *MemoryMonitor) triggerAggressiveGC() {
 	now := time.Now()
-	
+
 	// Avoid too frequent forced GC
 	if now.Sub(mm.lastGC) < 500*time.Millisecond {
 		return
 	}
-	
+
 	runtime.GC()
 	runtime.GC() // Double GC for thorough cleanup
-	
+
 	mm.lastGC = now
 	atomic.AddInt64(&mm.forceGCCount, 1)
 }
@@ -568,7 +565,7 @@ func (mm *MemoryMonitor) triggerAggressiveGC() {
 func (mm *MemoryMonitor) triggerOptimizations() {
 	// Clear unused pool entries
 	mm.optimizer.pools.clearExcessCapacity()
-	
+
 	// Suggest streaming for large allocations
 	mm.optimizer.recommendStreaming()
 }
@@ -579,7 +576,7 @@ func (pools *ObjectPools) clearExcessCapacity() {
 	// In practice, you'd implement more sophisticated pool management
 	pools.mu.Lock()
 	defer pools.mu.Unlock()
-	
+
 	// Clear some pooled objects to free memory
 	// Implementation would depend on specific pool types and usage patterns
 }
@@ -594,29 +591,29 @@ func (mo *MemoryOptimizer) recommendStreaming() {
 func (mo *MemoryOptimizer) updateMemoryMetrics(memStats *runtime.MemStats) {
 	mo.mu.Lock()
 	defer mo.mu.Unlock()
-	
+
 	mo.metrics.HeapUsedMB = int64(memStats.HeapInuse / 1024 / 1024)
 	mo.metrics.HeapAllocMB = int64(memStats.HeapAlloc / 1024 / 1024)
 	mo.metrics.StackUsedMB = int64(memStats.StackInuse / 1024 / 1024)
 	mo.metrics.TotalUsedMB = mo.metrics.HeapUsedMB + mo.metrics.StackUsedMB
-	
+
 	// Calculate pool hit rate
 	totalGets := atomic.LoadInt64(&mo.pools.getCount)
 	totalMisses := atomic.LoadInt64(&mo.pools.missCount)
-	
+
 	if totalGets > 0 {
 		mo.metrics.PoolHitRate = float64(totalGets-totalMisses) / float64(totalGets)
 	}
-	
+
 	// GC statistics
 	mo.metrics.GCCount = int64(memStats.NumGC)
 	mo.metrics.GCPauseTotalMs = int64(memStats.PauseTotalNs / 1000000)
-	
+
 	// Memory efficiency (heap used / heap allocated)
 	if memStats.HeapSys > 0 {
 		mo.metrics.MemoryEfficiency = float64(memStats.HeapInuse) / float64(memStats.HeapSys)
 	}
-	
+
 	mo.metrics.LastUpdateTime = time.Now()
 }
 
@@ -624,7 +621,7 @@ func (mo *MemoryOptimizer) updateMemoryMetrics(memStats *runtime.MemStats) {
 func (mo *MemoryOptimizer) GetMetrics() *MemoryMetrics {
 	mo.mu.RLock()
 	defer mo.mu.RUnlock()
-	
+
 	// Return a copy to prevent external modification
 	metrics := *mo.metrics
 	return &metrics
@@ -634,7 +631,7 @@ func (mo *MemoryOptimizer) GetMetrics() *MemoryMetrics {
 func (mo *MemoryOptimizer) GetOptimizations() []string {
 	mo.mu.RLock()
 	defer mo.mu.RUnlock()
-	
+
 	optimizations := make([]string, len(mo.optimizations))
 	copy(optimizations, mo.optimizations)
 	return optimizations
@@ -644,20 +641,20 @@ func (mo *MemoryOptimizer) GetOptimizations() []string {
 func (mo *MemoryOptimizer) EstimateMemorySavings() int64 {
 	mo.mu.RLock()
 	defer mo.mu.RUnlock()
-	
+
 	var totalSavings int64
-	
+
 	// Pool savings (estimated based on reuse rate)
 	poolSavings := int64(float64(mo.metrics.PoolHitRate) * float64(mo.metrics.HeapUsedMB) * 0.3) // 30% of heap from pooling
 	totalSavings += poolSavings
-	
+
 	// Streaming savings
 	totalSavings += mo.metrics.StreamingSavedMB
-	
+
 	// GC optimization savings (reduced overhead)
 	gcSavings := int64(float64(mo.metrics.HeapUsedMB) * 0.05) // 5% from better GC
 	totalSavings += gcSavings
-	
+
 	return totalSavings
 }
 
@@ -666,19 +663,18 @@ func validateMemoryConfig(config *MemoryConfig) error {
 	if config.MaxHeapSizeMB <= 0 {
 		return fmt.Errorf("max heap size must be positive")
 	}
-	
+
 	if config.GCTargetPercent <= 0 || config.GCTargetPercent > 1000 {
 		return fmt.Errorf("GC target percent must be between 1 and 1000")
 	}
-	
+
 	if config.StringBuilderPoolSize <= 0 {
 		return fmt.Errorf("string builder pool size must be positive")
 	}
-	
+
 	if config.StreamingThresholdMB <= 0 {
 		return fmt.Errorf("streaming threshold must be positive")
 	}
-	
+
 	return nil
 }
-

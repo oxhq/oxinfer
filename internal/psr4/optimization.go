@@ -22,32 +22,32 @@ const (
 // PerformancePreset defines optimized configuration for different project types
 type PerformancePreset struct {
 	ProjectSize ProjectSize
-	
+
 	// Cache Configuration
-	CacheEnabled  bool
-	CacheSize     int
-	CacheTTL      time.Duration
+	CacheEnabled    bool
+	CacheSize       int
+	CacheTTL        time.Duration
 	CleanupInterval time.Duration
-	
+
 	// Batch Processing
-	BatchSize          int
-	MaxWorkers         int
-	WorkerQueueSize    int
-	
+	BatchSize       int
+	MaxWorkers      int
+	WorkerQueueSize int
+
 	// I/O Optimization
-	IOBufferSize       int
-	ConcurrentReads    int
-	FilesystemTimeout  time.Duration
-	
+	IOBufferSize      int
+	ConcurrentReads   int
+	FilesystemTimeout time.Duration
+
 	// Memory Management
-	GCFrequency        int // Number of operations before suggesting GC
-	MemoryLimitMB      int
-	PreallocateSlices  bool
-	
+	GCFrequency       int // Number of operations before suggesting GC
+	MemoryLimitMB     int
+	PreallocateSlices bool
+
 	// Performance Monitoring
-	EnableMetrics      bool
-	MetricsInterval    time.Duration
-	EnableProfiling    bool
+	EnableMetrics   bool
+	MetricsInterval time.Duration
+	EnableProfiling bool
 }
 
 // GetPerformancePreset returns optimized configuration for a given project size
@@ -55,88 +55,88 @@ func GetPerformancePreset(size ProjectSize) PerformancePreset {
 	switch size {
 	case ProjectSizeSmall:
 		return PerformancePreset{
-			ProjectSize:        ProjectSizeSmall,
-			CacheEnabled:       true,
-			CacheSize:          200,
-			CacheTTL:           3 * time.Minute,
-			CleanupInterval:    30 * time.Second,
-			BatchSize:          20,
-			MaxWorkers:         2,
-			WorkerQueueSize:    50,
-			IOBufferSize:       4096,
-			ConcurrentReads:    2,
-			FilesystemTimeout:  1 * time.Second,
-			GCFrequency:        100,
-			MemoryLimitMB:      50,
-			PreallocateSlices:  false,
-			EnableMetrics:      false,
-			MetricsInterval:    30 * time.Second,
-			EnableProfiling:    false,
+			ProjectSize:       ProjectSizeSmall,
+			CacheEnabled:      true,
+			CacheSize:         200,
+			CacheTTL:          3 * time.Minute,
+			CleanupInterval:   30 * time.Second,
+			BatchSize:         20,
+			MaxWorkers:        2,
+			WorkerQueueSize:   50,
+			IOBufferSize:      4096,
+			ConcurrentReads:   2,
+			FilesystemTimeout: 1 * time.Second,
+			GCFrequency:       100,
+			MemoryLimitMB:     50,
+			PreallocateSlices: false,
+			EnableMetrics:     false,
+			MetricsInterval:   30 * time.Second,
+			EnableProfiling:   false,
 		}
-	
+
 	case ProjectSizeMedium:
 		return PerformancePreset{
-			ProjectSize:        ProjectSizeMedium,
-			CacheEnabled:       true,
-			CacheSize:          1000,
-			CacheTTL:           5 * time.Minute,
-			CleanupInterval:    1 * time.Minute,
-			BatchSize:          50,
-			MaxWorkers:         4,
-			WorkerQueueSize:    200,
-			IOBufferSize:       8192,
-			ConcurrentReads:    4,
-			FilesystemTimeout:  2 * time.Second,
-			GCFrequency:        500,
-			MemoryLimitMB:      100,
-			PreallocateSlices:  true,
-			EnableMetrics:      true,
-			MetricsInterval:    1 * time.Minute,
-			EnableProfiling:    false,
+			ProjectSize:       ProjectSizeMedium,
+			CacheEnabled:      true,
+			CacheSize:         1000,
+			CacheTTL:          5 * time.Minute,
+			CleanupInterval:   1 * time.Minute,
+			BatchSize:         50,
+			MaxWorkers:        4,
+			WorkerQueueSize:   200,
+			IOBufferSize:      8192,
+			ConcurrentReads:   4,
+			FilesystemTimeout: 2 * time.Second,
+			GCFrequency:       500,
+			MemoryLimitMB:     100,
+			PreallocateSlices: true,
+			EnableMetrics:     true,
+			MetricsInterval:   1 * time.Minute,
+			EnableProfiling:   false,
 		}
-	
+
 	case ProjectSizeLarge:
 		return PerformancePreset{
-			ProjectSize:        ProjectSizeLarge,
-			CacheEnabled:       true,
-			CacheSize:          5000,
-			CacheTTL:           10 * time.Minute,
-			CleanupInterval:    2 * time.Minute,
-			BatchSize:          100,
-			MaxWorkers:         runtime.NumCPU(),
-			WorkerQueueSize:    500,
-			IOBufferSize:       16384,
-			ConcurrentReads:    8,
-			FilesystemTimeout:  5 * time.Second,
-			GCFrequency:        1000,
-			MemoryLimitMB:      200,
-			PreallocateSlices:  true,
-			EnableMetrics:      true,
-			MetricsInterval:    30 * time.Second,
-			EnableProfiling:    false,
+			ProjectSize:       ProjectSizeLarge,
+			CacheEnabled:      true,
+			CacheSize:         5000,
+			CacheTTL:          10 * time.Minute,
+			CleanupInterval:   2 * time.Minute,
+			BatchSize:         100,
+			MaxWorkers:        runtime.NumCPU(),
+			WorkerQueueSize:   500,
+			IOBufferSize:      16384,
+			ConcurrentReads:   8,
+			FilesystemTimeout: 5 * time.Second,
+			GCFrequency:       1000,
+			MemoryLimitMB:     200,
+			PreallocateSlices: true,
+			EnableMetrics:     true,
+			MetricsInterval:   30 * time.Second,
+			EnableProfiling:   false,
 		}
-	
+
 	case ProjectSizeEnterprise:
 		return PerformancePreset{
-			ProjectSize:        ProjectSizeEnterprise,
-			CacheEnabled:       true,
-			CacheSize:          10000,
-			CacheTTL:           15 * time.Minute,
-			CleanupInterval:    3 * time.Minute,
-			BatchSize:          200,
-			MaxWorkers:         runtime.NumCPU() * 2,
-			WorkerQueueSize:    1000,
-			IOBufferSize:       32768,
-			ConcurrentReads:    16,
-			FilesystemTimeout:  10 * time.Second,
-			GCFrequency:        2000,
-			MemoryLimitMB:      500,
-			PreallocateSlices:  true,
-			EnableMetrics:      true,
-			MetricsInterval:    15 * time.Second,
-			EnableProfiling:    true,
+			ProjectSize:       ProjectSizeEnterprise,
+			CacheEnabled:      true,
+			CacheSize:         10000,
+			CacheTTL:          15 * time.Minute,
+			CleanupInterval:   3 * time.Minute,
+			BatchSize:         200,
+			MaxWorkers:        runtime.NumCPU() * 2,
+			WorkerQueueSize:   1000,
+			IOBufferSize:      32768,
+			ConcurrentReads:   16,
+			FilesystemTimeout: 10 * time.Second,
+			GCFrequency:       2000,
+			MemoryLimitMB:     500,
+			PreallocateSlices: true,
+			EnableMetrics:     true,
+			MetricsInterval:   15 * time.Second,
+			EnableProfiling:   true,
 		}
-	
+
 	default:
 		return GetPerformancePreset(ProjectSizeMedium)
 	}
@@ -145,23 +145,23 @@ func GetPerformancePreset(size ProjectSize) PerformancePreset {
 // GetCIPreset returns ultra-fast configuration optimized for CI/CD scenarios
 func GetCIPreset() PerformancePreset {
 	return PerformancePreset{
-		ProjectSize:        ProjectSizeMedium,
-		CacheEnabled:       false, // No cache for single-run CI
-		CacheSize:          0,
-		CacheTTL:           0,
-		CleanupInterval:    0,
-		BatchSize:          500, // Large batches for throughput
-		MaxWorkers:         runtime.NumCPU() * 2,
-		WorkerQueueSize:    2000,
-		IOBufferSize:       65536, // Large buffer for speed
-		ConcurrentReads:    runtime.NumCPU(),
-		FilesystemTimeout:  30 * time.Second, // Longer timeout for slow CI systems
-		GCFrequency:        10000, // Less frequent GC
-		MemoryLimitMB:      1000,  // More memory for speed
-		PreallocateSlices:  true,
-		EnableMetrics:      false, // No metrics in CI
-		MetricsInterval:    0,
-		EnableProfiling:    false,
+		ProjectSize:       ProjectSizeMedium,
+		CacheEnabled:      false, // No cache for single-run CI
+		CacheSize:         0,
+		CacheTTL:          0,
+		CleanupInterval:   0,
+		BatchSize:         500, // Large batches for throughput
+		MaxWorkers:        runtime.NumCPU() * 2,
+		WorkerQueueSize:   2000,
+		IOBufferSize:      65536, // Large buffer for speed
+		ConcurrentReads:   runtime.NumCPU(),
+		FilesystemTimeout: 30 * time.Second, // Longer timeout for slow CI systems
+		GCFrequency:       10000,            // Less frequent GC
+		MemoryLimitMB:     1000,             // More memory for speed
+		PreallocateSlices: true,
+		EnableMetrics:     false, // No metrics in CI
+		MetricsInterval:   0,
+		EnableProfiling:   false,
 	}
 }
 
@@ -169,15 +169,15 @@ func GetCIPreset() PerformancePreset {
 
 // BatchProcessor handles batch processing of class resolutions for improved performance
 type BatchProcessor struct {
-	resolver   PSR4Resolver
-	preset     PerformancePreset
-	workQueue  chan BatchJob
+	resolver    PSR4Resolver
+	preset      PerformancePreset
+	workQueue   chan BatchJob
 	resultQueue chan BatchResult
-	workers    []*BatchWorker
-	wg         sync.WaitGroup
-	ctx        context.Context
-	cancel     context.CancelFunc
-	metrics    *BatchMetrics
+	workers     []*BatchWorker
+	wg          sync.WaitGroup
+	ctx         context.Context
+	cancel      context.CancelFunc
+	metrics     *BatchMetrics
 }
 
 // BatchJob represents a single class resolution job
@@ -207,7 +207,7 @@ type BatchWorker struct {
 // NewBatchProcessor creates a new batch processor with the given resolver and preset
 func NewBatchProcessor(resolver PSR4Resolver, preset PerformancePreset) *BatchProcessor {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	processor := &BatchProcessor{
 		resolver:    resolver,
 		preset:      preset,
@@ -218,7 +218,7 @@ func NewBatchProcessor(resolver PSR4Resolver, preset PerformancePreset) *BatchPr
 		cancel:      cancel,
 		metrics:     NewBatchMetrics(),
 	}
-	
+
 	// Start workers
 	for i := 0; i < preset.MaxWorkers; i++ {
 		worker := &BatchWorker{
@@ -229,11 +229,11 @@ func NewBatchProcessor(resolver PSR4Resolver, preset PerformancePreset) *BatchPr
 			ctx:      ctx,
 		}
 		processor.workers[i] = worker
-		
+
 		processor.wg.Add(1)
 		go processor.runWorker(worker)
 	}
-	
+
 	return processor
 }
 
@@ -242,11 +242,11 @@ func (bp *BatchProcessor) ProcessBatch(classes []string) (map[string]BatchResult
 	start := time.Now()
 	results := make(map[string]BatchResult)
 	totalJobs := len(classes)
-	
+
 	if totalJobs == 0 {
 		return results, nil
 	}
-	
+
 	// Send jobs to workers
 	go func() {
 		for i, class := range classes {
@@ -257,7 +257,7 @@ func (bp *BatchProcessor) ProcessBatch(classes []string) (map[string]BatchResult
 			}
 		}
 	}()
-	
+
 	// Collect results
 	completed := 0
 	for completed < totalJobs {
@@ -265,15 +265,15 @@ func (bp *BatchProcessor) ProcessBatch(classes []string) (map[string]BatchResult
 		case result := <-bp.resultQueue:
 			results[result.FQCN] = result
 			completed++
-			
+
 			// Update metrics
 			bp.metrics.RecordJob(result.Duration, result.Error == nil)
-			
+
 		case <-bp.ctx.Done():
 			return results, bp.ctx.Err()
 		}
 	}
-	
+
 	bp.metrics.RecordBatch(time.Since(start), totalJobs)
 	return results, nil
 }
@@ -281,15 +281,15 @@ func (bp *BatchProcessor) ProcessBatch(classes []string) (map[string]BatchResult
 // runWorker runs a single batch worker
 func (bp *BatchProcessor) runWorker(worker *BatchWorker) {
 	defer bp.wg.Done()
-	
+
 	for {
 		select {
 		case job := <-worker.jobs:
 			start := time.Now()
-			
+
 			filePath, err := worker.resolver.ResolveClass(worker.ctx, job.FQCN)
 			duration := time.Since(start)
-			
+
 			result := BatchResult{
 				ID:       job.ID,
 				FQCN:     job.FQCN,
@@ -297,13 +297,13 @@ func (bp *BatchProcessor) runWorker(worker *BatchWorker) {
 				Error:    err,
 				Duration: duration,
 			}
-			
+
 			select {
 			case bp.resultQueue <- result:
 			case <-worker.ctx.Done():
 				return
 			}
-			
+
 		case <-worker.ctx.Done():
 			return
 		}
@@ -320,16 +320,16 @@ func (bp *BatchProcessor) Close() error {
 
 // GetMetrics returns current batch processing metrics
 func (bp *BatchProcessor) GetMetrics() BatchMetrics {
-	return *bp.metrics
+	return bp.metrics.GetSnapshot()
 }
 
 // ===== CACHE OPTIMIZATION =====
 
 // CacheOptimizer provides intelligent cache configuration and tuning
 type CacheOptimizer struct {
-	resolver       *DefaultPSR4Resolver
-	preset         PerformancePreset
-	metrics        *CacheMetrics
+	resolver         *DefaultPSR4Resolver
+	preset           PerformancePreset
+	metrics          *CacheMetrics
 	lastOptimization time.Time
 }
 
@@ -347,14 +347,14 @@ func (co *CacheOptimizer) OptimizeCache() {
 	if co.resolver.cache == nil {
 		return
 	}
-	
+
 	// Only optimize every few minutes to avoid constant changes
 	if time.Since(co.lastOptimization) < co.preset.MetricsInterval {
 		return
 	}
-	
+
 	stats := co.resolver.cache.GetStats()
-	
+
 	// Adjust TTL based on hit rate and size
 	if stats.Size > co.preset.CacheSize*8/10 { // 80% full
 		// Cache is getting full - reduce TTL to increase turnover
@@ -369,7 +369,7 @@ func (co *CacheOptimizer) OptimizeCache() {
 			co.resolver.cache.SetDefaultTTL(newTTL)
 		}
 	}
-	
+
 	co.lastOptimization = time.Now()
 }
 
@@ -378,12 +378,12 @@ func (co *CacheOptimizer) WarmCache(commonClasses []string) error {
 	if co.resolver.cache == nil {
 		return nil
 	}
-	
+
 	ctx := context.Background()
 	for _, class := range commonClasses {
 		_, _ = co.resolver.ResolveClass(ctx, class)
 	}
-	
+
 	return nil
 }
 
@@ -391,17 +391,17 @@ func (co *CacheOptimizer) WarmCache(commonClasses []string) error {
 
 // BatchMetrics tracks batch processing performance
 type BatchMetrics struct {
-	mu                sync.RWMutex
-	TotalJobs         int64
-	SuccessfulJobs    int64
-	FailedJobs        int64
-	TotalBatches      int64
-	TotalDuration     time.Duration
-	AverageJobTime    time.Duration
-	AverageBatchTime  time.Duration
-	MaxJobTime        time.Duration
-	MinJobTime        time.Duration
-	ThroughputPerSec  float64
+	mu               sync.RWMutex
+	TotalJobs        int64
+	SuccessfulJobs   int64
+	FailedJobs       int64
+	TotalBatches     int64
+	TotalDuration    time.Duration
+	AverageJobTime   time.Duration
+	AverageBatchTime time.Duration
+	MaxJobTime       time.Duration
+	MinJobTime       time.Duration
+	ThroughputPerSec float64
 }
 
 // NewBatchMetrics creates a new metrics collector
@@ -415,24 +415,24 @@ func NewBatchMetrics() *BatchMetrics {
 func (bm *BatchMetrics) RecordJob(duration time.Duration, success bool) {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
-	
+
 	bm.TotalJobs++
 	bm.TotalDuration += duration
-	
+
 	if success {
 		bm.SuccessfulJobs++
 	} else {
 		bm.FailedJobs++
 	}
-	
+
 	if duration > bm.MaxJobTime {
 		bm.MaxJobTime = duration
 	}
-	
+
 	if duration < bm.MinJobTime {
 		bm.MinJobTime = duration
 	}
-	
+
 	if bm.TotalJobs > 0 {
 		bm.AverageJobTime = bm.TotalDuration / time.Duration(bm.TotalJobs)
 	}
@@ -442,13 +442,13 @@ func (bm *BatchMetrics) RecordJob(duration time.Duration, success bool) {
 func (bm *BatchMetrics) RecordBatch(duration time.Duration, jobCount int) {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
-	
+
 	bm.TotalBatches++
-	
+
 	if bm.TotalBatches > 0 {
 		bm.AverageBatchTime = bm.TotalDuration / time.Duration(bm.TotalBatches)
 	}
-	
+
 	if duration.Seconds() > 0 {
 		bm.ThroughputPerSec = float64(jobCount) / duration.Seconds()
 	}
@@ -458,16 +458,28 @@ func (bm *BatchMetrics) RecordBatch(duration time.Duration, jobCount int) {
 func (bm *BatchMetrics) GetSnapshot() BatchMetrics {
 	bm.mu.RLock()
 	defer bm.mu.RUnlock()
-	return *bm
+	// Create a copy without the mutex to avoid copying locks
+	return BatchMetrics{
+		TotalJobs:        bm.TotalJobs,
+		SuccessfulJobs:   bm.SuccessfulJobs,
+		FailedJobs:       bm.FailedJobs,
+		TotalBatches:     bm.TotalBatches,
+		TotalDuration:    bm.TotalDuration,
+		AverageJobTime:   bm.AverageJobTime,
+		AverageBatchTime: bm.AverageBatchTime,
+		MaxJobTime:       bm.MaxJobTime,
+		MinJobTime:       bm.MinJobTime,
+		ThroughputPerSec: bm.ThroughputPerSec,
+	}
 }
 
 // CacheMetrics tracks cache performance over time
 type CacheMetrics struct {
-	mu              sync.RWMutex
-	Hits            int64
-	Misses          int64
-	Evictions       int64
-	ExpiredCleanups int64
+	mu               sync.RWMutex
+	Hits             int64
+	Misses           int64
+	Evictions        int64
+	ExpiredCleanups  int64
 	LastOptimization time.Time
 }
 
@@ -494,12 +506,12 @@ func (cm *CacheMetrics) RecordMiss() {
 func (cm *CacheMetrics) GetHitRate() float64 {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
-	
+
 	total := cm.Hits + cm.Misses
 	if total == 0 {
 		return 0
 	}
-	
+
 	return float64(cm.Hits) / float64(total)
 }
 
@@ -523,7 +535,7 @@ func NewFilesystemOptimizer(preset PerformancePreset) *FilesystemOptimizer {
 // BatchFileExists checks multiple file paths efficiently
 func (fo *FilesystemOptimizer) BatchFileExists(paths []string) map[string]bool {
 	results := make(map[string]bool)
-	
+
 	// Check cache first
 	var uncachedPaths []string
 	fo.mu.RLock()
@@ -535,27 +547,27 @@ func (fo *FilesystemOptimizer) BatchFileExists(paths []string) map[string]bool {
 		}
 	}
 	fo.mu.RUnlock()
-	
+
 	if len(uncachedPaths) == 0 {
 		return results
 	}
-	
+
 	// Process uncached paths in batches
 	batchSize := fo.preset.BatchSize
 	if batchSize <= 0 {
 		batchSize = 50
 	}
-	
+
 	for i := 0; i < len(uncachedPaths); i += batchSize {
 		end := i + batchSize
 		if end > len(uncachedPaths) {
 			end = len(uncachedPaths)
 		}
-		
+
 		batch := uncachedPaths[i:end]
 		fo.processBatch(batch, results)
 	}
-	
+
 	return results
 }
 
@@ -565,11 +577,11 @@ func (fo *FilesystemOptimizer) processBatch(paths []string, results map[string]b
 	// For now, we'll simulate the behavior
 	fo.mu.Lock()
 	defer fo.mu.Unlock()
-	
+
 	for _, path := range paths {
 		// Simulate file existence check
 		exists := len(path) > 0 && path[0] != '~' // Simple heuristic for benchmarking
-		
+
 		fo.cache[path] = exists
 		results[path] = exists
 	}
@@ -586,8 +598,8 @@ func (fo *FilesystemOptimizer) ClearCache() {
 
 // MemoryOptimizer provides memory usage optimization
 type MemoryOptimizer struct {
-	preset          PerformancePreset
-	operationCount  int
+	preset         PerformancePreset
+	operationCount int
 	lastGC         time.Time
 	memoryPressure bool
 }
@@ -603,15 +615,15 @@ func NewMemoryOptimizer(preset PerformancePreset) *MemoryOptimizer {
 func (mo *MemoryOptimizer) CheckMemoryPressure() bool {
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
-	
+
 	// Convert preset memory limit to bytes
 	limitBytes := uint64(mo.preset.MemoryLimitMB) * 1024 * 1024
-	
+
 	if mem.Alloc > limitBytes {
 		mo.memoryPressure = true
 		return true
 	}
-	
+
 	mo.memoryPressure = false
 	return false
 }
@@ -619,20 +631,20 @@ func (mo *MemoryOptimizer) CheckMemoryPressure() bool {
 // SuggestGC suggests garbage collection if needed
 func (mo *MemoryOptimizer) SuggestGC() bool {
 	mo.operationCount++
-	
+
 	// Check if we should suggest GC based on operation count
 	if mo.operationCount >= mo.preset.GCFrequency {
 		mo.operationCount = 0
 		mo.lastGC = time.Now()
 		return true
 	}
-	
+
 	// Check if memory pressure is high
 	if mo.CheckMemoryPressure() && time.Since(mo.lastGC) > time.Minute {
 		mo.lastGC = time.Now()
 		return true
 	}
-	
+
 	return false
 }
 
@@ -641,13 +653,13 @@ func (mo *MemoryOptimizer) GetOptimizedSlice(expectedSize int) []string {
 	if !mo.preset.PreallocateSlices {
 		return make([]string, 0)
 	}
-	
+
 	// Allocate with some extra capacity to avoid frequent reallocations
 	capacity := expectedSize + (expectedSize / 4) // 25% extra
 	if capacity < 8 {
 		capacity = 8
 	}
-	
+
 	return make([]string, 0, capacity)
 }
 
@@ -655,33 +667,33 @@ func (mo *MemoryOptimizer) GetOptimizedSlice(expectedSize int) []string {
 
 // OptimizedResolver wraps a PSR4Resolver with performance optimizations
 type OptimizedResolver struct {
-	resolver          PSR4Resolver
-	batchProcessor    *BatchProcessor
-	cacheOptimizer    *CacheOptimizer
-	memoryOptimizer   *MemoryOptimizer
-	fsOptimizer       *FilesystemOptimizer
-	preset            PerformancePreset
+	resolver        PSR4Resolver
+	batchProcessor  *BatchProcessor
+	cacheOptimizer  *CacheOptimizer
+	memoryOptimizer *MemoryOptimizer
+	fsOptimizer     *FilesystemOptimizer
+	preset          PerformancePreset
 }
 
 // NewOptimizedResolver creates a resolver with all performance optimizations enabled
 func NewOptimizedResolver(resolver PSR4Resolver, size ProjectSize) *OptimizedResolver {
 	preset := GetPerformancePreset(size)
-	
+
 	optimized := &OptimizedResolver{
 		resolver:        resolver,
 		preset:          preset,
 		memoryOptimizer: NewMemoryOptimizer(preset),
 		fsOptimizer:     NewFilesystemOptimizer(preset),
 	}
-	
+
 	// Initialize batch processor
 	optimized.batchProcessor = NewBatchProcessor(resolver, preset)
-	
+
 	// Initialize cache optimizer if resolver supports it
 	if defaultResolver, ok := resolver.(*DefaultPSR4Resolver); ok {
 		optimized.cacheOptimizer = NewCacheOptimizer(defaultResolver, preset)
 	}
-	
+
 	return optimized
 }
 
@@ -692,7 +704,7 @@ func (or *OptimizedResolver) ResolveClassesOptimized(classes []string) (map[stri
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Convert to simple map
 	resolved := make(map[string]string)
 	for fqcn, result := range results {
@@ -700,17 +712,17 @@ func (or *OptimizedResolver) ResolveClassesOptimized(classes []string) (map[stri
 			resolved[fqcn] = result.FilePath
 		}
 	}
-	
+
 	// Optimize cache if needed
 	if or.cacheOptimizer != nil {
 		or.cacheOptimizer.OptimizeCache()
 	}
-	
+
 	// Check for memory pressure
 	if or.memoryOptimizer.SuggestGC() {
 		runtime.GC()
 	}
-	
+
 	return resolved, nil
 }
 
@@ -743,7 +755,7 @@ func EstimateProjectSize(estimatedClasses int) ProjectSize {
 	case estimatedClasses < 100:
 		return ProjectSizeSmall
 	case estimatedClasses < 500:
-		return ProjectSizeMedium  
+		return ProjectSizeMedium
 	case estimatedClasses < 2000:
 		return ProjectSizeLarge
 	default:
@@ -762,13 +774,13 @@ func GetOptimalPresetForManifest(manifestMaxFiles, manifestMaxWorkers int) Perfo
 	} else {
 		size = ProjectSizeMedium // Safe default
 	}
-	
+
 	preset := GetPerformancePreset(size)
-	
+
 	// Override with manifest constraints if specified
 	if manifestMaxWorkers > 0 && manifestMaxWorkers < preset.MaxWorkers {
 		preset.MaxWorkers = manifestMaxWorkers
 	}
-	
+
 	return preset
 }

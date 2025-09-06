@@ -18,17 +18,17 @@ func TestRequestUsageMatcher_Match(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name                  string
-		phpContent            string
-		expectedMatches       int
-		expectedContentTypes  []string
-		expectedMethods       []string
-		expectedConfidence    float64
-		expectedPattern       string
+		name                 string
+		phpContent           string
+		expectedMatches      int
+		expectedContentTypes []string
+		expectedMethods      []string
+		expectedConfidence   float64
+		expectedPattern      string
 	}{
-        {
-            name: "request_all_method",
-            phpContent: `<?php
+		{
+			name: "request_all_method",
+			phpContent: `<?php
 namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 class TestController extends Controller {
@@ -37,14 +37,14 @@ class TestController extends Controller {
         return response()->json($data);
     }
 }`,
-            expectedMatches:     1,
-            expectedContentTypes: []string{"application/json", "application/x-www-form-urlencoded"},
-            expectedMethods:     nil,
-            expectedConfidence:  0.90,
-            expectedPattern:     "request_all",
-        },
-        {
-            name: "request_json_method",
+			expectedMatches:      1,
+			expectedContentTypes: []string{"application/json", "application/x-www-form-urlencoded"},
+			expectedMethods:      nil,
+			expectedConfidence:   0.90,
+			expectedPattern:      "request_all",
+		},
+		{
+			name: "request_json_method",
 			phpContent: `<?php
 namespace App\Http\Controllers;
 use Illuminate\Http\Request;
@@ -55,14 +55,14 @@ class TestController extends Controller {
         return response()->json(['received' => $jsonData]);
     }
 }`,
-            expectedMatches:     1,
-            expectedContentTypes: []string{"application/json"},
-            expectedMethods:     nil,
-            expectedConfidence:  0.91,
-            expectedPattern:     "request_json",
-        },
-        {
-            name: "request_file_upload",
+			expectedMatches:      1,
+			expectedContentTypes: []string{"application/json"},
+			expectedMethods:      nil,
+			expectedConfidence:   0.91,
+			expectedPattern:      "request_json",
+		},
+		{
+			name: "request_file_upload",
 			phpContent: `<?php
 namespace App\Http\Controllers;
 use Illuminate\Http\Request;
@@ -75,14 +75,14 @@ class TestController extends Controller {
         return response()->json(['uploaded' => true]);
     }
 }`,
-            expectedMatches:     1,
-            expectedContentTypes: []string{"multipart/form-data"},
-            expectedMethods:     nil,
-            expectedConfidence:  0.91,
-            expectedPattern:     "request_file",
-        },
-        {
-            name: "request_input_with_parameters",
+			expectedMatches:      1,
+			expectedContentTypes: []string{"multipart/form-data"},
+			expectedMethods:      nil,
+			expectedConfidence:   0.91,
+			expectedPattern:      "request_file",
+		},
+		{
+			name: "request_input_with_parameters",
 			phpContent: `<?php
 namespace App\Http\Controllers;
 use Illuminate\Http\Request;
@@ -94,14 +94,14 @@ class TestController extends Controller {
         return response()->json(['name' => $name, 'email' => $email]);
     }
 }`,
-            expectedMatches:     1,
-            expectedContentTypes: []string{"application/json", "application/x-www-form-urlencoded"},
-            expectedMethods:     nil,
-            expectedConfidence:  0.90,
-            expectedPattern:     "request_input",
-        },
-        {
-            name: "request_only_except_methods",
+			expectedMatches:      1,
+			expectedContentTypes: []string{"application/json", "application/x-www-form-urlencoded"},
+			expectedMethods:      nil,
+			expectedConfidence:   0.90,
+			expectedPattern:      "request_input",
+		},
+		{
+			name: "request_only_except_methods",
 			phpContent: `<?php
 namespace App\Http\Controllers;
 use Illuminate\Http\Request;
@@ -112,14 +112,14 @@ class TestController extends Controller {
         return response()->json(['allowed' => $allowed, 'cleaned' => $cleaned]);
     }
 }`,
-            expectedMatches:     1,
-            expectedContentTypes: []string{"application/json", "application/x-www-form-urlencoded"},
-            expectedMethods:     nil,
-            expectedConfidence:  0.90,
-            expectedPattern:     "request_only", // Will match first one found
-        },
-        {
-            name: "request_validation",
+			expectedMatches:      1,
+			expectedContentTypes: []string{"application/json", "application/x-www-form-urlencoded"},
+			expectedMethods:      nil,
+			expectedConfidence:   0.90,
+			expectedPattern:      "request_only", // Will match first one found
+		},
+		{
+			name: "request_validation",
 			phpContent: `<?php
 namespace App\Http\Controllers;
 use Illuminate\Http\Request;
@@ -132,12 +132,12 @@ class TestController extends Controller {
         return response()->json(['validated' => $validated]);
     }
 }`,
-            expectedMatches:     1,
-            expectedContentTypes: []string{"application/json", "application/x-www-form-urlencoded"},
-            expectedMethods:     nil,
-            expectedConfidence:  0.89,
-            expectedPattern:     "request_validate",
-        },
+			expectedMatches:      1,
+			expectedContentTypes: []string{"application/json", "application/x-www-form-urlencoded"},
+			expectedMethods:      nil,
+			expectedConfidence:   0.89,
+			expectedPattern:      "request_validate",
+		},
 		{
 			name: "no_request_usage",
 			phpContent: `<?php
@@ -172,8 +172,8 @@ class TestController extends Controller {
         return response()->json(['success' => true]);
     }
 }`,
-            expectedMatches: 1,
-        },
+			expectedMatches: 1,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -577,7 +577,7 @@ func containsAllStrings(slice, expected []string) bool {
 	for _, item := range slice {
 		found[item] = true
 	}
-	
+
 	for _, exp := range expected {
 		if !found[exp] {
 			return false
@@ -587,15 +587,15 @@ func containsAllStrings(slice, expected []string) bool {
 }
 
 // convertRequestUsageResults converts MatchResult array to comparable format
-func convertRequestUsageResults(results []*MatchResult) []map[string]interface{} {
-	converted := make([]map[string]interface{}, len(results))
+func convertRequestUsageResults(results []*MatchResult) []map[string]any {
+	converted := make([]map[string]any, len(results))
 	for i, result := range results {
 		requestData, ok := result.Data.(*RequestUsageMatch)
 		if !ok {
 			continue
 		}
 
-		converted[i] = map[string]interface{}{
+		converted[i] = map[string]any{
 			"type":         result.Type,
 			"position":     result.Position,
 			"confidence":   result.Confidence,

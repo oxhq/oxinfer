@@ -27,7 +27,7 @@ func TestConcurrentParsing_Basic(t *testing.T) {
 			Content: []byte("<?php class TestClass {}"),
 		},
 		{
-			ID:      "job2",  
+			ID:      "job2",
 			Content: []byte("<?php function testFunction() { return 'hello'; }"),
 		},
 		{
@@ -89,7 +89,7 @@ func TestConcurrentParsing_ErrorResilience(t *testing.T) {
 	jobs := []ParseJob{
 		{ID: "valid1", Content: []byte("<?php class ValidClass {}")},
 		{ID: "invalid", Content: []byte("<?php class BrokenClass { function test() { /* missing closing brace */")}, // Malformed PHP
-		{ID: "empty", Content: []byte("")},                            // Empty content
+		{ID: "empty", Content: []byte("")},                                                                          // Empty content
 		{ID: "valid2", Content: []byte("<?php function validFunc() {}")},
 	}
 
@@ -103,7 +103,7 @@ func TestConcurrentParsing_ErrorResilience(t *testing.T) {
 
 	var successful, failed int
 	resultsByID := make(map[string]ParseJobResult)
-	
+
 	for result := range results {
 		resultsByID[result.JobID] = result
 		if result.Error != nil {
@@ -163,9 +163,9 @@ func TestConcurrentParsing_ContextCancellation(t *testing.T) {
 
 	// Create context and cancel it immediately after starting
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	results, err := parser.ParseConcurrently(ctx, jobs)
-	
+
 	// Cancel context immediately after starting to test cancellation
 	cancel()
 	if err != nil && err != context.Canceled && err != context.DeadlineExceeded {
@@ -490,7 +490,7 @@ func TestParserPool_ConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < operationsPerGoroutine; j++ {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				
+
 				parser, err := pool.AcquireParser(ctx)
 				if err != nil {
 					errors <- fmt.Errorf("goroutine %d operation %d: acquire failed: %w", goroutineID, j, err)
@@ -505,7 +505,7 @@ func TestParserPool_ConcurrentAccess(t *testing.T) {
 				if err != nil {
 					errors <- fmt.Errorf("goroutine %d operation %d: release failed: %w", goroutineID, j, err)
 				}
-				
+
 				cancel()
 			}
 		}(i)
@@ -592,7 +592,7 @@ func BenchmarkConcurrentParsing_Performance(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	
+
 	for i := 0; i < b.N; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		results, err := parser.ParseConcurrently(ctx, jobs)
@@ -603,7 +603,7 @@ func BenchmarkConcurrentParsing_Performance(b *testing.B) {
 		// Consume all results
 		for range results {
 		}
-		
+
 		cancel()
 	}
 }
@@ -654,7 +654,7 @@ func BenchmarkSequentialVsConcurrent(b *testing.B) {
 			// Consume all results
 			for range results {
 			}
-			
+
 			cancel()
 		}
 	})

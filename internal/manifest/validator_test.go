@@ -153,7 +153,7 @@ func TestManifestValidator_ValidatePaths_Project(t *testing.T) {
 				os.Chdir(validDir)
 				defer os.Chdir(originalWd)
 			}
-			
+
 			err := validator.ValidatePaths(tt.manifest)
 
 			if tt.wantErr {
@@ -736,4 +736,3 @@ func TestManifestValidator_ErrorMessages(t *testing.T) {
 		})
 	}
 }
-

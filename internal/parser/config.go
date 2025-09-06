@@ -217,14 +217,14 @@ func EstimateMemoryUsage(config ProjectParserConfig) int64 {
 	// - Base overhead: ~10MB for indexer and PSR-4 resolver
 
 	baseOverhead := int64(10 * 1024 * 1024) // 10MB base
-	
+
 	workerMemory := int64(config.MaxWorkers) * 2 * 1024 * 1024 // 2MB per worker
-	
+
 	// Estimate file cache memory (assume average 10KB per PHP file)
 	cacheMemory := int64(config.MaxFiles) * 11 * 1024 // 11KB per file (content + metadata)
-	
+
 	totalEstimate := baseOverhead + workerMemory + cacheMemory
-	
+
 	return totalEstimate
 }
 

@@ -25,7 +25,7 @@ func NewResourceMatcher(language *sitter.Language, config *MatcherConfig) (*Defa
 	if language == nil {
 		return nil, fmt.Errorf("language cannot be nil")
 	}
-	
+
 	if config == nil {
 		config = DefaultMatcherConfig()
 	}
@@ -51,7 +51,7 @@ func (m *DefaultResourceMatcher) initialize() error {
 	if err != nil {
 		return fmt.Errorf("failed to compile resource queries: %w", err)
 	}
-	
+
 	m.queries = queries
 	m.initialized = true
 	return nil
@@ -83,7 +83,7 @@ func (m *DefaultResourceMatcher) Match(ctx context.Context, tree *parser.SyntaxT
 		}
 
 		queryDef := m.queryDefs[i]
-		
+
 		// Convert SyntaxTree back to tree-sitter node for querying
 		sitterNode, sitterTree, err := m.convertToSitterNode(tree)
 		if err != nil {
@@ -156,7 +156,7 @@ func (m *DefaultResourceMatcher) Close() error {
 	if m.compiler != nil {
 		m.compiler.Close()
 	}
-	
+
 	m.initialized = false
 	m.queries = nil
 	return nil
@@ -177,7 +177,7 @@ func (m *DefaultResourceMatcher) processResourceMatch(
 	// Extract captures
 	for _, capture := range match.Captures {
 		captureName := query.CaptureNameForId(capture.Index)
-		
+
 		switch captureName {
 		case "class":
 			classNode := capture.Node
@@ -189,44 +189,45 @@ func (m *DefaultResourceMatcher) processResourceMatch(
 		}
 	}
 
-    // Validate we found a resource class
-    if className == "" {
-        return nil
-    }
+	// Validate we found a resource class
+	if className == "" {
+		return nil
+	}
 
-    // Clean class name
-    className = m.cleanResourceClassName(className)
+	// Clean class name
+	className = m.cleanResourceClassName(className)
 
-    // Determine if class looks like a Resource or is an alias to a Resource
-    looksResource := m.isResourceClass(className)
-    if !looksResource {
-        // Try alias resolution based on use statements
-        aliasMap := parseUseAliases(string(tree.Source))
-        if fqcn, ok := aliasMap[className]; ok && strings.HasSuffix(fqcn, "Resource") {
-            looksResource = true
-        }
-    }
-    if !looksResource {
-        return nil
-    }
+	// Determine if class looks like a Resource or is an alias to a Resource
+	looksResource := m.isResourceClass(className)
+	if !looksResource {
+		// Try alias resolution based on use statements
+		aliasMap := parseUseAliases(string(tree.Source))
+		if fqcn, ok := aliasMap[className]; ok && strings.HasSuffix(fqcn, "Resource") {
+			looksResource = true
+		}
+	}
+	if !looksResource {
+		return nil
+	}
 
 	// Determine if this is a collection or single resource
 	isCollection := m.determineCollectionType(queryDef.Name, methodName)
 
-    // Create resource match
-    resourceMatch := &ResourceMatch{
-        Class:      className,
-        Collection: isCollection,
-        Pattern:    queryDef.Name,
-        Method:     methodName,
-    }
+	// Resolve full class name using imports
+	resolvedClassName := m.resolveClassName(className, tree)
 
-    // Import resolution disabled for class display; keep short class name
+	// Create resource match
+	resourceMatch := &ResourceMatch{
+		Class:      resolvedClassName,
+		Collection: isCollection,
+		Pattern:    queryDef.Name,
+		Method:     methodName,
+	}
 
 	return &MatchResult{
 		Type:       PatternTypeResource,
 		Position:   position,
-		Content:    fmt.Sprintf("%s%s", className, m.getMethodSuffix(methodName)),
+		Content:    fmt.Sprintf("%s%s", resolvedClassName, m.getMethodSuffix(methodName)),
 		Confidence: queryDef.Confidence,
 		Data:       resourceMatch,
 		Context: &MatchContext{
@@ -240,13 +241,13 @@ func (m *DefaultResourceMatcher) processResourceMatch(
 func (m *DefaultResourceMatcher) cleanResourceClassName(className string) string {
 	// Remove leading/trailing whitespace
 	className = strings.TrimSpace(className)
-	
+
 	// Remove namespace separators if they exist
 	parts := strings.Split(className, "\\")
 	if len(parts) > 0 {
 		className = parts[len(parts)-1]
 	}
-	
+
 	return className
 }
 
@@ -256,17 +257,17 @@ func (m *DefaultResourceMatcher) isResourceClass(className string) bool {
 	if !strings.HasSuffix(className, "Resource") {
 		return false
 	}
-	
+
 	// Must be at least "XResource" (minimum length check)
 	if len(className) < 9 { // "XResource" = 9 chars
 		return false
 	}
-	
+
 	// Must start with uppercase letter (PSR-4 compliance)
 	if len(className) > 0 && !isUpperCase(className[0]) {
 		return false
 	}
-	
+
 	return true
 }
 
@@ -314,11 +315,11 @@ func (m *DefaultResourceMatcher) getMethodSuffix(methodName string) string {
 
 // resolveClassName attempts to resolve the full class name using import statements.
 func (m *DefaultResourceMatcher) resolveClassName(className string, tree *parser.SyntaxTree) string {
-    aliasMap := parseUseAliases(string(tree.Source))
-    if fqcn, ok := aliasMap[className]; ok {
-        return fqcn
-    }
-    return className
+	aliasMap := parseUseAliases(string(tree.Source))
+	if fqcn, ok := aliasMap[className]; ok {
+		return fqcn
+	}
+	return className
 }
 
 // convertToSitterNode converts SyntaxTree back to tree-sitter node and tree for querying.
@@ -330,7 +331,7 @@ func (m *DefaultResourceMatcher) convertToSitterNode(tree *parser.SyntaxTree) (*
 	}
 
 	tempParser.SetLanguage(m.compiler.language)
-	
+
 	sitterTree, err := tempParser.ParseCtx(context.Background(), nil, tree.Source)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to re-parse content: %w", err)
@@ -366,107 +367,107 @@ func (m *DefaultResourceMatcher) filterByConfidence(results []*MatchResult) []*M
 
 // deduplicateResults removes duplicate matches by position and content.
 func (m *DefaultResourceMatcher) deduplicateResults(results []*MatchResult) []*MatchResult {
-    if !m.config.DeduplicateMatches {
-        return results
-    }
+	if !m.config.DeduplicateMatches {
+		return results
+	}
 
-    selected := make(map[string]*MatchResult)
+	selected := make(map[string]*MatchResult)
 
-    rank := func(rm *ResourceMatch) int {
-        if rm.Method == "collection" {
-            if rm.Pattern == "return_resource_collection" {
-                return 100
-            }
-            if rm.Pattern == "resource_collection_static" {
-                return 90
-            }
-        }
-        if rm.Method == "make" {
-            if rm.Pattern == "resource_make_static" {
-                return 100
-            }
-        }
-        switch rm.Pattern {
-        case "return_new_resource":
-            return 80
-        case "new_resource_instantiation":
-            return 70
-        case "variable_resource_assignment":
-            return 60
-        case "resource_collection_static", "return_resource_collection":
-            return 50
-        default:
-            return 10
-        }
-    }
+	rank := func(rm *ResourceMatch) int {
+		if rm.Method == "collection" {
+			if rm.Pattern == "return_resource_collection" {
+				return 100
+			}
+			if rm.Pattern == "resource_collection_static" {
+				return 90
+			}
+		}
+		if rm.Method == "make" {
+			if rm.Pattern == "resource_make_static" {
+				return 100
+			}
+		}
+		switch rm.Pattern {
+		case "return_new_resource":
+			return 80
+		case "new_resource_instantiation":
+			return 70
+		case "variable_resource_assignment":
+			return 60
+		case "resource_collection_static", "return_resource_collection":
+			return 50
+		default:
+			return 10
+		}
+	}
 
-    for _, result := range results {
-        if resourceMatch, ok := result.Data.(*ResourceMatch); ok {
-            key := fmt.Sprintf("%s:%d:%d", resourceMatch.Class, result.Position.Row, result.Position.Column)
-            if prev, exists := selected[key]; exists {
-                prevRM := prev.Data.(*ResourceMatch)
-                r1 := rank(resourceMatch)
-                r2 := rank(prevRM)
-                if r1 > r2 || (r1 == r2 && result.Confidence > prev.Confidence) {
-                    selected[key] = result
-                }
-            } else {
-                selected[key] = result
-            }
-        }
-    }
+	for _, result := range results {
+		if resourceMatch, ok := result.Data.(*ResourceMatch); ok {
+			key := fmt.Sprintf("%s:%d:%d", resourceMatch.Class, result.Position.Row, result.Position.Column)
+			if prev, exists := selected[key]; exists {
+				prevRM := prev.Data.(*ResourceMatch)
+				r1 := rank(resourceMatch)
+				r2 := rank(prevRM)
+				if r1 > r2 || (r1 == r2 && result.Confidence > prev.Confidence) {
+					selected[key] = result
+				}
+			} else {
+				selected[key] = result
+			}
+		}
+	}
 
-    // Sort keys for deterministic output
-    keys := make([]string, 0, len(selected))
-    for key := range selected {
-        keys = append(keys, key)
-    }
-    
-    // Sort keys alphabetically for consistent ordering
-    for i := 0; i < len(keys); i++ {
-        for j := i + 1; j < len(keys); j++ {
-            if keys[i] > keys[j] {
-                keys[i], keys[j] = keys[j], keys[i]
-            }
-        }
-    }
-    
-    deduplicated := make([]*MatchResult, 0, len(selected))
-    for _, key := range keys {
-        deduplicated = append(deduplicated, selected[key])
-    }
-    return deduplicated
+	// Sort keys for deterministic output
+	keys := make([]string, 0, len(selected))
+	for key := range selected {
+		keys = append(keys, key)
+	}
+
+	// Sort keys alphabetically for consistent ordering
+	for i := 0; i < len(keys); i++ {
+		for j := i + 1; j < len(keys); j++ {
+			if keys[i] > keys[j] {
+				keys[i], keys[j] = keys[j], keys[i]
+			}
+		}
+	}
+
+	deduplicated := make([]*MatchResult, 0, len(selected))
+	for _, key := range keys {
+		deduplicated = append(deduplicated, selected[key])
+	}
+	return deduplicated
 }
 
 // parseUseAliases extracts alias → FQCN mappings from use statements
 func parseUseAliases(src string) map[string]string {
-    m := make(map[string]string)
-    lines := strings.Split(src, "\n")
-    for _, ln := range lines {
-        s := strings.TrimSpace(ln)
-        if !strings.HasPrefix(s, "use ") || !strings.HasSuffix(s, ";") {
-            continue
-        }
-        s = strings.TrimSuffix(strings.TrimPrefix(s, "use "), ";")
-        parts := strings.Split(s, " as ")
-        if len(parts) == 1 {
-            fqcn := strings.TrimSpace(parts[0])
-            alias := fqcn
-            if idx := strings.LastIndex(alias, "\\"); idx != -1 {
-                alias = alias[idx+1:]
-            }
-            if alias != "" {
-                m[alias] = fqcn
-            }
-        } else {
-            fqcn := strings.TrimSpace(parts[0])
-            alias := strings.TrimSpace(parts[1])
-            if alias != "" {
-                m[alias] = fqcn
-            }
-        }
-    }
-    return m
+	m := make(map[string]string)
+	lines := strings.Split(src, "\n")
+	for _, ln := range lines {
+		s := strings.TrimSpace(ln)
+		if !strings.HasPrefix(s, "use ") || !strings.HasSuffix(s, ";") {
+			continue
+		}
+		s = strings.TrimSuffix(strings.TrimPrefix(s, "use "), ";")
+		parts := strings.Split(s, " as ")
+		if len(parts) == 1 {
+			fqcn := strings.TrimSpace(parts[0])
+			alias := fqcn
+			if idx := strings.LastIndex(alias, "\\"); idx != -1 {
+				alias = alias[idx+1:]
+			}
+			if alias != "" {
+				m[alias] = fqcn
+			}
+		} else {
+			fqcn := strings.TrimSpace(parts[0])
+			alias := strings.TrimSpace(parts[1])
+			if alias != "" {
+				m[alias] = fqcn
+			}
+		}
+	}
+	return m
 }
 
 // isUpperCase checks if a byte represents an uppercase letter.
@@ -501,16 +502,16 @@ func ValidateResourceClassName(className string) bool {
 	if !strings.HasSuffix(className, "Resource") {
 		return false
 	}
-	
+
 	// Must be properly capitalized
 	if len(className) > 0 && !isUpperCase(className[0]) {
 		return false
 	}
-	
+
 	// Must have reasonable length
 	if len(className) < 9 || len(className) > 100 {
 		return false
 	}
-	
+
 	return true
 }

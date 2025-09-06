@@ -52,8 +52,8 @@ func TestDelta_StructureCompliance(t *testing.T) {
 						},
 						Request: &RequestInfo{
 							ContentTypes: []string{"application/json"},
-							Body:         NewOrderedObjectFromMap(map[string]interface{}{"name": map[string]interface{}{}}),
-							Query:        NewOrderedObjectFromMap(map[string]interface{}{"page": map[string]interface{}{}}),
+							Body:         NewOrderedObjectFromMap(map[string]any{"name": map[string]any{}}),
+							Query:        NewOrderedObjectFromMap(map[string]any{"page": map[string]any{}}),
 						},
 						Resources: []Resource{
 							{Class: "UserResource", Collection: true},
@@ -247,9 +247,9 @@ func TestController_StructureValidation(t *testing.T) {
 				},
 				Request: &RequestInfo{
 					ContentTypes: []string{"application/json", "multipart/form-data"},
-					Body:         NewOrderedObjectFromMap(map[string]interface{}{"field": map[string]interface{}{}}),
-					Query:        NewOrderedObjectFromMap(map[string]interface{}{"filter": map[string]interface{}{}}),
-					Files:        NewOrderedObjectFromMap(map[string]interface{}{"upload": map[string]interface{}{}}),
+					Body:         NewOrderedObjectFromMap(map[string]any{"field": map[string]any{}}),
+					Query:        NewOrderedObjectFromMap(map[string]any{"filter": map[string]any{}}),
+					Files:        NewOrderedObjectFromMap(map[string]any{"upload": map[string]any{}}),
 				},
 				Resources: []Resource{
 					{Class: "TestResource", Collection: false},

@@ -14,10 +14,10 @@ import (
 
 func TestTripleRunValidation_BasicScenarios(t *testing.T) {
 	tests := []struct {
-		name         string
-		manifest     *manifest.Manifest
-		expectValid  bool
-		description  string
+		name        string
+		manifest    *manifest.Manifest
+		expectValid bool
+		description string
 	}{
 		{
 			name: "minimal_deterministic_output",
@@ -57,15 +57,15 @@ func TestTripleRunValidation_BasicScenarios(t *testing.T) {
 				t.Skipf("Fixture not found: %s", tt.manifest.Project.Root)
 				return
 			}
-			
+
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
 
 			config := determinism.DefaultValidationConfig()
 			config.Verbose = true
-			
+
 			validator := determinism.NewTripleRunValidator(config)
-			
+
 			report, err := validator.ValidateTripleRun(ctx, tt.manifest)
 			if err != nil {
 				t.Fatalf("Validation failed: %v", err)
@@ -260,7 +260,7 @@ func TestHasherDeterminism_EdgeCases(t *testing.T) {
 					canonicalHashes[hash.CanonicalSHA256] = true
 				}
 			}
-			
+
 			if len(canonicalHashes) != 1 {
 				t.Errorf("Expected 1 unique canonical hash, got %d", len(canonicalHashes))
 			}
@@ -275,11 +275,11 @@ func TestHasherDeterminism_EdgeCases(t *testing.T) {
 
 func TestValidationReport_Accuracy(t *testing.T) {
 	tests := []struct {
-		name     string
-		setup    func() *determinism.DeterminismReport
-		wantValid bool
+		name               string
+		setup              func() *determinism.DeterminismReport
+		wantValid          bool
 		wantCanonicalValid bool
-		description string
+		description        string
 	}{
 		{
 			name: "all_successful_runs",
@@ -295,9 +295,9 @@ func TestValidationReport_Accuracy(t *testing.T) {
 				}
 				return report
 			},
-			wantValid: true,
+			wantValid:          true,
 			wantCanonicalValid: true,
-			description: "Perfect triple-run validation",
+			description:        "Perfect triple-run validation",
 		},
 		{
 			name: "hash_mismatch",
@@ -309,9 +309,9 @@ func TestValidationReport_Accuracy(t *testing.T) {
 				report.AddValidationError("hash_mismatch", "Hashes don't match", nil)
 				return report
 			},
-			wantValid: false,
+			wantValid:          false,
 			wantCanonicalValid: false, // Any validation errors cause IsCanonicalValid to return false
-			description: "Hashes differ but canonical content identical",
+			description:        "Hashes differ but canonical content identical",
 		},
 		{
 			name: "execution_failure",
@@ -320,31 +320,31 @@ func TestValidationReport_Accuracy(t *testing.T) {
 				report.AllIdentical = false
 				report.AllCanonical = false
 				report.UniqueHashCount = 0
-				report.AddValidationError("execution_failure", "Run 2 failed", 
+				report.AddValidationError("execution_failure", "Run 2 failed",
 					map[string]string{"error": "timeout"})
 				return report
 			},
-			wantValid: false,
+			wantValid:          false,
 			wantCanonicalValid: false,
-			description: "Execution failures prevent validation",
+			description:        "Execution failures prevent validation",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			report := tt.setup()
-			
+
 			if report.IsValid() != tt.wantValid {
 				t.Errorf("IsValid() = %v, want %v", report.IsValid(), tt.wantValid)
 			}
-			
+
 			if report.IsCanonicalValid() != tt.wantCanonicalValid {
-				t.Errorf("IsCanonicalValid() = %v, want %v", 
+				t.Errorf("IsCanonicalValid() = %v, want %v",
 					report.IsCanonicalValid(), tt.wantCanonicalValid)
 			}
 
-			t.Logf("Report: %s - Valid: %v, Canonical: %v, Errors: %d", 
-				tt.description, report.IsValid(), report.IsCanonicalValid(), 
+			t.Logf("Report: %s - Valid: %v, Canonical: %v, Errors: %d",
+				tt.description, report.IsValid(), report.IsCanonicalValid(),
 				len(report.ValidationErrors))
 		})
 	}
@@ -353,7 +353,7 @@ func TestValidationReport_Accuracy(t *testing.T) {
 func TestConcurrentVsSequentialValidation(t *testing.T) {
 	// This test verifies that concurrent and sequential validation
 	// produce the same results (when they both succeed)
-	
+
 	manifest := &manifest.Manifest{
 		Project: manifest.ProjectConfig{
 			Root: "/tmp/test-project",
@@ -373,7 +373,7 @@ func TestConcurrentVsSequentialValidation(t *testing.T) {
 	seqConfig.Verbose = false
 	seqValidator := determinism.NewTripleRunValidator(seqConfig)
 
-	// Run concurrent validation  
+	// Run concurrent validation
 	concConfig := determinism.DefaultValidationConfig()
 	concConfig.Concurrent = true
 	concConfig.Verbose = false
@@ -399,7 +399,7 @@ func TestConcurrentVsSequentialValidation(t *testing.T) {
 	// Both should produce the same validity results
 	if seqReport.IsValid() != concReport.IsValid() {
 		t.Errorf("Sequential and concurrent validation produced different results")
-		t.Logf("Sequential valid: %v, Concurrent valid: %v", 
+		t.Logf("Sequential valid: %v, Concurrent valid: %v",
 			seqReport.IsValid(), concReport.IsValid())
 	}
 
@@ -407,7 +407,7 @@ func TestConcurrentVsSequentialValidation(t *testing.T) {
 	if seqReport.IsValid() && concReport.IsValid() {
 		if seqReport.FirstHash.SHA256 != concReport.FirstHash.SHA256 {
 			t.Errorf("Sequential and concurrent validation produced different hashes")
-			t.Logf("Sequential: %s, Concurrent: %s", 
+			t.Logf("Sequential: %s, Concurrent: %s",
 				seqReport.FirstHash.SHA256, concReport.FirstHash.SHA256)
 		}
 	}
@@ -416,7 +416,7 @@ func TestConcurrentVsSequentialValidation(t *testing.T) {
 func TestStressValidation_MemoryStability(t *testing.T) {
 	// This test runs many iterations to check for memory leaks
 	// and ensure consistent performance
-	
+
 	if testing.Short() {
 		t.Skip("Skipping stress test in short mode")
 	}
@@ -481,11 +481,11 @@ func TestStressValidation_MemoryStability(t *testing.T) {
 	// Check for performance degradation
 	firstQuarter := executionTimes[:iterations/4]
 	lastQuarter := executionTimes[iterations*3/4:]
-	
+
 	avgFirst := calculateAverage(firstQuarter)
 	avgLast := calculateAverage(lastQuarter)
-	
-	degradation := float64(avgLast - avgFirst) / float64(avgFirst) * 100
+
+	degradation := float64(avgLast-avgFirst) / float64(avgFirst) * 100
 	if degradation > 50 { // More than 50% slower
 		t.Errorf("Performance degradation detected: %.1f%% slower in final quarter", degradation)
 	}
@@ -496,7 +496,7 @@ func calculateAverage(times []int64) int64 {
 	if len(times) == 0 {
 		return 0
 	}
-	
+
 	sum := int64(0)
 	for _, time := range times {
 		sum += time

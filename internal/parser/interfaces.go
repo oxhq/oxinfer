@@ -56,6 +56,10 @@ type QueryEngine interface {
 	// ExtractInterfaces finds all interface definitions.
 	// Returns interfaces with their method signatures and inheritance.
 	ExtractInterfaces(tree *SyntaxTree) ([]PHPInterface, error)
+
+	// ExtractUseStatements finds all use/import statements in the syntax tree.
+	// Returns use statements with their fully qualified names and aliases.
+	ExtractUseStatements(tree *SyntaxTree) ([]PHPUseStatement, error)
 }
 
 // ParserPool manages thread-safe access to tree-sitter parser instances.
@@ -105,7 +109,7 @@ type PHPConstructExtractor interface {
 type PHPParser interface {
 	// ProcessFile implements indexer.FileProcessor for system integration.
 	// Performs complete PHP analysis and returns structured results.
-	ProcessFile(ctx context.Context, file interface{}) (interface{}, error)
+	ProcessFile(ctx context.Context, file any) (any, error)
 
 	// ParsePHPFile performs comprehensive PHP file analysis.
 	// Returns detailed PHP structure information for pattern detection.
@@ -161,7 +165,7 @@ type ErrorHandler interface {
 }
 
 // PHPProjectParser orchestrates complete PHP project analysis integrating all core components.
-// Combines file discovery, PSR-4 resolution, concurrent parsing, 
+// Combines file discovery, PSR-4 resolution, concurrent parsing,
 // and construct extraction into a unified Laravel project analysis system.
 type PHPProjectParser interface {
 	// ParseProject performs complete PHP project analysis with progress monitoring.
@@ -803,7 +807,7 @@ type ProjectParserConfig struct {
 // ProjectParseResult contains the comprehensive results of PHP project parsing.
 type ProjectParseResult struct {
 	// Discovered files (file indexer integration)
-	DiscoveredFiles []interface{} // Files found by indexer
+	DiscoveredFiles []any // Files found by indexer
 
 	// Parse results
 	ParsedFiles []ParsedFileResult // Successfully parsed files
@@ -886,9 +890,9 @@ type ProjectParserProgress struct {
 	InterfacesFound int // Interfaces extracted so far
 
 	// Performance metrics
-	ElapsedTime       time.Duration // Time since parsing started
+	ElapsedTime        time.Duration // Time since parsing started
 	EstimatedRemaining time.Duration // Estimated time remaining
-	ThroughputPerSec  float64       // Files processed per second
+	ThroughputPerSec   float64       // Files processed per second
 
 	// Resource usage
 	CurrentMemoryUsage int64 // Current memory usage

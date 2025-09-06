@@ -123,7 +123,7 @@ func (v *manifestValidator) ValidateSchema(data []byte) error {
 	}
 
 	// Parse the JSON data for validation
-	var jsonData interface{}
+	var jsonData any
 	if err := json.Unmarshal(data, &jsonData); err != nil {
 		return cli.WrapInputError("invalid JSON structure", err)
 	}

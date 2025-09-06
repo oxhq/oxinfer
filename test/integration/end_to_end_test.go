@@ -47,7 +47,7 @@ func TestEndToEndWithFixtures(t *testing.T) {
 			}
 
 			// Validate that output is valid JSON
-			var result map[string]interface{}
+			var result map[string]any
 			if err := json.Unmarshal([]byte(output), &result); err != nil {
 				t.Fatalf("CLI output is not valid JSON: %v\nOutput: %s", err, output)
 			}
@@ -63,7 +63,7 @@ func TestEndToEndWithFixtures(t *testing.T) {
 			// In the initial version, all collections should be empty arrays
 			collections := []string{"controllers", "models", "polymorphic", "broadcast"}
 			for _, collection := range collections {
-				if arr, ok := result[collection].([]interface{}); !ok {
+				if arr, ok := result[collection].([]any); !ok {
 					t.Errorf("Field %s should be an array", collection)
 				} else if len(arr) != 0 {
 					t.Errorf("Field %s should be empty array in initial version, got length %d", collection, len(arr))
@@ -71,7 +71,7 @@ func TestEndToEndWithFixtures(t *testing.T) {
 			}
 
 			// Verify meta structure
-			if meta, ok := result["meta"].(map[string]interface{}); ok {
+			if meta, ok := result["meta"].(map[string]any); ok {
 				if partial, exists := meta["partial"]; !exists {
 					t.Error("Meta missing partial field")
 				} else if _, ok := partial.(bool); !ok {
@@ -80,7 +80,7 @@ func TestEndToEndWithFixtures(t *testing.T) {
 
 				if stats, exists := meta["stats"]; !exists {
 					t.Error("Meta missing stats field")
-				} else if statsObj, ok := stats.(map[string]interface{}); ok {
+				} else if statsObj, ok := stats.(map[string]any); ok {
 					if _, exists := statsObj["filesParsed"]; !exists {
 						t.Error("Meta.stats missing filesParsed field")
 					}
@@ -173,7 +173,7 @@ func TestEndToEndInvalidManifests(t *testing.T) {
 
 			// Stderr should contain JSON error for CLI errors
 			if tc.exitCode != 2 { // Not internal error
-				var errorObj map[string]interface{}
+				var errorObj map[string]any
 				if err := json.Unmarshal([]byte(stderrStr), &errorObj); err != nil {
 					t.Errorf("Error output should be valid JSON: %v\nOutput: %s", err, stderrStr)
 				} else {
@@ -223,7 +223,7 @@ func TestEndToEndStdinInput(t *testing.T) {
 
 	// Validate JSON output
 	output := stdout.String()
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal([]byte(output), &result); err != nil {
 		t.Fatalf("CLI output is not valid JSON: %v", err)
 	}
@@ -262,7 +262,7 @@ func TestEndToEndOutputFile(t *testing.T) {
 		t.Fatalf("Failed to read output file: %v", err)
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(content, &result); err != nil {
 		t.Fatalf("Output file contains invalid JSON: %v", err)
 	}
@@ -305,7 +305,7 @@ func TestEndToEndFlagCombinations(t *testing.T) {
 			wantExitCode: 0,
 			checkStdout: func(t *testing.T, output string) {
 				// Should still produce valid JSON output
-				var result map[string]interface{}
+				var result map[string]any
 				if err := json.Unmarshal([]byte(output), &result); err != nil {
 					t.Errorf("Output should be valid JSON: %v", err)
 				}
@@ -377,7 +377,7 @@ func TestDeterministicOutput(t *testing.T) {
 	// All hashes should be identical (except for timestamp)
 	// Since we can't control timestamp, we'll parse JSON and compare structure
 	for i := 1; i < len(outputs); i++ {
-		var result1, result2 map[string]interface{}
+		var result1, result2 map[string]any
 
 		if err := json.Unmarshal([]byte(outputs[0]), &result1); err != nil {
 			t.Fatalf("Failed to parse output %d: %v", 0, err)
@@ -388,10 +388,10 @@ func TestDeterministicOutput(t *testing.T) {
 
 		// Remove timestamp fields before comparing (they will differ)
 		// Note: In new schema, there's no timestamp in meta, so this is mostly for compatibility
-		if meta1, ok := result1["meta"].(map[string]interface{}); ok {
+		if meta1, ok := result1["meta"].(map[string]any); ok {
 			delete(meta1, "timestamp")
 		}
-		if meta2, ok := result2["meta"].(map[string]interface{}); ok {
+		if meta2, ok := result2["meta"].(map[string]any); ok {
 			delete(meta2, "timestamp")
 		}
 
@@ -414,15 +414,15 @@ func TestT7PatternsIntegration(t *testing.T) {
 	defer os.Remove(cliPath)
 
 	// Create a temporary test manifest with T7 features enabled
-	testManifest := map[string]interface{}{
-		"project": map[string]interface{}{
+	testManifest := map[string]any{
+		"project": map[string]any{
 			"root":     "../../",
 			"composer": "go.mod",
 		},
-		"scan": map[string]interface{}{
+		"scan": map[string]any{
 			"targets": []string{"test/fixtures/matchers"},
 		},
-		"features": map[string]interface{}{
+		"features": map[string]any{
 			"with_pivot":     true,
 			"attribute_make": true,
 			"scopes_used":    true,
@@ -463,31 +463,31 @@ func TestT7PatternsIntegration(t *testing.T) {
 		t.Fatal("CLI produced no output")
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal([]byte(output), &result); err != nil {
 		t.Fatalf("Output is not valid JSON: %v\nOutput: %s", err, output)
 	}
 
 	// Verify T7 pattern structures are present
 	t.Run("verify_controllers_with_scopes", func(t *testing.T) {
-		controllers, ok := result["controllers"].([]interface{})
+		controllers, ok := result["controllers"].([]any)
 		if !ok {
 			t.Fatal("Controllers array not found")
 		}
 
 		foundScopes := false
 		for _, controller := range controllers {
-			ctrl, ok := controller.(map[string]interface{})
+			ctrl, ok := controller.(map[string]any)
 			if !ok {
 				continue
 			}
 
 			if scopesUsed, exists := ctrl["scopesUsed"]; exists {
-				scopes, ok := scopesUsed.([]interface{})
+				scopes, ok := scopesUsed.([]any)
 				if ok && len(scopes) > 0 {
 					foundScopes = true
 					// Verify scope structure
-					scope := scopes[0].(map[string]interface{})
+					scope := scopes[0].(map[string]any)
 					if _, hasOn := scope["on"]; !hasOn {
 						t.Error("Scope missing 'on' field")
 					}
@@ -505,7 +505,7 @@ func TestT7PatternsIntegration(t *testing.T) {
 	})
 
 	t.Run("verify_models_with_pivot_and_attributes", func(t *testing.T) {
-		models, ok := result["models"].([]interface{})
+		models, ok := result["models"].([]any)
 		if !ok || len(models) == 0 {
 			t.Log("No models found in output - this may be expected for current fixture structure")
 			return
@@ -515,18 +515,18 @@ func TestT7PatternsIntegration(t *testing.T) {
 		foundAttributes := false
 
 		for _, model := range models {
-			mdl, ok := model.(map[string]interface{})
+			mdl, ok := model.(map[string]any)
 			if !ok {
 				continue
 			}
 
 			// Check for pivot patterns
 			if withPivot, exists := mdl["withPivot"]; exists {
-				pivots, ok := withPivot.([]interface{})
+				pivots, ok := withPivot.([]any)
 				if ok && len(pivots) > 0 {
 					foundPivot = true
 					// Verify pivot structure
-					pivot := pivots[0].(map[string]interface{})
+					pivot := pivots[0].(map[string]any)
 					if _, hasRelation := pivot["relation"]; !hasRelation {
 						t.Error("Pivot missing 'relation' field")
 					}
@@ -538,11 +538,11 @@ func TestT7PatternsIntegration(t *testing.T) {
 
 			// Check for attribute patterns
 			if attributes, exists := mdl["attributes"]; exists {
-				attrs, ok := attributes.([]interface{})
+				attrs, ok := attributes.([]any)
 				if ok && len(attrs) > 0 {
 					foundAttributes = true
 					// Verify attribute structure
-					attr := attrs[0].(map[string]interface{})
+					attr := attrs[0].(map[string]any)
 					if _, hasName := attr["name"]; !hasName {
 						t.Error("Attribute missing 'name' field")
 					}
@@ -662,9 +662,8 @@ func TestNonExistentManifestFile(t *testing.T) {
 
 	// Should produce JSON error on stderr
 	stderrStr := stderr.String()
-	var errorObj map[string]interface{}
+	var errorObj map[string]any
 	if err := json.Unmarshal([]byte(stderrStr), &errorObj); err != nil {
 		t.Errorf("Error output should be valid JSON: %v\nOutput: %s", err, stderrStr)
 	}
 }
-

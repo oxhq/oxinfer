@@ -59,7 +59,7 @@ func TestNewPolymorphicMatcher(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			matcher, err := NewPolymorphicMatcher(tt.language, tt.config)
-			
+
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("NewPolymorphicMatcher() expected error, got nil")
@@ -161,11 +161,11 @@ func TestDefaultPolymorphicMatcher_Match_ErrorCases(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			results, err := matcher.Match(ctx, tt.tree, "test.php")
-			
+
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("Match() expected error, got nil")
@@ -202,7 +202,7 @@ func TestDefaultPolymorphicMatcher_MatchPolymorphic(t *testing.T) {
 	if err != nil {
 		t.Errorf("MatchPolymorphic() unexpected error = %v", err)
 	}
-	
+
 	if matches == nil {
 		t.Error("MatchPolymorphic() returned nil matches")
 	}
@@ -238,8 +238,8 @@ func TestPolymorphicMatch_Structure(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		field  interface{}
-		expect interface{}
+		field  any
+		expect any
 	}{
 		{"relation_field", match.Relation, "imageable"},
 		{"type_field", match.Type, "morphTo"},
@@ -281,9 +281,9 @@ func TestPolymorphicMatch_Structure(t *testing.T) {
 
 func TestDefaultPolymorphicMatcher_Close(t *testing.T) {
 	tests := []struct {
-		name           string
-		setupCompiler  bool
-		expectCleanup  bool
+		name          string
+		setupCompiler bool
+		expectCleanup bool
 	}{
 		{
 			name:          "with_compiler",
@@ -317,11 +317,11 @@ func TestDefaultPolymorphicMatcher_Close(t *testing.T) {
 			if matcher.initialized != false {
 				t.Error("Close() did not set initialized to false")
 			}
-			
+
 			if matcher.queries != nil {
 				t.Error("Close() did not nil queries")
 			}
-			
+
 			if matcher.morphMap != nil {
 				t.Error("Close() did not nil morphMap")
 			}
@@ -360,12 +360,12 @@ func TestPolymorphicMatcherIntegration(t *testing.T) {
 			testFunc: func(t *testing.T, m *DefaultPolymorphicMatcher) {
 				ctx := context.Background()
 				tree := createMockSyntaxTree("<?php")
-				
+
 				matches, err := m.MatchPolymorphic(ctx, tree, "test.php")
 				if err != nil {
 					t.Logf("MatchPolymorphic completed without error (unexpected with mock)")
 				}
-				
+
 				if matches == nil {
 					t.Error("MatchPolymorphic returned nil matches")
 				}
@@ -383,25 +383,25 @@ func TestPolymorphicMatcherIntegration(t *testing.T) {
 // Helper functions
 
 func containsString(s, substr string) bool {
-	return len(s) > 0 && len(substr) > 0 && len(s) >= len(substr) && 
-		   s[len(s)-len(substr):] == substr || 
-		   s[:len(substr)] == substr ||
-		   (len(s) > len(substr) && len(s) > 0 && 
-		    func() bool {
-			    for i := 0; i <= len(s)-len(substr); i++ {
-				    if s[i:i+len(substr)] == substr {
-					    return true
-				    }
-			    }
-			    return false
-		    }())
+	return len(s) > 0 && len(substr) > 0 && len(s) >= len(substr) &&
+		s[len(s)-len(substr):] == substr ||
+		s[:len(substr)] == substr ||
+		(len(s) > len(substr) && len(s) > 0 &&
+			func() bool {
+				for i := 0; i <= len(s)-len(substr); i++ {
+					if s[i:i+len(substr)] == substr {
+						return true
+					}
+				}
+				return false
+			}())
 }
 
 // Test helper functions from the PolymorphicMatcher
 
 func TestGetSupportedPolymorphicPatterns(t *testing.T) {
 	patterns := GetSupportedPolymorphicPatterns()
-	
+
 	expectedPatterns := []string{
 		"$this->morphTo()",
 		"$this->morphOne(Comment::class, 'commentable')",
@@ -411,11 +411,11 @@ func TestGetSupportedPolymorphicPatterns(t *testing.T) {
 		"$this->morphByMany(Tag::class, 'taggable')",
 		"$this->morphToMany(Video::class, 'videoable')",
 	}
-	
+
 	if len(patterns) != len(expectedPatterns) {
 		t.Errorf("GetSupportedPolymorphicPatterns() length = %v, want %v", len(patterns), len(expectedPatterns))
 	}
-	
+
 	for i, pattern := range patterns {
 		if i < len(expectedPatterns) && pattern != expectedPatterns[i] {
 			t.Errorf("GetSupportedPolymorphicPatterns()[%d] = %v, want %v", i, pattern, expectedPatterns[i])
@@ -425,13 +425,13 @@ func TestGetSupportedPolymorphicPatterns(t *testing.T) {
 
 func TestGetPolymorphicMethodConventions(t *testing.T) {
 	conventions := GetPolymorphicMethodConventions()
-	
+
 	expectedMethods := []string{"morphTo", "morphOne", "morphMany", "morphByMany", "morphToMany", "morphMap"}
-	
+
 	if len(conventions) != len(expectedMethods) {
 		t.Errorf("GetPolymorphicMethodConventions() length = %v, want %v", len(conventions), len(expectedMethods))
 	}
-	
+
 	for _, method := range expectedMethods {
 		if _, exists := conventions[method]; !exists {
 			t.Errorf("GetPolymorphicMethodConventions() missing method: %v", method)
@@ -446,34 +446,34 @@ func TestValidatePolymorphicMethodCall(t *testing.T) {
 		want   bool
 	}{
 		// morphTo tests
-		{"morphTo", []string{}, true},                                      // No args
-		{"morphTo", []string{"imageable"}, true},                          // Name only
+		{"morphTo", []string{}, true},                                              // No args
+		{"morphTo", []string{"imageable"}, true},                                   // Name only
 		{"morphTo", []string{"imageable", "imageable_type", "imageable_id"}, true}, // Full args
-		{"morphTo", []string{"arg1", "arg2"}, false},                      // Invalid 2 args
-		{"morphTo", []string{"arg1", "arg2", "arg3", "arg4"}, false},      // Too many args
-		
+		{"morphTo", []string{"arg1", "arg2"}, false},                               // Invalid 2 args
+		{"morphTo", []string{"arg1", "arg2", "arg3", "arg4"}, false},               // Too many args
+
 		// morphOne tests
-		{"morphOne", []string{}, false},                                    // No args (invalid)
-		{"morphOne", []string{"Comment::class"}, true},                     // Model only
-		{"morphOne", []string{"Comment::class", "commentable"}, true},      // Model + name
-		{"morphOne", []string{"Comment::class", "commentable", "commentable_type", "commentable_id"}, true}, // Full args
+		{"morphOne", []string{}, false},                                                                               // No args (invalid)
+		{"morphOne", []string{"Comment::class"}, true},                                                                // Model only
+		{"morphOne", []string{"Comment::class", "commentable"}, true},                                                 // Model + name
+		{"morphOne", []string{"Comment::class", "commentable", "commentable_type", "commentable_id"}, true},           // Full args
 		{"morphOne", []string{"Comment::class", "commentable", "commentable_type", "commentable_id", "extra"}, false}, // Too many args
-		
+
 		// morphMany tests
-		{"morphMany", []string{}, false},                                   // No args (invalid)
-		{"morphMany", []string{"Comment::class"}, true},                    // Model only
-		{"morphMany", []string{"Comment::class", "commentable"}, true},     // Model + name
-		
+		{"morphMany", []string{}, false},                               // No args (invalid)
+		{"morphMany", []string{"Comment::class"}, true},                // Model only
+		{"morphMany", []string{"Comment::class", "commentable"}, true}, // Model + name
+
 		// morphByMany tests
-		{"morphByMany", []string{}, false},                                 // No args (invalid)  
-		{"morphByMany", []string{"Tag::class"}, false},                     // Missing relationship name
-		{"morphByMany", []string{"Tag::class", "taggable"}, true},          // Valid
-		
+		{"morphByMany", []string{}, false},                        // No args (invalid)
+		{"morphByMany", []string{"Tag::class"}, false},            // Missing relationship name
+		{"morphByMany", []string{"Tag::class", "taggable"}, true}, // Valid
+
 		// morphToMany tests
-		{"morphToMany", []string{}, false},                                 // No args (invalid)
-		{"morphToMany", []string{"Video::class"}, false},                   // Missing relationship name  
-		{"morphToMany", []string{"Video::class", "videoable"}, true},       // Valid
-		
+		{"morphToMany", []string{}, false},                           // No args (invalid)
+		{"morphToMany", []string{"Video::class"}, false},             // Missing relationship name
+		{"morphToMany", []string{"Video::class", "videoable"}, true}, // Valid
+
 		// Invalid method
 		{"invalidMethod", []string{}, false},
 	}

@@ -26,31 +26,31 @@ type FixtureTestCase struct {
 func TestFixtureStructure(t *testing.T) {
 	fixtures := []FixtureTestCase{
 		{
-			Name:         "minimal_laravel",
-			Path:         "../../test/fixtures/integration/minimal-laravel",
-			ExpectedFiles: []string{"composer.json", "manifest.json"},
-			ExpectedDirs:  []string{"app", "app/Http", "app/Http/Controllers", "app/Models", "routes"},
-			PHPValidation: true,
+			Name:             "minimal_laravel",
+			Path:             "../../test/fixtures/integration/minimal-laravel",
+			ExpectedFiles:    []string{"composer.json", "manifest.json"},
+			ExpectedDirs:     []string{"app", "app/Http", "app/Http/Controllers", "app/Models", "routes"},
+			PHPValidation:    true,
 			ManifestFeatures: []string{"http_status", "request_usage"},
-			Description:  "Minimal Laravel fixture with basic MVC patterns",
+			Description:      "Minimal Laravel fixture with basic MVC patterns",
 		},
 		{
-			Name:         "api_project",
-			Path:         "../../test/fixtures/integration/api-project",
-			ExpectedFiles: []string{"composer.json", "manifest.json"},
-			ExpectedDirs:  []string{"app", "app/Http", "app/Http/Controllers", "app/Http/Requests", "app/Http/Resources", "app/Models", "routes"},
-			PHPValidation: true,
+			Name:             "api_project",
+			Path:             "../../test/fixtures/integration/api-project",
+			ExpectedFiles:    []string{"composer.json", "manifest.json"},
+			ExpectedDirs:     []string{"app", "app/Http", "app/Http/Controllers", "app/Http/Requests", "app/Http/Resources", "app/Models", "routes"},
+			PHPValidation:    true,
 			ManifestFeatures: []string{"http_status", "request_usage", "resource_usage", "with_pivot", "scopes_used"},
-			Description:  "API-focused fixture with resources, requests, and advanced relationships",
+			Description:      "API-focused fixture with resources, requests, and advanced relationships",
 		},
 		{
-			Name:         "complex_app",
-			Path:         "../../test/fixtures/integration/complex-app",
-			ExpectedFiles: []string{"composer.json", "manifest.json"},
-			ExpectedDirs:  []string{"app", "app/Http", "app/Http/Controllers", "app/Models", "app/Broadcasting", "routes"},
-			PHPValidation: true,
+			Name:             "complex_app",
+			Path:             "../../test/fixtures/integration/complex-app",
+			ExpectedFiles:    []string{"composer.json", "manifest.json"},
+			ExpectedDirs:     []string{"app", "app/Http", "app/Http/Controllers", "app/Models", "app/Broadcasting", "routes"},
+			PHPValidation:    true,
 			ManifestFeatures: []string{"http_status", "request_usage", "resource_usage", "with_pivot", "scopes_used", "polymorphic", "broadcast_channels"},
-			Description:  "Complex fixture with polymorphic relationships and broadcasting",
+			Description:      "Complex fixture with polymorphic relationships and broadcasting",
 		},
 	}
 
@@ -139,7 +139,7 @@ func validateComposerJSON(t *testing.T, composerPath string) {
 		t.Fatalf("Failed to read composer.json: %v", err)
 	}
 
-	var composer map[string]interface{}
+	var composer map[string]any
 	if err := json.Unmarshal(data, &composer); err != nil {
 		t.Fatalf("Invalid composer.json: %v", err)
 	}
@@ -155,8 +155,8 @@ func validateComposerJSON(t *testing.T, composerPath string) {
 	}
 
 	// Validate autoload structure
-	if autoload, ok := composer["autoload"].(map[string]interface{}); ok {
-		if psr4, ok := autoload["psr-4"].(map[string]interface{}); ok {
+	if autoload, ok := composer["autoload"].(map[string]any); ok {
+		if psr4, ok := autoload["psr-4"].(map[string]any); ok {
 			if _, exists := psr4["App\\"]; !exists {
 				t.Error("composer.json autoload missing App\\ namespace")
 			} else {
@@ -188,7 +188,7 @@ func validateManifestJSON(t *testing.T, manifestPath string, expectedFeatures []
 		t.Fatalf("Failed to read manifest.json: %v", err)
 	}
 
-	var manifest map[string]interface{}
+	var manifest map[string]any
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		t.Fatalf("Invalid manifest.json: %v", err)
 	}
@@ -204,7 +204,7 @@ func validateManifestJSON(t *testing.T, manifestPath string, expectedFeatures []
 	}
 
 	// Validate project configuration
-	if project, ok := manifest["project"].(map[string]interface{}); ok {
+	if project, ok := manifest["project"].(map[string]any); ok {
 		requiredProjectFields := []string{"root", "composer"}
 		for _, field := range requiredProjectFields {
 			if _, exists := project[field]; !exists {
@@ -223,8 +223,8 @@ func validateManifestJSON(t *testing.T, manifestPath string, expectedFeatures []
 	}
 
 	// Validate scan configuration
-	if scan, ok := manifest["scan"].(map[string]interface{}); ok {
-		if targets, ok := scan["targets"].([]interface{}); ok {
+	if scan, ok := manifest["scan"].(map[string]any); ok {
+		if targets, ok := scan["targets"].([]any); ok {
 			if len(targets) == 0 {
 				t.Error("manifest.json scan.targets should not be empty")
 			} else {
@@ -237,7 +237,7 @@ func validateManifestJSON(t *testing.T, manifestPath string, expectedFeatures []
 
 	// Validate features configuration
 	if len(expectedFeatures) > 0 {
-		if features, ok := manifest["features"].(map[string]interface{}); ok {
+		if features, ok := manifest["features"].(map[string]any); ok {
 			for _, feature := range expectedFeatures {
 				if enabled, exists := features[feature]; !exists {
 					t.Errorf("manifest.json missing expected feature: %s", feature)
@@ -260,7 +260,7 @@ func validatePHPFiles(t *testing.T, basePath, fixtureName string) {
 	t.Helper()
 
 	phpFiles := []string{}
-	
+
 	// Find all PHP files recursively
 	err := filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -313,7 +313,7 @@ func validatePHPFile(t *testing.T, phpFile, fixtureName string) {
 
 	// Determine file type and validate accordingly
 	relPath, _ := filepath.Rel(filepath.Join("../../test/fixtures/integration", fixtureName), phpFile)
-	
+
 	switch {
 	case strings.Contains(relPath, "Controllers"):
 		validateControllerFile(t, contentStr, relPath)
@@ -496,7 +496,7 @@ func validateFixtureDependencies(t *testing.T, fixtureName string) {
 	t.Helper()
 
 	basePath := filepath.Join("../../test/fixtures/integration", fixtureName)
-	
+
 	// Find all PHP files and extract class references
 	classReferences := make(map[string][]string) // file -> referenced classes
 	definedClasses := make(map[string]string)    // class -> file
@@ -607,7 +607,7 @@ func validateInternalReferences(t *testing.T, fixtureName string, definedClasses
 	case "api-project":
 		expectedClasses := []string{
 			"App\\Http\\Controllers\\ProductController",
-			"App\\Http\\Requests\\StoreProductRequest", 
+			"App\\Http\\Requests\\StoreProductRequest",
 			"App\\Http\\Resources\\ProductResource",
 			"App\\Models\\Product",
 			"App\\Models\\Category",
@@ -658,7 +658,7 @@ func TestFixturePerformance(t *testing.T) {
 	for _, fixture := range fixtures {
 		t.Run(fixture.name+"_performance", func(t *testing.T) {
 			manifestPath := filepath.Join("../../test/fixtures/integration", fixture.name, "manifest.json")
-			
+
 			// Measure processing time
 			start := time.Now()
 			cmd := exec.Command(cliPath, "--manifest", manifestPath)

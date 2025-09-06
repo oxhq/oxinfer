@@ -24,7 +24,7 @@ func TestDefaultContentTypeDetector_DetectContentType(t *testing.T) {
 			patterns: []matchers.RequestUsageMatch{
 				{
 					Methods: []string{"file", "input"},
-					Body:    map[string]interface{}{"name": "test"},
+					Body:    map[string]any{"name": "test"},
 				},
 			},
 			expected: "multipart/form-data",
@@ -34,7 +34,7 @@ func TestDefaultContentTypeDetector_DetectContentType(t *testing.T) {
 			patterns: []matchers.RequestUsageMatch{
 				{
 					Methods: []string{"json", "input"},
-					Body:    map[string]interface{}{"name": "test"},
+					Body:    map[string]any{"name": "test"},
 				},
 			},
 			expected: "application/json",
@@ -44,7 +44,7 @@ func TestDefaultContentTypeDetector_DetectContentType(t *testing.T) {
 			patterns: []matchers.RequestUsageMatch{
 				{
 					Methods: []string{"input"},
-					Body:    map[string]interface{}{"name": "test", "email": "test"},
+					Body:    map[string]any{"name": "test", "email": "test"},
 				},
 			},
 			expected: "application/json",
@@ -55,7 +55,7 @@ func TestDefaultContentTypeDetector_DetectContentType(t *testing.T) {
 				{
 					ContentTypes: []string{"application/x-www-form-urlencoded"},
 					Methods:      []string{"input"},
-					Body:         map[string]interface{}{"name": "test"},
+					Body:         map[string]any{"name": "test"},
 				},
 			},
 			expected: "application/x-www-form-urlencoded",
@@ -65,7 +65,7 @@ func TestDefaultContentTypeDetector_DetectContentType(t *testing.T) {
 			patterns: []matchers.RequestUsageMatch{
 				{
 					Methods: []string{"all"},
-					Body:    map[string]interface{}{"data": "test"},
+					Body:    map[string]any{"data": "test"},
 				},
 			},
 			expected: "application/x-www-form-urlencoded",
@@ -75,7 +75,7 @@ func TestDefaultContentTypeDetector_DetectContentType(t *testing.T) {
 			patterns: []matchers.RequestUsageMatch{
 				{
 					Methods: []string{"hasFile", "validated"},
-					Body:    map[string]interface{}{"name": "test"},
+					Body:    map[string]any{"name": "test"},
 				},
 			},
 			expected: "multipart/form-data",
@@ -85,8 +85,8 @@ func TestDefaultContentTypeDetector_DetectContentType(t *testing.T) {
 			patterns: []matchers.RequestUsageMatch{
 				{
 					Methods: []string{"input"},
-					Body:    map[string]interface{}{"name": "test"},
-					Files:   map[string]interface{}{"avatar": map[string]interface{}{}},
+					Body:    map[string]any{"name": "test"},
+					Files:   map[string]any{"avatar": map[string]any{}},
 				},
 			},
 			expected: "multipart/form-data",
@@ -96,7 +96,7 @@ func TestDefaultContentTypeDetector_DetectContentType(t *testing.T) {
 			patterns: []matchers.RequestUsageMatch{
 				{
 					Methods: []string{"validate", "input"},
-					Body:    map[string]interface{}{"name": "test"},
+					Body:    map[string]any{"name": "test"},
 				},
 			},
 			expected: "application/x-www-form-urlencoded",
@@ -106,7 +106,7 @@ func TestDefaultContentTypeDetector_DetectContentType(t *testing.T) {
 			patterns: []matchers.RequestUsageMatch{
 				{
 					Methods: []string{"json", "file", "input"},
-					Body:    map[string]interface{}{"name": "test"},
+					Body:    map[string]any{"name": "test"},
 				},
 			},
 			expected: "multipart/form-data",
@@ -116,11 +116,11 @@ func TestDefaultContentTypeDetector_DetectContentType(t *testing.T) {
 			patterns: []matchers.RequestUsageMatch{
 				{
 					Methods: []string{"json", "input"},
-					Body:    map[string]interface{}{"name": "test"},
+					Body:    map[string]any{"name": "test"},
 				},
 				{
 					Methods: []string{"file", "validate"},
-					Files:   map[string]interface{}{"upload": map[string]interface{}{}},
+					Files:   map[string]any{"upload": map[string]any{}},
 				},
 			},
 			expected: "multipart/form-data",
@@ -130,11 +130,11 @@ func TestDefaultContentTypeDetector_DetectContentType(t *testing.T) {
 			patterns: []matchers.RequestUsageMatch{
 				{
 					Methods: []string{"json", "input"},
-					Body:    map[string]interface{}{"data": "test"},
+					Body:    map[string]any{"data": "test"},
 				},
 				{
 					Methods: []string{"validate", "input"},
-					Body:    map[string]interface{}{"name": "test"},
+					Body:    map[string]any{"name": "test"},
 				},
 			},
 			expected: "application/json",
@@ -144,11 +144,11 @@ func TestDefaultContentTypeDetector_DetectContentType(t *testing.T) {
 			patterns: []matchers.RequestUsageMatch{
 				{
 					Methods: []string{"validate"},
-					Body:    map[string]interface{}{"b": "test"},
+					Body:    map[string]any{"b": "test"},
 				},
 				{
 					Methods: []string{"input"},
-					Body:    map[string]interface{}{"a": "test"},
+					Body:    map[string]any{"a": "test"},
 				},
 			},
 			expected: "application/json",
@@ -183,7 +183,7 @@ func TestDefaultContentTypeDetector_HasFileUploads(t *testing.T) {
 			patterns: []matchers.RequestUsageMatch{
 				{
 					Methods: []string{"file", "input"},
-					Body:    map[string]interface{}{"name": "test"},
+					Body:    map[string]any{"name": "test"},
 				},
 			},
 			expected: true,
@@ -193,7 +193,7 @@ func TestDefaultContentTypeDetector_HasFileUploads(t *testing.T) {
 			patterns: []matchers.RequestUsageMatch{
 				{
 					Methods: []string{"hasFile", "validated"},
-					Body:    map[string]interface{}{"name": "test"},
+					Body:    map[string]any{"name": "test"},
 				},
 			},
 			expected: true,
@@ -203,8 +203,8 @@ func TestDefaultContentTypeDetector_HasFileUploads(t *testing.T) {
 			patterns: []matchers.RequestUsageMatch{
 				{
 					Methods: []string{"input"},
-					Body:    map[string]interface{}{"name": "test"},
-					Files:   map[string]interface{}{"avatar": map[string]interface{}{}},
+					Body:    map[string]any{"name": "test"},
+					Files:   map[string]any{"avatar": map[string]any{}},
 				},
 			},
 			expected: true,
@@ -215,7 +215,7 @@ func TestDefaultContentTypeDetector_HasFileUploads(t *testing.T) {
 				{
 					ContentTypes: []string{"multipart/form-data"},
 					Methods:      []string{"input"},
-					Body:         map[string]interface{}{"name": "test"},
+					Body:         map[string]any{"name": "test"},
 				},
 			},
 			expected: true,
@@ -225,7 +225,7 @@ func TestDefaultContentTypeDetector_HasFileUploads(t *testing.T) {
 			patterns: []matchers.RequestUsageMatch{
 				{
 					Methods: []string{"json", "input"},
-					Body:    map[string]interface{}{"name": "test"},
+					Body:    map[string]any{"name": "test"},
 				},
 			},
 			expected: false,
@@ -235,7 +235,7 @@ func TestDefaultContentTypeDetector_HasFileUploads(t *testing.T) {
 			patterns: []matchers.RequestUsageMatch{
 				{
 					Methods: []string{"validate", "input"},
-					Body:    map[string]interface{}{"name": "test"},
+					Body:    map[string]any{"name": "test"},
 				},
 			},
 			expected: false,
@@ -245,11 +245,11 @@ func TestDefaultContentTypeDetector_HasFileUploads(t *testing.T) {
 			patterns: []matchers.RequestUsageMatch{
 				{
 					Methods: []string{"json", "input"},
-					Body:    map[string]interface{}{"name": "test"},
+					Body:    map[string]any{"name": "test"},
 				},
 				{
 					Methods: []string{"file", "validate"},
-					Files:   map[string]interface{}{"upload": map[string]interface{}{}},
+					Files:   map[string]any{"upload": map[string]any{}},
 				},
 			},
 			expected: true,
@@ -259,11 +259,11 @@ func TestDefaultContentTypeDetector_HasFileUploads(t *testing.T) {
 			patterns: []matchers.RequestUsageMatch{
 				{
 					Methods: []string{"json", "input"},
-					Body:    map[string]interface{}{"name": "test"},
+					Body:    map[string]any{"name": "test"},
 				},
 				{
 					Methods: []string{"validate", "input"},
-					Body:    map[string]interface{}{"email": "test"},
+					Body:    map[string]any{"email": "test"},
 				},
 			},
 			expected: false,
@@ -411,70 +411,70 @@ func TestDefaultKeyPathParser_IsArrayNotation(t *testing.T) {
 	parser := NewKeyPathParser(nil)
 
 	tests := []struct {
-		name           string
-		segment        string
+		name            string
+		segment         string
 		expectedIsArray bool
-		expectedKey    string
+		expectedKey     string
 	}{
 		{
-			name:           "simple key",
-			segment:        "name",
+			name:            "simple key",
+			segment:         "name",
 			expectedIsArray: false,
-			expectedKey:    "",
+			expectedKey:     "",
 		},
 		{
-			name:           "array with numeric index",
-			segment:        "users[0]",
+			name:            "array with numeric index",
+			segment:         "users[0]",
 			expectedIsArray: true,
-			expectedKey:    "0",
+			expectedKey:     "0",
 		},
 		{
-			name:           "array with string key",
-			segment:        "data[key]",
+			name:            "array with string key",
+			segment:         "data[key]",
 			expectedIsArray: true,
-			expectedKey:    "key",
+			expectedKey:     "key",
 		},
 		{
-			name:           "empty array notation",
-			segment:        "items[]",
+			name:            "empty array notation",
+			segment:         "items[]",
 			expectedIsArray: true,
-			expectedKey:    "",
+			expectedKey:     "",
 		},
 		{
-			name:           "double quoted key",
-			segment:        `data["quoted"]`,
+			name:            "double quoted key",
+			segment:         `data["quoted"]`,
 			expectedIsArray: true,
-			expectedKey:    "quoted",
+			expectedKey:     "quoted",
 		},
 		{
-			name:           "single quoted key",
-			segment:        "data['quoted']",
+			name:            "single quoted key",
+			segment:         "data['quoted']",
 			expectedIsArray: true,
-			expectedKey:    "quoted",
+			expectedKey:     "quoted",
 		},
 		{
-			name:           "invalid notation - no closing bracket",
-			segment:        "data[key",
+			name:            "invalid notation - no closing bracket",
+			segment:         "data[key",
 			expectedIsArray: false,
-			expectedKey:    "",
+			expectedKey:     "",
 		},
 		{
-			name:           "invalid notation - no opening bracket",
-			segment:        "datakey]",
+			name:            "invalid notation - no opening bracket",
+			segment:         "datakey]",
 			expectedIsArray: false,
-			expectedKey:    "",
+			expectedKey:     "",
 		},
 		{
-			name:           "invalid notation - brackets in wrong order",
-			segment:        "data]key[",
+			name:            "invalid notation - brackets in wrong order",
+			segment:         "data]key[",
 			expectedIsArray: false,
-			expectedKey:    "",
+			expectedKey:     "",
 		},
 		{
-			name:           "nested brackets",
-			segment:        "data[key[nested]]",
+			name:            "nested brackets",
+			segment:         "data[key[nested]]",
 			expectedIsArray: true,
-			expectedKey:    "key[nested]",
+			expectedKey:     "key[nested]",
 		},
 	}
 
@@ -497,6 +497,7 @@ func TestNewContentTypeDetector(t *testing.T) {
 	detector := NewContentTypeDetector(nil)
 	if detector == nil {
 		t.Errorf("NewContentTypeDetector() returned nil")
+		return
 	}
 	if detector.config == nil {
 		t.Errorf("NewContentTypeDetector() config is nil")
@@ -507,6 +508,7 @@ func TestNewKeyPathParser(t *testing.T) {
 	parser := NewKeyPathParser(nil)
 	if parser == nil {
 		t.Errorf("NewKeyPathParser() returned nil")
+		return
 	}
 	if parser.config == nil {
 		t.Errorf("NewKeyPathParser() config is nil")
@@ -544,14 +546,14 @@ func TestBuildNestedObject(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := BuildNestedObject(tt.segments)
 			if result == nil {
 				t.Fatal("BuildNestedObject returned nil")
 			}
-			
+
 			tt.validate(t, result)
 		})
 	}
@@ -560,51 +562,51 @@ func TestBuildNestedObject(t *testing.T) {
 func TestT11_ShapeInferencer_CompleteDemo(t *testing.T) {
 	// This test demonstrates the complete T11.3 Shape Inferencer implementation
 	// working end-to-end with all components integrated
-	
+
 	config := DefaultInferenceConfig()
 	detector := NewContentTypeDetector(config)
 	parser := NewKeyPathParser(config)
 	merger := NewPropertyMerger(config)
 	inferencer := NewShapeInferencer(detector, parser, merger, config)
-	
+
 	// Example Laravel request patterns that would come from the matchers
 	patterns := []matchers.RequestUsageMatch{
 		{
 			Methods: []string{"only", "validate"},
-			Body: map[string]interface{}{
+			Body: map[string]any{
 				// These demonstrate the T11 acceptance criteria
-				"users.*.email":    "user@example.com",
-				"users.*.name":     "John",
-				"profile.bio":      "Software developer",
-				"settings.theme":   "dark",
-				"tags":            []interface{}{"go", "api"},
+				"users.*.email":  "user@example.com",
+				"users.*.name":   "John",
+				"profile.bio":    "Software developer",
+				"settings.theme": "dark",
+				"tags":           []any{"go", "api"},
 			},
 		},
 		{
 			Methods: []string{"input"},
-			Body: map[string]interface{}{
+			Body: map[string]any{
 				"age":    25,
 				"active": true,
 			},
 		},
 	}
-	
+
 	// Infer the complete request shape
 	result, err := inferencer.InferRequestShape(patterns)
 	if err != nil {
 		t.Fatalf("InferRequestShape() error: %v", err)
 	}
-	
+
 	// Verify the inferred shape structure
 	t.Logf("=== T11.3 Shape Inferencer Demo Results ===")
 	t.Logf("Content Types: %v", result.ContentTypes)
 	t.Logf("Body Properties: %d", result.Body.PropertyCount())
-	
+
 	// Test consolidation of multiple patterns
 	if result.Body.PropertyCount() != 6 {
 		t.Errorf("Expected 6 consolidated properties, got %d", result.Body.PropertyCount())
 	}
-	
+
 	// Test T11 acceptance criteria: users.*.email creates proper nested array structure
 	usersProp, exists := result.Body.GetProperty("users")
 	if !exists {
@@ -616,45 +618,45 @@ func TestT11_ShapeInferencer_CompleteDemo(t *testing.T) {
 	if usersProp.Items.Type != PropertyTypeObject {
 		t.Error("Expected users array to contain objects")
 	}
-	
+
 	// Verify nested properties in users array items
 	emailProp, exists := usersProp.Items.Properties.GetProperty("email")
 	if !exists || emailProp.Type != PropertyTypeString {
 		t.Error("Expected users[].email to be string property")
 	}
-	
-	nameProp, exists := usersProp.Items.Properties.GetProperty("name") 
+
+	nameProp, exists := usersProp.Items.Properties.GetProperty("name")
 	if !exists || nameProp.Type != PropertyTypeString {
 		t.Error("Expected users[].name to be string property")
 	}
-	
+
 	// Test nested object creation from profile.bio
 	profileProp, exists := result.Body.GetProperty("profile")
 	if !exists || profileProp.Type != PropertyTypeObject {
 		t.Error("Expected profile to be object property")
 	}
-	
+
 	bioProp, exists := profileProp.Properties.GetProperty("bio")
 	if !exists || bioProp.Type != PropertyTypeString {
 		t.Error("Expected profile.bio to be string property")
 	}
-	
+
 	// Test array type inference
 	tagsProp, exists := result.Body.GetProperty("tags")
 	if !exists || tagsProp.Type != PropertyTypeArray {
 		t.Error("Expected tags to be array property")
 	}
-	
+
 	// Test property merging from multiple patterns
 	ageProp, exists := result.Body.GetProperty("age")
 	if !exists || ageProp.Type != PropertyTypeNumber {
 		t.Error("Expected age to be number property from second pattern")
 	}
-	
+
 	t.Logf("✅ T11.3 PropertyMerger + ShapeInferencer implementation complete!")
 	t.Logf("✅ All T11 acceptance criteria satisfied:")
 	t.Logf("   - Consolidate keys from multiple request patterns: ✓")
-	t.Logf("   - Interpret only(['users.*.email']) to nested shape: ✓") 
+	t.Logf("   - Interpret only(['users.*.email']) to nested shape: ✓")
 	t.Logf("   - KeyPathParser integration: ✓")
 	t.Logf("   - ContentTypeDetector integration: ✓")
 	t.Logf("   - PropertyMerger integration: ✓")

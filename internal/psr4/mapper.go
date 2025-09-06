@@ -21,15 +21,15 @@ func NewClassMapper(composerData *ComposerData, includeDev bool) (ClassMapper, e
 	if composerData == nil {
 		return nil, NewMappingError("", "composer data cannot be nil", nil)
 	}
-	
+
 	mappings, err := composerData.GetPSR4Mappings()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Filter mappings based on dev dependency preference
 	filteredMappings := FilterMappingsByDev(mappings, includeDev)
-	
+
 	return &DefaultClassMapper{
 		mappings:   filteredMappings,
 		includeDev: includeDev,
@@ -44,30 +44,30 @@ func (m *DefaultClassMapper) MapClass(fqcn string) ([]string, error) {
 	if err := ValidateFQCNFormat(fqcn); err != nil {
 		return nil, err
 	}
-	
+
 	// Get all namespace prefixes for matching
 	namespaces := m.getNamespacePrefixes()
 	if len(namespaces) == 0 {
 		return nil, NewClassNotMappableError(fqcn)
 	}
-	
+
 	// Find the best matching namespace prefix
 	matchingNamespace, remainingPath := FindLongestMatchingPrefix(fqcn, namespaces)
-	
+
 	if matchingNamespace == "" && remainingPath == fqcn {
 		// No namespace matched, this class cannot be mapped
 		return nil, NewClassNotMappableError(fqcn)
 	}
-	
+
 	// Get all directory paths for the matching namespace
 	directoryPaths := m.getPathsForNamespace(matchingNamespace)
 	if len(directoryPaths) == 0 {
 		return nil, NewClassNotMappableError(fqcn)
 	}
-	
+
 	// Convert remaining class path to file path
 	classFilePath := m.convertClassPathToFilePath(remainingPath)
-	
+
 	// Generate candidate file paths
 	var candidates []string
 	for _, dirPath := range directoryPaths {
@@ -77,10 +77,10 @@ func (m *DefaultClassMapper) MapClass(fqcn string) ([]string, error) {
 		candidatePath = filepath.ToSlash(candidatePath)
 		candidates = append(candidates, candidatePath)
 	}
-	
+
 	// Sort candidates for deterministic output
 	sort.Strings(candidates)
-	
+
 	return candidates, nil
 }
 
@@ -93,11 +93,11 @@ func (m *DefaultClassMapper) GetNamespaces() []string {
 // getNamespacePrefixes extracts namespace prefixes from all mappings.
 func (m *DefaultClassMapper) getNamespacePrefixes() []string {
 	prefixes := make([]string, 0, len(m.mappings))
-	
+
 	for _, mapping := range m.mappings {
 		prefixes = append(prefixes, mapping.Namespace)
 	}
-	
+
 	return prefixes
 }
 
@@ -105,17 +105,17 @@ func (m *DefaultClassMapper) getNamespacePrefixes() []string {
 // Handles multiple paths per namespace as defined by PSR-4.
 func (m *DefaultClassMapper) getPathsForNamespace(namespace string) []string {
 	var paths []string
-	
+
 	for _, mapping := range m.mappings {
 		if mapping.Namespace == namespace {
 			// Copy paths to avoid modifying original mapping
 			paths = append(paths, mapping.Paths...)
 		}
 	}
-	
+
 	// Sort for deterministic behavior
 	sort.Strings(paths)
-	
+
 	return paths
 }
 
@@ -125,18 +125,18 @@ func (m *DefaultClassMapper) convertClassPathToFilePath(classPath string) string
 	if classPath == "" {
 		return ""
 	}
-	
+
 	// Convert namespace separators to path separators
 	filePath := ConvertNamespaceToPath(classPath)
-	
+
 	// Remove trailing slash if present
 	filePath = NormalizePath(filePath)
-	
+
 	// Add .php extension
 	if filePath != "" {
 		filePath += ".php"
 	}
-	
+
 	return filePath
 }
 
@@ -150,26 +150,26 @@ func (s StaticClassMapper) MapClassToFile(fqcn string, composerConfig *ComposerC
 	if composerConfig == nil {
 		return "", NewMappingError(fqcn, "composer config cannot be nil", nil)
 	}
-	
+
 	// Convert ComposerConfig to ComposerData for processing
 	composerData := convertConfigToData(composerConfig)
-	
+
 	// Create temporary mapper
 	mapper, err := NewClassMapper(composerData, true) // Include dev for full mapping
 	if err != nil {
 		return "", err
 	}
-	
+
 	// Get potential file paths
 	candidates, err := mapper.MapClass(fqcn)
 	if err != nil {
 		return "", err
 	}
-	
+
 	if len(candidates) == 0 {
 		return "", NewClassNotMappableError(fqcn)
 	}
-	
+
 	// Return first (most specific) candidate
 	return candidates[0], nil
 }
@@ -180,59 +180,59 @@ func (s StaticClassMapper) MapFileToClass(filePath string, composerConfig *Compo
 	if composerConfig == nil {
 		return "", NewFileNotMappableError(filePath)
 	}
-	
+
 	if filePath == "" {
 		return "", NewFileNotMappableError(filePath)
 	}
-	
+
 	// Normalize file path
 	normalizedPath := NormalizePath(filePath)
-	
+
 	// Remove .php extension if present
 	if filepath.Ext(normalizedPath) == ".php" {
 		normalizedPath = normalizedPath[:len(normalizedPath)-4]
 	}
-	
+
 	// Convert ComposerConfig to ComposerData for processing
 	composerData := convertConfigToData(composerConfig)
-	
+
 	mappings, err := composerData.GetPSR4Mappings()
 	if err != nil {
 		return "", err
 	}
-	
+
 	// Try to match file path to a namespace mapping
 	for _, mapping := range mappings {
 		for _, dirPath := range mapping.Paths {
 			normalizedDirPath := NormalizePath(dirPath)
-			
+
 			// Check if file path starts with this directory
 			if len(normalizedPath) > len(normalizedDirPath) &&
 				normalizedPath[:len(normalizedDirPath)] == normalizedDirPath {
-				
+
 				// Extract relative path
 				relativePath := normalizedPath[len(normalizedDirPath):]
 				if relativePath[0] == '/' {
 					relativePath = relativePath[1:]
 				}
-				
+
 				// Convert path to namespace
 				relativeNamespace := ConvertPathToNamespace(relativePath)
-				
+
 				// Combine with base namespace
 				fullNamespace := mapping.Namespace + relativeNamespace
-				
+
 				// Remove trailing backslash to get FQCN
 				fqcn := fullNamespace
 				if fqcn != "" && fqcn[len(fqcn)-1] == '\\' {
 					fqcn = fqcn[:len(fqcn)-1]
 				}
-				
+
 				return fqcn, nil
 			}
 		}
 	}
-	
+
 	return "", NewFileNotMappableError(filePath)
 }
 
@@ -242,47 +242,47 @@ func (s StaticClassMapper) GetNamespaceForPath(filePath string, composerConfig *
 	if composerConfig == nil {
 		return "", NewFileNotMappableError(filePath)
 	}
-	
+
 	if filePath == "" {
 		return "", NewFileNotMappableError(filePath)
 	}
-	
+
 	// Normalize file path and remove extension
 	normalizedPath := NormalizePath(filePath)
 	if filepath.Ext(normalizedPath) == ".php" {
 		normalizedPath = normalizedPath[:len(normalizedPath)-4]
 	}
-	
+
 	// Convert ComposerConfig to ComposerData for processing
 	composerData := convertConfigToData(composerConfig)
-	
+
 	mappings, err := composerData.GetPSR4Mappings()
 	if err != nil {
 		return "", err
 	}
-	
+
 	// Find the best matching namespace mapping
 	bestMatch := ""
 	bestMatchLength := 0
-	
+
 	for _, mapping := range mappings {
 		for _, dirPath := range mapping.Paths {
 			normalizedDirPath := NormalizePath(dirPath)
-			
+
 			// Check if file path starts with this directory
 			if len(normalizedPath) >= len(normalizedDirPath) &&
 				normalizedPath[:len(normalizedDirPath)] == normalizedDirPath {
-				
+
 				// Choose the longest matching path
 				if len(normalizedDirPath) > bestMatchLength {
 					bestMatchLength = len(normalizedDirPath)
-					
+
 					// Extract relative path
 					relativePath := normalizedPath[len(normalizedDirPath):]
 					if len(relativePath) > 0 && relativePath[0] == '/' {
 						relativePath = relativePath[1:]
 					}
-					
+
 					// Get parent directory for namespace
 					if relativePath != "" {
 						parentDir := filepath.Dir(relativePath)
@@ -299,16 +299,16 @@ func (s StaticClassMapper) GetNamespaceForPath(filePath string, composerConfig *
 			}
 		}
 	}
-	
+
 	if bestMatch == "" {
 		return "", NewFileNotMappableError(filePath)
 	}
-	
+
 	// Remove trailing backslash for namespace representation
 	if bestMatch != "" && bestMatch[len(bestMatch)-1] == '\\' {
 		bestMatch = bestMatch[:len(bestMatch)-1]
 	}
-	
+
 	return bestMatch, nil
 }
 
@@ -318,28 +318,28 @@ func (s StaticClassMapper) ValidateClassMapping(fqcn string, filePath string, co
 	if composerConfig == nil {
 		return NewMappingError(fqcn, "composer config cannot be nil", nil)
 	}
-	
+
 	// Validate FQCN format
 	if err := ValidateFQCNFormat(fqcn); err != nil {
 		return err
 	}
-	
+
 	// Map FQCN to expected file path
 	expectedPath, err := s.MapClassToFile(fqcn, composerConfig)
 	if err != nil {
 		return err
 	}
-	
+
 	// Normalize paths for comparison
 	normalizedExpected := NormalizePath(expectedPath)
 	normalizedActual := NormalizePath(filePath)
-	
+
 	if normalizedExpected != normalizedActual {
-		return NewMappingError(fqcn, 
-			"class mapping validation failed: expected '"+normalizedExpected+"', got '"+normalizedActual+"'", 
+		return NewMappingError(fqcn,
+			"class mapping validation failed: expected '"+normalizedExpected+"', got '"+normalizedActual+"'",
 			nil)
 	}
-	
+
 	return nil
 }
 

@@ -39,13 +39,13 @@ func TestDefaultComposerLoader_LoadComposer(t *testing.T) {
 			expectedConfig: &ComposerConfig{
 				Name: "laravel/laravel",
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
-						"App\\": "app/",
+					PSR4: map[string]any{
+						"App\\":               "app/",
 						"Database\\Seeders\\": "database/seeders/",
 					},
 				},
 				AutoloadDev: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"Tests\\": "tests/",
 					},
 				},
@@ -67,9 +67,9 @@ func TestDefaultComposerLoader_LoadComposer(t *testing.T) {
 			expectedConfig: &ComposerConfig{
 				Name: "test/package",
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
-						"App\\": "src/",
-						"Multi\\": []interface{}{"src/Multi", "lib/Multi"},
+					PSR4: map[string]any{
+						"App\\":    "src/",
+						"Multi\\":  []any{"src/Multi", "lib/Multi"},
 						"Single\\": "src/Single/",
 					},
 				},
@@ -87,7 +87,7 @@ func TestDefaultComposerLoader_LoadComposer(t *testing.T) {
 			expectError: false,
 			expectedConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -109,7 +109,7 @@ func TestDefaultComposerLoader_LoadComposer(t *testing.T) {
 			expectedConfig: &ComposerConfig{
 				Name: "test/package",
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "src/",
 					},
 					Classmap: []string{"legacy/"},
@@ -118,15 +118,15 @@ func TestDefaultComposerLoader_LoadComposer(t *testing.T) {
 			},
 		},
 		{
-			name:        "malformed JSON",
+			name:         "malformed JSON",
 			composerJSON: `{"name": "test/package", "invalid": json}`,
-			expectError: true,
-			errorType:   ErrComposerMalformed,
+			expectError:  true,
+			errorType:    ErrComposerMalformed,
 		},
 		{
-			name:        "empty JSON",
-			composerJSON: `{}`,
-			expectError: false,
+			name:           "empty JSON",
+			composerJSON:   `{}`,
+			expectError:    false,
 			expectedConfig: &ComposerConfig{},
 		},
 	}
@@ -188,7 +188,7 @@ func TestDefaultComposerLoader_ValidateConfig(t *testing.T) {
 			name: "valid config with PSR-4",
 			config: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -199,7 +199,7 @@ func TestDefaultComposerLoader_ValidateConfig(t *testing.T) {
 			name: "valid config with dev PSR-4",
 			config: &ComposerConfig{
 				AutoloadDev: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"Tests\\": "tests/",
 					},
 				},
@@ -210,13 +210,13 @@ func TestDefaultComposerLoader_ValidateConfig(t *testing.T) {
 			name: "valid config with multiple namespaces",
 			config: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
-						"App\\": "app/",
+					PSR4: map[string]any{
+						"App\\":               "app/",
 						"Database\\Seeders\\": "database/seeders/",
 					},
 				},
 				AutoloadDev: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"Tests\\": "tests/",
 					},
 				},
@@ -227,7 +227,7 @@ func TestDefaultComposerLoader_ValidateConfig(t *testing.T) {
 			name: "valid config with array paths",
 			config: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"Multi\\": []string{"src/Multi", "lib/Multi"},
 					},
 				},
@@ -254,7 +254,7 @@ func TestDefaultComposerLoader_ValidateConfig(t *testing.T) {
 			name: "invalid namespace without backslash",
 			config: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App": "app/", // Missing trailing backslash
 					},
 				},
@@ -266,7 +266,7 @@ func TestDefaultComposerLoader_ValidateConfig(t *testing.T) {
 			name: "empty namespace",
 			config: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"": "app/", // Empty namespace (valid for PSR-4 root)
 					},
 				},
@@ -277,7 +277,7 @@ func TestDefaultComposerLoader_ValidateConfig(t *testing.T) {
 			name: "invalid path type",
 			config: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": 123, // Invalid type
 					},
 				},
@@ -289,7 +289,7 @@ func TestDefaultComposerLoader_ValidateConfig(t *testing.T) {
 			name: "empty path string",
 			config: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "", // Empty path
 					},
 				},
@@ -301,7 +301,7 @@ func TestDefaultComposerLoader_ValidateConfig(t *testing.T) {
 			name: "empty paths array",
 			config: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": []string{}, // Empty paths array
 					},
 				},
@@ -355,16 +355,16 @@ func TestLoadComposerFromReader(t *testing.T) {
 			expectedConfig: &ComposerConfig{
 				Name: "test/package",
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "src/",
 					},
 				},
 			},
 		},
 		{
-			name:        "invalid JSON from reader",
+			name:         "invalid JSON from reader",
 			composerJSON: `{"invalid": json}`,
-			expectError: true,
+			expectError:  true,
 		},
 	}
 
@@ -395,7 +395,7 @@ func TestLoadComposerFromReader(t *testing.T) {
 func TestFindComposerFile(t *testing.T) {
 	// Create a temporary directory structure
 	tmpDir := t.TempDir()
-	
+
 	// Create nested directories
 	subDir := filepath.Join(tmpDir, "app", "Http", "Controllers")
 	err := os.MkdirAll(subDir, 0755)
@@ -450,7 +450,7 @@ func TestFindComposerFile(t *testing.T) {
 
 			expectedPath, _ := filepath.Abs(composerPath)
 			foundPathAbs, _ := filepath.Abs(foundPath)
-			
+
 			if foundPathAbs != expectedPath {
 				t.Errorf("FindComposerFile() expected %s, got %s", expectedPath, foundPathAbs)
 			}
@@ -474,6 +474,7 @@ func TestMustLoadComposer(t *testing.T) {
 		config := MustLoadComposer(tmpFile)
 		if config == nil {
 			t.Error("MustLoadComposer() returned nil")
+			return
 		}
 		if config.Name != "test/package" {
 			t.Errorf("MustLoadComposer() expected name 'test/package', got '%s'", config.Name)
@@ -487,7 +488,7 @@ func TestMustLoadComposer(t *testing.T) {
 				t.Error("MustLoadComposer() expected panic for nonexistent file")
 			}
 		}()
-		
+
 		MustLoadComposer("/nonexistent/composer.json")
 	})
 }
@@ -513,11 +514,11 @@ func createTempComposerFile(t *testing.T, content string) string {
 
 func isErrorType(err error, target error) bool {
 	if composerErr, ok := err.(*ComposerError); ok {
-		return composerErr.Cause != nil && 
+		return composerErr.Cause != nil &&
 			(composerErr.Cause == target || strings.Contains(composerErr.Cause.Error(), target.Error()))
 	}
 	if mappingErr, ok := err.(*MappingError); ok {
-		return mappingErr.Cause != nil && 
+		return mappingErr.Cause != nil &&
 			(mappingErr.Cause == target || strings.Contains(mappingErr.Cause.Error(), target.Error()))
 	}
 	return err == target || strings.Contains(err.Error(), target.Error())
@@ -611,14 +612,14 @@ func BenchmarkValidateConfig(b *testing.B) {
 	config := &ComposerConfig{
 		Name: "laravel/laravel",
 		Autoload: AutoloadSection{
-			PSR4: map[string]interface{}{
-				"App\\": "app/",
+			PSR4: map[string]any{
+				"App\\":                 "app/",
 				"Database\\Factories\\": "database/factories/",
-				"Database\\Seeders\\": "database/seeders/",
+				"Database\\Seeders\\":   "database/seeders/",
 			},
 		},
 		AutoloadDev: AutoloadSection{
-			PSR4: map[string]interface{}{
+			PSR4: map[string]any{
 				"Tests\\": "tests/",
 			},
 		},

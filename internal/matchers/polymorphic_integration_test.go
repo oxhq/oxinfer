@@ -8,7 +8,7 @@ import (
 
 func TestPolymorphicIntegration(t *testing.T) {
 	language := php.GetLanguage()
-	
+
 	tests := []struct {
 		name                      string
 		enablePolymorphicMatching bool
@@ -30,21 +30,21 @@ func TestPolymorphicIntegration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			config := DefaultMatcherConfig()
 			config.EnablePolymorphicMatching = tt.enablePolymorphicMatching
-			
+
 			processor, err := NewPatternMatchingProcessor(language, config)
 			if err != nil {
 				t.Fatalf("Failed to create processor: %v", err)
 			}
 			defer processor.Close()
-			
+
 			// Verify the correct number of matchers are registered
 			composite := processor.composite
 			matchers := composite.GetMatchers()
-			
+
 			if len(matchers) != tt.expectedPatternTypesCount {
 				t.Errorf("Expected %d matchers, got %d", tt.expectedPatternTypesCount, len(matchers))
 			}
-			
+
 			// Verify polymorphic matcher is present/absent based on config
 			_, hasPolymorphic := matchers[PatternTypePolymorphic]
 			if tt.enablePolymorphicMatching && !hasPolymorphic {
@@ -60,23 +60,23 @@ func TestPolymorphicIntegration(t *testing.T) {
 func TestPolymorphicMatcherEnabled(t *testing.T) {
 	language := php.GetLanguage()
 	config := DefaultMatcherConfig()
-	
+
 	composite, err := NewCompositePatternMatcher(language, config)
 	if err != nil {
 		t.Fatalf("Failed to create composite matcher: %v", err)
 	}
 	defer composite.Close()
-	
+
 	// Test polymorphic matcher type is enabled
 	enabled := composite.isMatcherEnabled(PatternTypePolymorphic)
 	if !enabled {
 		t.Error("Expected polymorphic matcher to be enabled with default config")
 	}
-	
+
 	// Test with disabled config
 	config.EnablePolymorphicMatching = false
 	composite.config = config
-	
+
 	enabled = composite.isMatcherEnabled(PatternTypePolymorphic)
 	if enabled {
 		t.Error("Expected polymorphic matcher to be disabled when config is false")
@@ -89,11 +89,11 @@ func TestLaravelPatternsPolymorphicField(t *testing.T) {
 		FilePath:     "test.php",
 		Polymorphics: make([]*PolymorphicMatch, 0),
 	}
-	
+
 	if patterns.Polymorphics == nil {
 		t.Error("Expected Polymorphics field to be initialized")
 	}
-	
+
 	if len(patterns.Polymorphics) != 0 {
 		t.Error("Expected Polymorphics field to be empty initially")
 	}
@@ -102,25 +102,25 @@ func TestLaravelPatternsPolymorphicField(t *testing.T) {
 func TestProcessMatchResultsPolymorphic(t *testing.T) {
 	language := php.GetLanguage()
 	config := DefaultMatcherConfig()
-	
+
 	composite, err := NewCompositePatternMatcher(language, config)
 	if err != nil {
 		t.Fatalf("Failed to create composite matcher: %v", err)
 	}
 	defer composite.Close()
-	
+
 	patterns := &LaravelPatterns{
 		FilePath:     "test.php",
 		Polymorphics: make([]*PolymorphicMatch, 0),
 	}
-	
+
 	// Create a polymorphic match result
 	polyMatch := &PolymorphicMatch{
 		Relation: "imageable",
 		Type:     "morphTo",
 		Pattern:  "morphTo",
 	}
-	
+
 	results := []*MatchResult{
 		{
 			Type:       PatternTypePolymorphic,
@@ -128,15 +128,15 @@ func TestProcessMatchResultsPolymorphic(t *testing.T) {
 			Confidence: 0.9,
 		},
 	}
-	
+
 	// Process the results
 	composite.processMatchResults(PatternTypePolymorphic, results, patterns)
-	
+
 	// Verify the polymorphic match was added
 	if len(patterns.Polymorphics) != 1 {
 		t.Fatalf("Expected 1 polymorphic match, got %d", len(patterns.Polymorphics))
 	}
-	
+
 	if patterns.Polymorphics[0].Relation != "imageable" {
 		t.Errorf("Expected relation 'imageable', got '%s'", patterns.Polymorphics[0].Relation)
 	}
@@ -145,13 +145,13 @@ func TestProcessMatchResultsPolymorphic(t *testing.T) {
 func TestConvertToEmitterFormatWithPolymorphic(t *testing.T) {
 	language := php.GetLanguage()
 	config := DefaultMatcherConfig()
-	
+
 	processor, err := NewPatternMatchingProcessor(language, config)
 	if err != nil {
 		t.Fatalf("Failed to create processor: %v", err)
 	}
 	defer processor.Close()
-	
+
 	// Create patterns with polymorphic matches
 	patterns := &LaravelPatterns{
 		FilePath: "TestController.php",
@@ -167,13 +167,13 @@ func TestConvertToEmitterFormatWithPolymorphic(t *testing.T) {
 			},
 		},
 	}
-	
+
 	// Convert to emitter format
 	controller, err := processor.ConvertToEmitterFormat(patterns)
 	if err != nil {
 		t.Fatalf("Failed to convert patterns: %v", err)
 	}
-	
+
 	// Note: Polymorphic relationships are now handled at the top-level delta, not on individual controllers
 	// Verify controller has basic fields
 	if controller.FQCN == "" {
@@ -182,10 +182,10 @@ func TestConvertToEmitterFormatWithPolymorphic(t *testing.T) {
 	if controller.Method == "" {
 		t.Error("Expected controller to have method")
 	}
-	
+
 	// Polymorphic data would be verified at the delta level, not controller level
 	t.Logf("Controller converted successfully: %s::%s", controller.FQCN, controller.Method)
-	
+
 	// Polymorphic validation would now be done at the delta level in integration tests
 }
 
@@ -193,15 +193,15 @@ func TestPatternCountIncludesPolymorphic(t *testing.T) {
 	// Mock patterns with polymorphic matches
 	patterns := &LaravelPatterns{
 		FilePath:     "test.php",
-		HTTPStatus:   make([]*HTTPStatusMatch, 1),     // 1 match
-		RequestUsage: make([]*RequestUsageMatch, 1),   // 1 match  
-		Resources:    make([]*ResourceMatch, 1),       // 1 match
-		Pivots:       make([]*PivotMatch, 1),          // 1 match
-		Attributes:   make([]*AttributeMatch, 1),      // 1 match
-		Scopes:       make([]*ScopeMatch, 1),          // 1 match
-		Polymorphics: make([]*PolymorphicMatch, 2),    // 2 matches
+		HTTPStatus:   make([]*HTTPStatusMatch, 1),   // 1 match
+		RequestUsage: make([]*RequestUsageMatch, 1), // 1 match
+		Resources:    make([]*ResourceMatch, 1),     // 1 match
+		Pivots:       make([]*PivotMatch, 1),        // 1 match
+		Attributes:   make([]*AttributeMatch, 1),    // 1 match
+		Scopes:       make([]*ScopeMatch, 1),        // 1 match
+		Polymorphics: make([]*PolymorphicMatch, 2),  // 2 matches
 	}
-	
+
 	// Add dummy matches to calculate the count
 	patterns.HTTPStatus[0] = &HTTPStatusMatch{Status: 200}
 	patterns.RequestUsage[0] = &RequestUsageMatch{Methods: []string{"GET"}}
@@ -211,12 +211,12 @@ func TestPatternCountIncludesPolymorphic(t *testing.T) {
 	patterns.Scopes[0] = &ScopeMatch{Name: "active"}
 	patterns.Polymorphics[0] = &PolymorphicMatch{Relation: "imageable", Type: "morphTo"}
 	patterns.Polymorphics[1] = &PolymorphicMatch{Relation: "commentable", Type: "morphMany"}
-	
+
 	// Verify the pattern count calculation includes polymorphic patterns
 	expectedCount := int64(8) // 6 other types + 2 polymorphic = 8 total
-	actualCount := int64(len(patterns.HTTPStatus) + len(patterns.RequestUsage) + len(patterns.Resources) + 
+	actualCount := int64(len(patterns.HTTPStatus) + len(patterns.RequestUsage) + len(patterns.Resources) +
 		len(patterns.Pivots) + len(patterns.Attributes) + len(patterns.Scopes) + len(patterns.Polymorphics))
-	
+
 	if actualCount != expectedCount {
 		t.Errorf("Expected pattern count %d, got %d", expectedCount, actualCount)
 	}
@@ -224,29 +224,29 @@ func TestPatternCountIncludesPolymorphic(t *testing.T) {
 
 func TestFeatureFlagIntegration(t *testing.T) {
 	config := DefaultMatcherConfig()
-	
+
 	// Test that polymorphic is enabled by default
 	if !config.EnablePolymorphicMatching {
 		t.Error("Expected polymorphic matching to be enabled by default")
 	}
-	
+
 	// Test feature flag application
 	features := &FeatureConfig{
 		Polymorphic: boolPtr(false),
 	}
-	
+
 	config.ApplyFeatureFlags(features)
-	
+
 	if config.EnablePolymorphicMatching {
 		t.Error("Expected polymorphic matching to be disabled after applying feature flag")
 	}
-	
+
 	// Test with nil polymorphic flag (should preserve existing config)
 	config.EnablePolymorphicMatching = true
 	features.Polymorphic = nil
-	
+
 	config.ApplyFeatureFlags(features)
-	
+
 	if !config.EnablePolymorphicMatching {
 		t.Error("Expected polymorphic matching to remain enabled when feature flag is nil")
 	}

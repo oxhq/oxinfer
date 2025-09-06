@@ -14,7 +14,7 @@ import "context"
 type ComposerConfig struct {
 	// Autoload contains production autoloading rules
 	Autoload AutoloadSection `json:"autoload"`
-	// AutoloadDev contains development-only autoloading rules  
+	// AutoloadDev contains development-only autoloading rules
 	AutoloadDev AutoloadSection `json:"autoload-dev"`
 	// Name is the package name (optional)
 	Name string `json:"name,omitempty"`
@@ -23,9 +23,9 @@ type ComposerConfig struct {
 // AutoloadSection represents an autoload configuration section
 type AutoloadSection struct {
 	// PSR4 maps namespace prefixes to directory paths
-	PSR4 map[string]interface{} `json:"psr-4,omitempty"`
+	PSR4 map[string]any `json:"psr-4,omitempty"`
 	// PSR0 maps namespace prefixes to directory paths (legacy)
-	PSR0 map[string]interface{} `json:"psr-0,omitempty"`
+	PSR0 map[string]any `json:"psr-0,omitempty"`
 	// Classmap lists directories/files to scan for classes
 	Classmap []string `json:"classmap,omitempty"`
 	// Files lists files to include directly
@@ -40,7 +40,7 @@ type ComposerLoader interface {
 	// LoadComposer loads a composer.json file from the specified path.
 	// Returns ComposerConfig or error if file cannot be loaded/parsed.
 	LoadComposer(path string) (*ComposerConfig, error)
-	
+
 	// ValidateConfig validates a ComposerConfig for PSR-4 compliance.
 	// Checks namespace format, directory paths, and structural requirements.
 	ValidateConfig(config *ComposerConfig) error
@@ -56,7 +56,7 @@ type ClassMapper interface {
 	// Returns ordered list of candidates (most specific namespace first).
 	// FQCN format: "App\\Http\\Controllers\\UserController"
 	MapClass(fqcn string) ([]string, error)
-	
+
 	// GetNamespaces returns all registered namespace prefixes.
 	// Useful for enumerating available namespaces.
 	GetNamespaces() []string
@@ -71,7 +71,7 @@ type PathResolver interface {
 	// baseDir is the directory containing composer.json (project root).
 	// Returns absolute path to file or error if none found.
 	ResolvePath(ctx context.Context, candidates []string, baseDir string) (string, error)
-	
+
 	// FileExists checks if a file exists at the given path.
 	// Handles both absolute and relative paths efficiently.
 	FileExists(path string) bool
@@ -86,11 +86,11 @@ type PSR4Resolver interface {
 	// ResolveClass resolves a fully qualified class name to file path.
 	// This is the primary method that orchestrates the complete resolution.
 	ResolveClass(ctx context.Context, fqcn string) (string, error)
-	
+
 	// GetAllClasses returns a map of all discoverable classes to their file paths.
 	// Results must be deterministically ordered for consistent delta.json output.
 	GetAllClasses(ctx context.Context) (map[string]string, error)
-	
+
 	// Refresh reloads composer configuration and clears caches.
 	// Used when composer.json is modified during analysis.
 	Refresh() error

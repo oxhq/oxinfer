@@ -36,13 +36,13 @@ func TestMVPPerformanceRequirements(t *testing.T) {
 		// For medium project (400 files), need >40 files/second to meet 10s target
 		expectedMinThroughput := 40.0 // 400 files / 10 seconds
 		if targets.FilesPerSecond < expectedMinThroughput {
-			t.Errorf("Files per second target too low: %.1f (minimum needed: %.1f)", 
+			t.Errorf("Files per second target too low: %.1f (minimum needed: %.1f)",
 				targets.FilesPerSecond, expectedMinThroughput)
 		}
 
 		// Verify cache hit rate is suitable for incremental performance
 		if targets.CacheHitRate < 0.9 {
-			t.Errorf("Cache hit rate should be at least 90%% for 2s incremental target, got %.1f%%", 
+			t.Errorf("Cache hit rate should be at least 90%% for 2s incremental target, got %.1f%%",
 				targets.CacheHitRate*100)
 		}
 
@@ -79,7 +79,7 @@ func TestMVPPerformanceRequirements(t *testing.T) {
 		}
 
 		if config.CPUUtilizationMin < 0.8 {
-			t.Errorf("CPU utilization minimum should support MVP efficiency target: %.1f%% (should be ≥80%%)", 
+			t.Errorf("CPU utilization minimum should support MVP efficiency target: %.1f%% (should be ≥80%%)",
 				config.CPUUtilizationMin*100)
 		}
 
@@ -177,7 +177,7 @@ func TestPerformanceSystemIntegration(t *testing.T) {
 		}
 	})
 
-	// Test 2: Performance integration creation  
+	// Test 2: Performance integration creation
 	t.Run("integration_creation", func(t *testing.T) {
 		integration, err := NewPerformanceIntegration(nil)
 		if err != nil {
@@ -213,18 +213,18 @@ func TestPerformanceTargetsCalculation(t *testing.T) {
 
 	// Test medium project scenario (400 files)
 	projectFiles := 400
-	
+
 	// Calculate required throughput for cold run target
 	requiredThroughput := float64(projectFiles) / targets.ColdRun.Seconds()
 	if targets.FilesPerSecond < requiredThroughput {
-		t.Errorf("Files per second target insufficient for medium project: %.1f < %.1f", 
+		t.Errorf("Files per second target insufficient for medium project: %.1f < %.1f",
 			targets.FilesPerSecond, requiredThroughput)
 	}
 
 	// Incremental run should be much faster (assuming 90% cache hit rate)
 	uncachedFiles := float64(projectFiles) * (1.0 - targets.CacheHitRate)
 	requiredIncrementalThroughput := uncachedFiles / targets.IncrementalRun.Seconds()
-	
+
 	// Should be achievable with good caching
 	if requiredIncrementalThroughput > targets.FilesPerSecond*2 {
 		t.Errorf("Incremental throughput requirement too high: %.1f files/sec", requiredIncrementalThroughput)
@@ -289,7 +289,7 @@ func BenchmarkMVPTargetsCalculation(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		targets := MVPPerformanceTargets()
-		
+
 		// Basic validation to ensure the function works
 		if targets.ColdRun == 0 {
 			b.Fatal("Cold run target should not be zero")
@@ -355,11 +355,13 @@ func TestPerformanceSystemResourceUsage(t *testing.T) {
 
 	if integration == nil {
 		t.Error("Integration should be created")
+		return
 	}
 
 	// Verify targets are set correctly
 	if integration.targets == nil {
 		t.Error("Performance targets should be initialized")
+		return
 	}
 
 	if integration.targets.ColdRun != 10*time.Second {

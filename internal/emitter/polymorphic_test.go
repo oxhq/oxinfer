@@ -132,7 +132,7 @@ func TestPolymorphicEmitterIntegration(t *testing.T) {
 				t.Logf("Want: %s", tt.wantJSON)
 
 				// Parse both JSONs to compare structure
-				var gotStruct, wantStruct interface{}
+				var gotStruct, wantStruct any
 				if err := json.Unmarshal(gotJSON, &gotStruct); err != nil {
 					t.Fatalf("Failed to unmarshal got JSON: %v", err)
 				}
@@ -164,11 +164,11 @@ func TestPolymorphicEmitterIntegration(t *testing.T) {
 
 func TestPolymorphicNormalization(t *testing.T) {
 	emitter := NewJSONEmitter()
-	
+
 	// Test polymorphic relation with unsorted data
 	relation := &PolymorphicRelation{
-		Relation: "taggable",
-		Type:     "morphTo",
+		Relation:      "taggable",
+		Type:          "morphTo",
 		RelatedModels: []string{"Video", "Post", "Article"}, // Unsorted
 		Discriminator: &PolymorphicDiscriminator{
 			PropertyName: "taggable_type",
@@ -238,7 +238,7 @@ func TestDeterministicPolymorphicJSON(t *testing.T) {
 	}
 
 	emitter := NewJSONEmitter()
-	
+
 	// Marshal multiple times to verify deterministic ordering
 	var results []string
 	for i := 0; i < 5; i++ {
@@ -260,21 +260,21 @@ func TestDeterministicPolymorphicJSON(t *testing.T) {
 	}
 
 	// Verify polymorphic relations are sorted by relation name within controller
-	var deltaStruct map[string]interface{}
+	var deltaStruct map[string]any
 	if err := json.Unmarshal([]byte(firstResult), &deltaStruct); err != nil {
 		t.Fatalf("Failed to unmarshal JSON: %v", err)
 	}
 
-	controllers := deltaStruct["controllers"].([]interface{})
+	controllers := deltaStruct["controllers"].([]any)
 	if len(controllers) > 0 {
-		controller := controllers[0].(map[string]interface{})
+		controller := controllers[0].(map[string]any)
 		if polymorphics, exists := controller["polymorphic"]; exists {
-			polyArray := polymorphics.([]interface{})
+			polyArray := polymorphics.([]any)
 			if len(polyArray) >= 2 {
 				// Should be sorted: alpha, zeta
-				firstPoly := polyArray[0].(map[string]interface{})
-				secondPoly := polyArray[1].(map[string]interface{})
-				
+				firstPoly := polyArray[0].(map[string]any)
+				secondPoly := polyArray[1].(map[string]any)
+
 				if firstPoly["relation"] != "alpha" {
 					t.Errorf("First polymorphic relation should be 'alpha', got %v", firstPoly["relation"])
 				}

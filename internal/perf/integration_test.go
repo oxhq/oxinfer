@@ -2,16 +2,8 @@ package perf
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/garaekz/oxinfer/internal/emitter"
-	"github.com/garaekz/oxinfer/internal/indexer"
-	"github.com/garaekz/oxinfer/internal/manifest"
-	"github.com/garaekz/oxinfer/internal/pipeline"
 )
 
 func TestPerformanceIntegration_Initialize(t *testing.T) {
@@ -93,96 +85,6 @@ func TestPerformanceIntegration_MVPTargets(t *testing.T) {
 	}
 }
 
-// createTestManifest creates a test manifest for performance testing.
-func createTestManifest(t testing.TB, tempDir string) *manifest.Manifest {
-	// Create required directories
-	projectDir := filepath.Join(tempDir, "test-project")
-	if err := os.MkdirAll(projectDir, 0755); err != nil {
-		t.Fatalf("Failed to create project dir: %v", err)
-	}
-
-	composerFile := filepath.Join(projectDir, "composer.json")
-	if err := os.WriteFile(composerFile, []byte(`{"name": "test/project"}`), 0644); err != nil {
-		t.Fatalf("Failed to create composer.json: %v", err)
-	}
-
-	appDir := filepath.Join(projectDir, "app")
-	if err := os.MkdirAll(appDir, 0755); err != nil {
-		t.Fatalf("Failed to create app dir: %v", err)
-	}
-
-	return &manifest.Manifest{
-		Project: manifest.ProjectConfig{
-			Root:     projectDir,
-			Composer: "composer.json",
-		},
-		Scan: manifest.ScanConfig{
-			Targets: []string{"app"},
-			Globs:   []string{"**/*.php"},
-		},
-		Limits: &manifest.LimitsConfig{
-			MaxWorkers: intPtr(8),
-			MaxFiles:   intPtr(500),
-			MaxDepth:   intPtr(3),
-		},
-		Cache: &manifest.CacheConfig{
-			Enabled: boolPtr(true),
-			Kind:    stringPtr("sha256+mtime"),
-		},
-	}
-}
-
-// mockPipelineOrchestrator implements pipeline.PipelineOrchestrator for testing.
-type mockPipelineOrchestrator struct {
-	processingTime time.Duration
-	memoryUsage    int64
-	filesProcessed int
-	shouldFail     bool
-}
-
-func (m *mockPipelineOrchestrator) ProcessProject(ctx context.Context, manifest *manifest.Manifest) (*emitter.Delta, error) {
-	if m.shouldFail {
-		return nil, fmt.Errorf("mock orchestrator failure")
-	}
-
-	// Simulate processing time
-	time.Sleep(10 * time.Millisecond) // Minimal sleep for testing
-
-	// Return mock delta
-	return &emitter.Delta{
-		Meta: emitter.MetaInfo{
-			Partial: false,
-			Stats: emitter.MetaStats{
-				FilesParsed: int64(m.filesProcessed),
-				DurationMs:  int64(m.processingTime / time.Millisecond),
-			},
-		},
-		Controllers: []emitter.Controller{},
-		Models:      []emitter.Model{},
-		Polymorphic: []emitter.Polymorphic{},
-		Broadcast:   []emitter.Broadcast{},
-	}, nil
-}
-
-func (m *mockPipelineOrchestrator) RunIndexingPhase(ctx context.Context, manifest *manifest.Manifest) (*indexer.IndexResult, error) {
-	return &indexer.IndexResult{TotalFiles: m.filesProcessed}, nil
-}
-
-func (m *mockPipelineOrchestrator) RunParsingPhase(ctx context.Context, files []indexer.FileInfo) (*pipeline.ParseResults, error) {
-	return &pipeline.ParseResults{FilesProcessed: m.filesProcessed}, nil
-}
-
-func (m *mockPipelineOrchestrator) RunMatchingPhase(ctx context.Context, parseResults *pipeline.ParseResults) (*pipeline.MatchResults, error) {
-	return &pipeline.MatchResults{TotalMatches: 10}, nil
-}
-
-func (m *mockPipelineOrchestrator) RunInferencePhase(ctx context.Context, matchResults *pipeline.MatchResults) (*pipeline.InferenceResults, error) {
-	return &pipeline.InferenceResults{ShapesInferred: 5}, nil
-}
-
-func (m *mockPipelineOrchestrator) Close() error {
-	return nil
-}
 
 // Helper functions
 func intPtr(i int) *int {

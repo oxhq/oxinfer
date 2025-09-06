@@ -64,25 +64,25 @@ func TestPolymorphicIntegrationEndToEnd(t *testing.T) {
 	}
 
 	// Verify JSON is valid and can be unmarshaled
-	var unmarshaled map[string]interface{}
+	var unmarshaled map[string]any
 	if err := json.Unmarshal(jsonBytes, &unmarshaled); err != nil {
 		t.Fatalf("Generated JSON is not valid: %v", err)
 	}
 
 	// Verify structure includes polymorphic data at top level
-	polymorphics, ok := unmarshaled["polymorphic"].([]interface{})
+	polymorphics, ok := unmarshaled["polymorphic"].([]any)
 	if !ok || len(polymorphics) == 0 {
 		t.Fatal("Polymorphic relations not found at top level")
 	}
 
 	// Verify polymorphic structure matches plan.md schema
-	polyRelation := polymorphics[0].(map[string]interface{})
+	polyRelation := polymorphics[0].(map[string]any)
 	if polyRelation["parent"] == nil {
 		t.Error("Expected 'parent' field in polymorphic relation")
 	}
-	
+
 	// Verify morph structure
-	morph, ok := polyRelation["morph"].(map[string]interface{})
+	morph, ok := polyRelation["morph"].(map[string]any)
 	if !ok {
 		t.Fatal("Expected 'morph' field in polymorphic relation")
 	}
@@ -91,7 +91,7 @@ func TestPolymorphicIntegrationEndToEnd(t *testing.T) {
 	}
 
 	// Verify discriminator structure
-	discriminator, ok := polyRelation["discriminator"].(map[string]interface{})
+	discriminator, ok := polyRelation["discriminator"].(map[string]any)
 	if !ok {
 		t.Fatal("Discriminator not found in polymorphic relation")
 	}
@@ -100,23 +100,23 @@ func TestPolymorphicIntegrationEndToEnd(t *testing.T) {
 	}
 
 	// Verify models section (models no longer have polymorphic fields directly)
-	models, ok := unmarshaled["models"].([]interface{})
+	models, ok := unmarshaled["models"].([]any)
 	if !ok || len(models) == 0 {
 		t.Fatal("Models not found in JSON output")
 	}
 
-	model := models[0].(map[string]interface{})
+	model := models[0].(map[string]any)
 	if model["fqcn"] == nil {
 		t.Error("Expected 'fqcn' field in model")
 	}
 
 	// Verify global polymorphic section
-	globalPolymorphics, ok := unmarshaled["polymorphic"].([]interface{})
+	globalPolymorphics, ok := unmarshaled["polymorphic"].([]any)
 	if !ok || len(globalPolymorphics) == 0 {
 		t.Fatal("Global polymorphic configurations not found")
 	}
 
-	globalPoly := globalPolymorphics[0].(map[string]interface{})
+	globalPoly := globalPolymorphics[0].(map[string]any)
 	if globalPoly["parent"] != "App\\Models\\Comment" {
 		t.Errorf("Expected parent 'App\\Models\\Comment', got %v", globalPoly["parent"])
 	}
@@ -150,9 +150,9 @@ func TestPolymorphicSchemaValidation(t *testing.T) {
 			IsExplicit:   true,
 			DefaultType:  stringPtr("default"),
 		},
-		RelatedModels:    []string{"Model1", "Model2"},
-		DepthTruncated:   boolPtr(true),
-		MaxDepth:         intPtr(3),
+		RelatedModels:  []string{"Model1", "Model2"},
+		DepthTruncated: boolPtr(true),
+		MaxDepth:       intPtr(3),
 	}
 
 	// Marshal to JSON and verify structure
@@ -162,7 +162,7 @@ func TestPolymorphicSchemaValidation(t *testing.T) {
 	}
 
 	// Unmarshal and verify all fields are preserved
-	var unmarshaled map[string]interface{}
+	var unmarshaled map[string]any
 	if err := json.Unmarshal(jsonBytes, &unmarshaled); err != nil {
 		t.Fatalf("Failed to unmarshal JSON: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestPolymorphicSchemaValidation(t *testing.T) {
 	}
 
 	// Verify discriminator structure
-	discriminator, ok := unmarshaled["discriminator"].(map[string]interface{})
+	discriminator, ok := unmarshaled["discriminator"].(map[string]any)
 	if !ok {
 		t.Fatal("Discriminator is not a proper object")
 	}

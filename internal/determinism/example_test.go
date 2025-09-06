@@ -189,7 +189,7 @@ func TestDeterminismDemo_RealWorldScenario(t *testing.T) {
 					},
 					Request: &emitter.RequestInfo{
 						ContentTypes: []string{"application/json"},
-						Query:        emitter.NewOrderedObjectFromMap(map[string]interface{}{"page": map[string]interface{}{}}),
+						Query:        emitter.NewOrderedObjectFromMap(map[string]any{"page": map[string]any{}}),
 					},
 					Resources: []emitter.Resource{
 						{Class: "UserResource", Collection: true},
@@ -208,7 +208,7 @@ func TestDeterminismDemo_RealWorldScenario(t *testing.T) {
 					},
 					Request: &emitter.RequestInfo{
 						ContentTypes: []string{"application/json", "multipart/form-data"},
-						Body:         emitter.NewOrderedObjectFromMap(map[string]interface{}{"title": map[string]interface{}{}, "content": map[string]interface{}{}}),
+						Body:         emitter.NewOrderedObjectFromMap(map[string]any{"title": map[string]any{}, "content": map[string]any{}}),
 					},
 				},
 			},

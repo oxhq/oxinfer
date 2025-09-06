@@ -2,13 +2,13 @@
 package matchers
 
 import (
-    "context"
-    "fmt"
-    "strings"
-    "sort"
+	"context"
+	"fmt"
+	"sort"
+	"strings"
 
-    "github.com/garaekz/oxinfer/internal/parser"
-    sitter "github.com/smacker/go-tree-sitter"
+	"github.com/garaekz/oxinfer/internal/parser"
+	sitter "github.com/smacker/go-tree-sitter"
 )
 
 // DefaultPivotMatcher implements PivotMatcher interface.
@@ -26,7 +26,7 @@ func NewPivotMatcher(language *sitter.Language, config *MatcherConfig) (*Default
 	if language == nil {
 		return nil, fmt.Errorf("language cannot be nil")
 	}
-	
+
 	if config == nil {
 		config = DefaultMatcherConfig()
 	}
@@ -52,7 +52,7 @@ func (m *DefaultPivotMatcher) initialize() error {
 	if err != nil {
 		return fmt.Errorf("failed to compile pivot queries: %w", err)
 	}
-	
+
 	m.queries = queries
 	m.initialized = true
 	return nil
@@ -84,7 +84,7 @@ func (m *DefaultPivotMatcher) Match(ctx context.Context, tree *parser.SyntaxTree
 		}
 
 		queryDef := m.queryDefs[i]
-		
+
 		// Convert SyntaxTree back to tree-sitter node for querying
 		sitterNode, sitterTree, err := m.convertToSitterNode(tree)
 		if err != nil {
@@ -119,29 +119,29 @@ func (m *DefaultPivotMatcher) Match(ctx context.Context, tree *parser.SyntaxTree
 	}
 
 	// Apply confidence filtering and deduplication
-    filteredResults := m.filterByConfidence(allResults)
-    finalResults := m.deduplicateResults(filteredResults)
+	filteredResults := m.filterByConfidence(allResults)
+	finalResults := m.deduplicateResults(filteredResults)
 
-    // Ensure deterministic order by source position (row, then column)
-    if len(finalResults) > 1 {
-        sort.SliceStable(finalResults, func(i, j int) bool {
-            if finalResults[i].Position.Row != finalResults[j].Position.Row {
-                return finalResults[i].Position.Row < finalResults[j].Position.Row
-            }
-            if finalResults[i].Position.Column != finalResults[j].Position.Column {
-                return finalResults[i].Position.Column < finalResults[j].Position.Column
-            }
-            // Tiebreaker: method name if available
-            im, iok := finalResults[i].Data.(*PivotMatch)
-            jm, jok := finalResults[j].Data.(*PivotMatch)
-            if iok && jok && im.Method != jm.Method {
-                return im.Method < jm.Method
-            }
-            return false
-        })
-    }
+	// Ensure deterministic order by source position (row, then column)
+	if len(finalResults) > 1 {
+		sort.SliceStable(finalResults, func(i, j int) bool {
+			if finalResults[i].Position.Row != finalResults[j].Position.Row {
+				return finalResults[i].Position.Row < finalResults[j].Position.Row
+			}
+			if finalResults[i].Position.Column != finalResults[j].Position.Column {
+				return finalResults[i].Position.Column < finalResults[j].Position.Column
+			}
+			// Tiebreaker: method name if available
+			im, iok := finalResults[i].Data.(*PivotMatch)
+			jm, jok := finalResults[j].Data.(*PivotMatch)
+			if iok && jok && im.Method != jm.Method {
+				return im.Method < jm.Method
+			}
+			return false
+		})
+	}
 
-    return finalResults, nil
+	return finalResults, nil
 }
 
 // MatchPivots finds Laravel pivot relationship patterns.
@@ -176,7 +176,7 @@ func (m *DefaultPivotMatcher) Close() error {
 	if m.compiler != nil {
 		m.compiler.Close()
 	}
-	
+
 	m.initialized = false
 	m.queries = nil
 	return nil
@@ -198,7 +198,7 @@ func (m *DefaultPivotMatcher) processPivotMatch(
 	// Extract captures
 	for _, capture := range match.Captures {
 		captureName := query.CaptureNameForId(capture.Index)
-		
+
 		switch captureName {
 		case "method", "pivot_method", "second_method":
 			methodNode := capture.Node
@@ -289,14 +289,14 @@ func (m *DefaultPivotMatcher) extractAliasFromArgs(argsNode *sitter.Node, tree *
 			}
 		}
 	}
-	
+
 	return ""
 }
 
 // extractPivotFields extracts field names from withPivot method arguments.
 func (m *DefaultPivotMatcher) extractPivotFields(argsNode *sitter.Node, tree *parser.SyntaxTree) []string {
 	var fields []string
-	
+
 	// Walk through arguments to find string literals
 	for i := uint32(0); i < argsNode.ChildCount(); i++ {
 		child := argsNode.Child(int(i))
@@ -331,7 +331,7 @@ func (m *DefaultPivotMatcher) extractStringFromArgument(argNode *sitter.Node, tr
 		if child == nil {
 			continue
 		}
-		
+
 		// Handle both string types
 		if child.Type() == "string" || child.Type() == "encapsed_string" {
 			return m.extractStringContent(child, tree)
@@ -349,7 +349,7 @@ func (m *DefaultPivotMatcher) extractStringContent(stringNode *sitter.Node, tree
 			return string(child.Content(tree.Source))
 		}
 	}
-	
+
 	// Fallback: clean the entire string content
 	return m.cleanStringLiteral(string(stringNode.Content(tree.Source)))
 }
@@ -357,15 +357,15 @@ func (m *DefaultPivotMatcher) extractStringContent(stringNode *sitter.Node, tree
 // cleanStringLiteral removes quotes from string literals.
 func (m *DefaultPivotMatcher) cleanStringLiteral(str string) string {
 	str = strings.TrimSpace(str)
-	
+
 	// Remove single or double quotes
 	if len(str) >= 2 {
-		if (str[0] == '"' && str[len(str)-1] == '"') || 
-		   (str[0] == '\'' && str[len(str)-1] == '\'') {
+		if (str[0] == '"' && str[len(str)-1] == '"') ||
+			(str[0] == '\'' && str[len(str)-1] == '\'') {
 			return str[1 : len(str)-1]
 		}
 	}
-	
+
 	return str
 }
 
@@ -383,12 +383,12 @@ func (m *DefaultPivotMatcher) isPivotMethod(methodName string) bool {
 func (m *DefaultPivotMatcher) inferRelationshipName(tree *parser.SyntaxTree, position parser.Point) string {
 	// This is a simplified implementation - in practice, you might want to
 	// walk up the AST to find the parent method declaration or relationship call
-	
+
 	// Look for common patterns like "belongsToMany" in the surrounding context
 	sourceLines := strings.Split(string(tree.Source), "\n")
 	if position.Row < len(sourceLines) {
 		currentLine := sourceLines[position.Row]
-		
+
 		// Check for belongsToMany in the current line
 		if strings.Contains(currentLine, "belongsToMany") {
 			// Try to extract the model name from belongsToMany call
@@ -474,7 +474,7 @@ func (m *DefaultPivotMatcher) convertToSitterNode(tree *parser.SyntaxTree) (*sit
 	}
 
 	tempParser.SetLanguage(m.compiler.language)
-	
+
 	sitterTree, err := tempParser.ParseCtx(context.Background(), nil, tree.Source)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to re-parse content: %w", err)
@@ -520,7 +520,7 @@ func (m *DefaultPivotMatcher) deduplicateResults(results []*MatchResult) []*Matc
 		if pivotMatch, ok := result.Data.(*PivotMatch); ok {
 			// Create unique key based on position and method
 			key := fmt.Sprintf("%s:%d:%d:%s", pivotMatch.Relation, result.Position.Row, result.Position.Column, pivotMatch.Method)
-			
+
 			if existing, exists := seen[key]; exists {
 				// Keep the match with higher confidence
 				if result.Confidence > existing.Confidence {
@@ -554,10 +554,10 @@ func GetSupportedPivotPatterns() []string {
 // GetPivotMethodConventions returns Laravel pivot method conventions.
 func GetPivotMethodConventions() map[string]string {
 	return map[string]string{
-		"withPivot":     "Specifies additional columns on pivot table",
+		"withPivot":      "Specifies additional columns on pivot table",
 		"withTimestamps": "Adds created_at and updated_at timestamps to pivot",
-		"as":            "Sets custom accessor name for pivot table data",
-		"belongsToMany": "Defines many-to-many relationship with pivot table",
+		"as":             "Sets custom accessor name for pivot table data",
+		"belongsToMany":  "Defines many-to-many relationship with pivot table",
 	}
 }
 

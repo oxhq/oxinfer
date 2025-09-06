@@ -204,7 +204,7 @@ class UserController extends Controller
 		}
 	}
 
-	// Verify request usage patterns were detected  
+	// Verify request usage patterns were detected
 	if len(patterns.RequestUsage) == 0 {
 		t.Error("Expected request usage patterns to be detected")
 	} else {
@@ -228,7 +228,7 @@ class UserController extends Controller
 	if patterns.ProcessedAt == 0 {
 		t.Error("Expected ProcessedAt timestamp to be set")
 	}
-	
+
 	if patterns.ProcessingMs == 0 {
 		t.Error("Expected ProcessingMs to be set")
 	}
@@ -323,13 +323,13 @@ class ProductController extends Controller
 		t.Fatal("Expected emitter.Controller, got nil")
 	}
 
-    // FQCN and Method inference are placeholders in this stage; ensure non-empty defaults
-    if controller.FQCN == "" {
-        t.Error("Expected non-empty controller FQCN")
-    }
-    if controller.Method == "" {
-        t.Error("Expected non-empty controller method")
-    }
+	// FQCN and Method inference are placeholders in this stage; ensure non-empty defaults
+	if controller.FQCN == "" {
+		t.Error("Expected non-empty controller FQCN")
+	}
+	if controller.Method == "" {
+		t.Error("Expected non-empty controller method")
+	}
 
 	// Verify HTTP status was converted
 	if controller.HTTP == nil {
@@ -351,12 +351,12 @@ class ProductController extends Controller
 		if !containsAllStrings(controller.Request.ContentTypes, expectedContentTypes) {
 			t.Errorf("Expected content types %v, got %v", expectedContentTypes, controller.Request.ContentTypes)
 		}
-		
-		if controller.Request.Body == nil || len(controller.Request.Body) == 0 {
+
+		if len(controller.Request.Body) == 0 {
 			t.Error("Expected request body parameters to be detected")
 		}
-		
-		if controller.Request.Files == nil || len(controller.Request.Files) == 0 {
+
+		if len(controller.Request.Files) == 0 {
 			t.Error("Expected request file parameters to be detected")
 		}
 	}
@@ -589,7 +589,7 @@ class ProcessorBenchmark extends Controller {
 		if err != nil {
 			b.Fatalf("Processor failed: %v", err)
 		}
-		
+
 		// Also benchmark conversion to emitter format
 		_, err = processor.ConvertToEmitterFormat(patterns)
 		if err != nil {
@@ -853,9 +853,9 @@ class UserController extends Controller
 		t.Errorf("Expected at least 3 HTTP status patterns, got %d", len(patterns.HTTPStatus))
 	}
 
-    if len(patterns.RequestUsage) < 1 {
-        t.Errorf("Expected at least 1 request usage pattern, got %d", len(patterns.RequestUsage))
-    }
+	if len(patterns.RequestUsage) < 1 {
+		t.Errorf("Expected at least 1 request usage pattern, got %d", len(patterns.RequestUsage))
+	}
 
 	if len(patterns.Resources) < 3 {
 		t.Errorf("Expected at least 3 resource patterns, got %d", len(patterns.Resources))

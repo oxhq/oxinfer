@@ -20,7 +20,7 @@ func NewContentTypeDetector(config *InferenceConfig) *DefaultContentTypeDetector
 	if config == nil {
 		config = DefaultInferenceConfig()
 	}
-	
+
 	return &DefaultContentTypeDetector{
 		config: config,
 	}
@@ -35,8 +35,8 @@ func (d *DefaultContentTypeDetector) DetectContentType(patterns []matchers.Reque
 
 	// Count occurrences of each content type indicator
 	contentTypeScores := map[string]int{
-		"multipart/form-data":                0,
-		"application/json":                   0,
+		"multipart/form-data":               0,
+		"application/json":                  0,
 		"application/x-www-form-urlencoded": 0,
 	}
 
@@ -145,11 +145,11 @@ func (d *DefaultContentTypeDetector) hasJSONMethods(methods []string) bool {
 // hasFormMethods checks if methods indicate form data patterns.
 func (d *DefaultContentTypeDetector) hasFormMethods(methods []string) bool {
 	formMethods := map[string]bool{
-		"validate":   true,
-		"validated":  true,
-		"all":        true,
-		"only":       true,
-		"except":     true,
+		"validate":  true,
+		"validated": true,
+		"all":       true,
+		"only":      true,
+		"except":    true,
 		// Note: "input" is NOT included here - it defaults to JSON in Laravel APIs
 	}
 
@@ -166,8 +166,8 @@ func (d *DefaultContentTypeDetector) hasFormMethods(methods []string) bool {
 func (d *DefaultContentTypeDetector) selectHighestPriorityContentType(scores map[string]int) string {
 	// Priority order based on Laravel conventions
 	priorityOrder := []string{
-		"multipart/form-data",      // Highest priority - file uploads are explicit
-		"application/json",         // Second - Laravel API default
+		"multipart/form-data",               // Highest priority - file uploads are explicit
+		"application/json",                  // Second - Laravel API default
 		"application/x-www-form-urlencoded", // Third - traditional forms
 	}
 
@@ -204,7 +204,7 @@ func NewKeyPathParser(config *InferenceConfig) *DefaultKeyPathParser {
 	if config == nil {
 		config = DefaultInferenceConfig()
 	}
-	
+
 	return &DefaultKeyPathParser{
 		config: config,
 	}
@@ -272,13 +272,13 @@ func (p *DefaultKeyPathParser) IsArrayNotation(segment string) (bool, string) {
 	// Find the array key between brackets
 	startIdx := strings.Index(segment, "[")
 	endIdx := strings.LastIndex(segment, "]")
-	
+
 	if startIdx >= endIdx {
 		return false, ""
 	}
 
 	arrayKey := segment[startIdx+1 : endIdx]
-	
+
 	// Empty brackets indicate array append operation
 	if arrayKey == "" {
 		return true, ""
@@ -286,7 +286,7 @@ func (p *DefaultKeyPathParser) IsArrayNotation(segment string) (bool, string) {
 
 	// Remove quotes if present
 	arrayKey = strings.Trim(arrayKey, `"'`)
-	
+
 	return true, arrayKey
 }
 
@@ -317,7 +317,7 @@ func NewShapeInferencer(
 	if propertyMerger == nil {
 		propertyMerger = NewPropertyMerger(config)
 	}
-	
+
 	return &DefaultShapeInferencer{
 		contentTypeDetector: contentTypeDetector,
 		keyPathParser:       keyPathParser,
@@ -343,7 +343,7 @@ func (s *DefaultShapeInferencer) InferRequestShape(patterns []matchers.RequestUs
 	// Convert body properties
 	if len(consolidated.Body) > 0 {
 		s.convertPropertyMapToOrderedObject(consolidated.Body, &requestInfo.Body)
-		
+
 		// Process Laravel-specific patterns (like only() calls)
 		if err := s.processLaravelPatterns(patterns, &requestInfo.Body); err != nil {
 			return nil, fmt.Errorf("failed to process Laravel patterns for body: %w", err)
@@ -369,7 +369,7 @@ func (s *DefaultShapeInferencer) processLaravelPatterns(patterns []matchers.Requ
 	// Extract Laravel method patterns that indicate nested structures
 	laravelPaths := make([]string, 0)
 	pathsToRemove := make(map[string]bool)
-	
+
 	for _, pattern := range patterns {
 		// Look for Laravel methods that suggest path-based access
 		for _, method := range pattern.Methods {
@@ -384,7 +384,7 @@ func (s *DefaultShapeInferencer) processLaravelPatterns(patterns []matchers.Requ
 				}
 			}
 		}
-		
+
 		// Also check for direct path-like keys in body parameters
 		for key := range pattern.Body {
 			if s.isPathLikeKey(key) && !s.containsPath(laravelPaths, key) {
@@ -393,12 +393,12 @@ func (s *DefaultShapeInferencer) processLaravelPatterns(patterns []matchers.Requ
 			}
 		}
 	}
-	
+
 	// Remove the path-like keys from target since they will be replaced with nested structure
 	for pathKey := range pathsToRemove {
 		s.removePropertyFromTarget(target, pathKey)
 	}
-	
+
 	// If we found Laravel paths, create nested structures
 	if len(laravelPaths) > 0 {
 		nestedObj, err := MergePaths(s.keyPathParser, laravelPaths)
@@ -409,7 +409,7 @@ func (s *DefaultShapeInferencer) processLaravelPatterns(patterns []matchers.Requ
 				fmt.Sprintf("paths: %v", laravelPaths),
 			)
 		}
-		
+
 		// Merge the nested structure into the target
 		if err := mergeNestedObjects(target, nestedObj); err != nil {
 			return NewShapeInferenceError(
@@ -419,7 +419,7 @@ func (s *DefaultShapeInferencer) processLaravelPatterns(patterns []matchers.Requ
 			)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -427,7 +427,7 @@ func (s *DefaultShapeInferencer) processLaravelPatterns(patterns []matchers.Requ
 func (s *DefaultShapeInferencer) removePropertyFromTarget(target *OrderedObject, key string) {
 	// Remove from properties map
 	delete(target.Properties, key)
-	
+
 	// Remove from order slice
 	newOrder := make([]string, 0, len(target.Order))
 	for _, orderKey := range target.Order {
@@ -444,17 +444,17 @@ func (s *DefaultShapeInferencer) isPathLikeKey(key string) bool {
 	if strings.Contains(key, ".") {
 		return true
 	}
-	
+
 	// Check for wildcard notation
 	if strings.Contains(key, "*") {
 		return true
 	}
-	
+
 	// Check for array notation
 	if strings.Contains(key, "[") && strings.Contains(key, "]") {
 		return true
 	}
-	
+
 	return false
 }
 
@@ -542,7 +542,7 @@ func (s *DefaultShapeInferencer) ConsolidatePatterns(patterns []matchers.Request
 }
 
 // mergeProperties merges properties from source into target map using intelligent type inference.
-func (s *DefaultShapeInferencer) mergeProperties(source map[string]interface{}, target map[string]*PropertyInfo) {
+func (s *DefaultShapeInferencer) mergeProperties(source map[string]any, target map[string]*PropertyInfo) {
 	// Convert the source map to PropertyInfo using PropertyMerger
 	sourceObj, err := s.propertyMerger.ConvertToOrderedObject(source)
 	if err != nil {
@@ -554,7 +554,7 @@ func (s *DefaultShapeInferencer) mergeProperties(source map[string]interface{}, 
 		}
 		return
 	}
-	
+
 	// Merge the converted properties
 	for key, newProp := range sourceObj.Properties {
 		if existing, exists := target[key]; exists {
@@ -573,7 +573,7 @@ func (s *DefaultShapeInferencer) mergeProperties(source map[string]interface{}, 
 }
 
 // inferPropertyType infers PropertyInfo from an interface{} value (fallback method).
-func (s *DefaultShapeInferencer) inferPropertyType(value interface{}) *PropertyInfo {
+func (s *DefaultShapeInferencer) inferPropertyType(value any) *PropertyInfo {
 	switch v := value.(type) {
 	case string:
 		return CreateStringProperty("", "")
@@ -581,7 +581,7 @@ func (s *DefaultShapeInferencer) inferPropertyType(value interface{}) *PropertyI
 		return CreateNumberProperty("", "")
 	case bool:
 		return CreateStringProperty("", "") // Laravel often treats booleans as strings
-	case map[string]interface{}:
+	case map[string]any:
 		if len(v) == 0 {
 			return CreateStringProperty("", "") // Default for empty objects
 		}
@@ -620,21 +620,21 @@ func BuildNestedObject(segments []PathSegment) *OrderedObject {
 	for i := 0; i < len(segments)-1; i++ {
 		segment := segments[i]
 		nextSegment := segments[i+1]
-		
+
 		var prop *PropertyInfo
-		
+
 		// Check if the NEXT segment is a wildcard - if so, current segment should be an array
 		if nextSegment.IsWildcard {
 			// Create array property - the next segment is a wildcard, so this should be an array
 			nestedObj := CreateEmptyOrderedObject()
 			itemProp := CreateObjectProperty(nestedObj, "")
 			prop = CreateArrayProperty(itemProp, "")
-			
+
 			// Add the property with the current segment key
 			current.AddProperty(segment.Key, prop)
 			// Move to the array item properties for next iteration
 			current = prop.Items.Properties
-			
+
 			// Skip the wildcard segment since we've handled it
 			i++ // This will skip the next iteration which would be the wildcard
 		} else if segment.IsArray {
@@ -642,14 +642,14 @@ func BuildNestedObject(segments []PathSegment) *OrderedObject {
 			nestedObj := CreateEmptyOrderedObject()
 			itemProp := CreateObjectProperty(nestedObj, "")
 			prop = CreateArrayProperty(itemProp, "")
-			
+
 			current.AddProperty(segment.Key, prop)
 			current = prop.Items.Properties
 		} else {
 			// Regular object property
 			nestedObj := CreateEmptyOrderedObject()
 			prop = CreateObjectProperty(nestedObj, "")
-			
+
 			current.AddProperty(segment.Key, prop)
 			current = prop.Properties
 		}
@@ -657,12 +657,12 @@ func BuildNestedObject(segments []PathSegment) *OrderedObject {
 
 	// Handle the final segment - this becomes a terminal property
 	finalSegment := segments[len(segments)-1]
-	
+
 	// Skip if the final segment is a wildcard (it was already handled)
 	if finalSegment.IsWildcard {
 		return root
 	}
-	
+
 	var finalProp *PropertyInfo
 
 	if finalSegment.IsArray {
@@ -685,7 +685,7 @@ func PathSegmentsToNestedObject(parser KeyPathParser, path string) (*OrderedObje
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return BuildNestedObject(segments), nil
 }
 
@@ -697,7 +697,7 @@ func MergePaths(parser KeyPathParser, paths []string) (*OrderedObject, error) {
 	}
 
 	root := CreateEmptyOrderedObject()
-	
+
 	for _, path := range paths {
 		pathObject, err := PathSegmentsToNestedObject(parser, path)
 		if err != nil {
@@ -707,7 +707,7 @@ func MergePaths(parser KeyPathParser, paths []string) (*OrderedObject, error) {
 				"merging multiple paths",
 			)
 		}
-		
+
 		if err := mergeNestedObjects(root, pathObject); err != nil {
 			return nil, NewShapeInferenceError(
 				ErrorTypeKeyPathParsing,
@@ -716,7 +716,7 @@ func MergePaths(parser KeyPathParser, paths []string) (*OrderedObject, error) {
 			)
 		}
 	}
-	
+
 	return root, nil
 }
 
@@ -725,7 +725,7 @@ func mergeNestedObjects(target, source *OrderedObject) error {
 	if source == nil || source.IsEmpty() {
 		return nil
 	}
-	
+
 	// Process properties in deterministic order
 	keys := source.Order
 	if len(keys) == 0 {
@@ -742,13 +742,13 @@ func mergeNestedObjects(target, source *OrderedObject) error {
 			}
 		}
 	}
-	
+
 	for _, key := range keys {
 		sourceProp := source.Properties[key]
 		if sourceProp == nil {
 			continue
 		}
-		
+
 		if existingProp, exists := target.GetProperty(key); exists {
 			// Property exists, need to merge
 			if err := mergePropertyInfos(existingProp, sourceProp); err != nil {
@@ -759,7 +759,7 @@ func mergeNestedObjects(target, source *OrderedObject) error {
 			target.AddProperty(key, sourceProp.Clone())
 		}
 	}
-	
+
 	return nil
 }
 
@@ -773,7 +773,7 @@ func mergePropertyInfos(target, source *PropertyInfo) error {
 		}
 		return nil
 	}
-	
+
 	// Handle object type merging
 	if target.Type == PropertyTypeObject && source.Type == PropertyTypeObject {
 		if target.Properties == nil {
@@ -782,14 +782,14 @@ func mergePropertyInfos(target, source *PropertyInfo) error {
 			return mergeNestedObjects(target.Properties, source.Properties)
 		}
 	}
-	
+
 	// Handle array type merging
 	if target.Type == PropertyTypeArray && source.Type == PropertyTypeArray {
 		if target.Items != nil && source.Items != nil {
 			return mergePropertyInfos(target.Items, source.Items)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -803,7 +803,7 @@ func NewPropertyMerger(config *InferenceConfig) *DefaultPropertyMerger {
 	if config == nil {
 		config = DefaultInferenceConfig()
 	}
-	
+
 	return &DefaultPropertyMerger{
 		config: config,
 	}
@@ -818,14 +818,14 @@ func (m *DefaultPropertyMerger) MergeProperties(props []*PropertyInfo) (*Propert
 			"MergeProperties",
 		)
 	}
-	
+
 	if len(props) == 1 {
 		return props[0].Clone(), nil
 	}
-	
+
 	// Start with the first property as base
 	result := props[0].Clone()
-	
+
 	// Merge remaining properties
 	for i := 1; i < len(props); i++ {
 		if err := m.mergeIntoProperty(result, props[i]); err != nil {
@@ -836,28 +836,28 @@ func (m *DefaultPropertyMerger) MergeProperties(props []*PropertyInfo) (*Propert
 			)
 		}
 	}
-	
+
 	return result, nil
 }
 
 // ConvertToOrderedObject converts raw map data from matchers to structured OrderedObject.
-func (m *DefaultPropertyMerger) ConvertToOrderedObject(data map[string]interface{}) (*OrderedObject, error) {
+func (m *DefaultPropertyMerger) ConvertToOrderedObject(data map[string]any) (*OrderedObject, error) {
 	if len(data) == 0 {
 		return CreateEmptyOrderedObject(), nil
 	}
-	
+
 	result := CreateEmptyOrderedObject()
-	
+
 	// Sort keys for deterministic processing
 	keys := make([]string, 0, len(data))
 	for key := range data {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	
+
 	for _, key := range keys {
 		value := data[key]
-		
+
 		// Convert the value to PropertyInfo
 		propInfo, err := m.convertValueToPropertyInfo(value)
 		if err != nil {
@@ -867,10 +867,10 @@ func (m *DefaultPropertyMerger) ConvertToOrderedObject(data map[string]interface
 				fmt.Sprintf("ConvertToOrderedObject: %T", value),
 			)
 		}
-		
+
 		result.AddProperty(key, propInfo)
 	}
-	
+
 	return result, nil
 }
 
@@ -879,25 +879,25 @@ func (m *DefaultPropertyMerger) mergeIntoProperty(target, source *PropertyInfo) 
 	if source == nil {
 		return nil
 	}
-	
+
 	// Handle type conflicts with intelligent resolution
 	resolvedType, err := m.resolveTypeConflict(target.Type, source.Type)
 	if err != nil {
 		return err
 	}
-	
+
 	target.Type = resolvedType
-	
+
 	// Merge descriptions (prefer non-empty)
 	if target.Description == "" && source.Description != "" {
 		target.Description = source.Description
 	}
-	
+
 	// Merge formats (prefer non-empty)
 	if target.Format == "" && source.Format != "" {
 		target.Format = source.Format
 	}
-	
+
 	// Handle type-specific merging
 	switch target.Type {
 	case PropertyTypeObject:
@@ -915,12 +915,12 @@ func (m *DefaultPropertyMerger) resolveTypeConflict(type1, type2 PropertyType) (
 	if type1 == type2 {
 		return type1, nil
 	}
-	
+
 	if !m.config.MergeSimilarTypes {
 		// Return the first type if merging is disabled
 		return type1, nil
 	}
-	
+
 	// Define priority order: Object > Array > File > Number > String
 	typePriority := map[PropertyType]int{
 		PropertyTypeObject: 5,
@@ -929,19 +929,19 @@ func (m *DefaultPropertyMerger) resolveTypeConflict(type1, type2 PropertyType) (
 		PropertyTypeNumber: 2,
 		PropertyTypeString: 1,
 	}
-	
+
 	priority1, exists1 := typePriority[type1]
 	priority2, exists2 := typePriority[type2]
-	
+
 	if !exists1 || !exists2 {
 		return PropertyTypeString, nil // Default fallback
 	}
-	
+
 	// Return the type with higher priority
 	if priority1 >= priority2 {
 		return type1, nil
 	}
-	
+
 	return type2, nil
 }
 
@@ -951,12 +951,12 @@ func (m *DefaultPropertyMerger) mergeObjectProperties(target, source *PropertyIn
 	if target.Properties == nil {
 		target.Properties = CreateEmptyOrderedObject()
 	}
-	
+
 	// If source is an object, merge its properties
 	if source.Type == PropertyTypeObject && source.Properties != nil {
 		return mergeNestedObjects(target.Properties, source.Properties)
 	}
-	
+
 	return nil
 }
 
@@ -970,44 +970,44 @@ func (m *DefaultPropertyMerger) mergeArrayProperties(target, source *PropertyInf
 			return m.mergeIntoProperty(target.Items, source.Items)
 		}
 	}
-	
+
 	return nil
 }
 
 // convertValueToPropertyInfo converts an interface{} value to PropertyInfo.
-func (m *DefaultPropertyMerger) convertValueToPropertyInfo(value interface{}) (*PropertyInfo, error) {
+func (m *DefaultPropertyMerger) convertValueToPropertyInfo(value any) (*PropertyInfo, error) {
 	switch v := value.(type) {
 	case string:
 		return CreateStringProperty("", ""), nil
-		
+
 	case int, int32, int64:
 		return CreateNumberProperty("", "integer"), nil
-		
+
 	case float32, float64:
 		return CreateNumberProperty("", "float"), nil
-		
+
 	case bool:
 		// Laravel often treats booleans as strings in request validation
 		return CreateStringProperty("", ""), nil
-		
-	case []interface{}:
+
+	case []any:
 		// Handle arrays
 		if len(v) == 0 {
 			// Empty array - assume string items
 			return CreateArrayProperty(CreateStringProperty("", ""), ""), nil
 		}
-		
+
 		// Infer item type from first element
 		itemProp, err := m.convertValueToPropertyInfo(v[0])
 		if err != nil {
 			return nil, err
 		}
-		
+
 		// Merge with other elements if they exist
 		if len(v) > 1 {
 			allItems := make([]*PropertyInfo, len(v))
 			allItems[0] = itemProp
-			
+
 			for i := 1; i < len(v); i++ {
 				itemProp2, err := m.convertValueToPropertyInfo(v[i])
 				if err != nil {
@@ -1015,29 +1015,29 @@ func (m *DefaultPropertyMerger) convertValueToPropertyInfo(value interface{}) (*
 				}
 				allItems[i] = itemProp2
 			}
-			
+
 			mergedItem, err := m.MergeProperties(allItems)
 			if err != nil {
 				return nil, err
 			}
 			itemProp = mergedItem
 		}
-		
+
 		return CreateArrayProperty(itemProp, ""), nil
-		
-	case map[string]interface{}:
+
+	case map[string]any:
 		// Handle nested objects
 		nestedObj, err := m.ConvertToOrderedObject(v)
 		if err != nil {
 			return nil, err
 		}
-		
+
 		return CreateObjectProperty(nestedObj, ""), nil
-		
+
 	case nil:
 		// Null values default to string
 		return CreateStringProperty("", ""), nil
-		
+
 	default:
 		// Unknown types default to string
 		return CreateStringProperty("", ""), nil

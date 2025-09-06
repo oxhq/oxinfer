@@ -220,20 +220,20 @@ func (o *DefaultOrchestrator) RunParsingPhase(ctx context.Context, files []index
 		// Process successful result
 		if parseResult != nil {
 			// Extract file path from result
-			if resultMap, ok := parseResult.(*map[string]interface{}); ok {
+			if resultMap, ok := parseResult.(*map[string]any); ok {
 				if filePath, ok := (*resultMap)["filePath"].(string); ok {
 					// Compute relative path from project root
 					relativePath, err := filepath.Rel(o.config.ProjectRoot, filePath)
 					if err != nil {
 						relativePath = filePath // Fallback to absolute path
 					}
-					
+
 					// Extract namespace from result if available
 					namespace := ""
 					if ns, ok := (*resultMap)["namespace"].(string); ok {
 						namespace = ns
 					}
-					
+
 					parsedFile := ParsedFile{
 						FilePath:     filePath,
 						RelativePath: relativePath,
@@ -446,14 +446,14 @@ func (o *DefaultOrchestrator) SetProgressCallback(callback func(*PipelineProgres
 func (o *DefaultOrchestrator) ClearCaches() {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	
+
 	// Clear results and stats
 	o.results = &PipelineResults{}
 	o.stats = &PipelineStats{}
 	o.progress = &PipelineProgress{
 		Phase: PipelinePhaseInitializing,
 	}
-	
+
 	// Clear component registry caches
 	if o.registry != nil {
 		o.registry.ClearCaches()
@@ -523,7 +523,7 @@ func (o *DefaultOrchestrator) createPatternMatcher() (matchers.CompositePatternM
 
 	// Create matcher configuration with enabled patterns
 	config := matchers.DefaultMatcherConfig()
-	
+
 	// Apply feature flags from manifest to matcher configuration
 	if o.config.MatcherConfig != nil {
 		// Use the existing matcher config from pipeline config
@@ -539,9 +539,6 @@ func (o *DefaultOrchestrator) createPatternMatcher() (matchers.CompositePatternM
 	// Extract the composite matcher from the processor
 	// The processor contains a composite matcher that has all individual matchers registered
 	composite := processor.GetComposite()
-	if composite == nil {
-		return nil, fmt.Errorf("pattern matching processor has no composite matcher")
-	}
 
 	return composite, nil
 }
@@ -563,7 +560,7 @@ func (o *DefaultOrchestrator) parseSyntaxTree(ctx context.Context, filePath stri
 	if !ok {
 		return nil, fmt.Errorf("PHPParser does not support syntax tree parsing: %T", o.registry.PHPParser)
 	}
-	
+
 	// Parse the file to get syntax tree
 	tree, err := treeSitterParser.ParseFile(ctx, filePath)
 	if err != nil {
@@ -573,89 +570,6 @@ func (o *DefaultOrchestrator) parseSyntaxTree(ctx context.Context, filePath stri
 	return tree, nil
 }
 
-// extractMethods extracts all methods from a slice of classes.
-func extractMethods(classes []parser.PHPClass) []parser.PHPMethod {
-	var methods []parser.PHPMethod
-	for _, class := range classes {
-		methods = append(methods, class.Methods...)
-	}
-	return methods
-}
-
-// parseAndExtractFile parses a single file and extracts PHP constructs.
-func (o *DefaultOrchestrator) parseAndExtractFile(ctx context.Context, file indexer.FileInfo, extractor parser.PHPConstructExtractor, results *ParseResults) (time.Duration, error) {
-	fileDuration := time.Duration(0)
-
-	// Cast to TreeSitterParser for syntax tree access
-	treeSitterParser, ok := o.registry.PHPParser.(parser.TreeSitterParser)
-	if !ok {
-		return fileDuration, fmt.Errorf("PHPParser does not support syntax tree parsing: %T", o.registry.PHPParser)
-	}
-	
-	// Parse the file with timeout handling
-	tree, err := treeSitterParser.ParseFile(ctx, file.Path)
-	if err != nil {
-		return fileDuration, fmt.Errorf("failed to parse file %s: %w", file.Path, err)
-	}
-	// Note: SyntaxTree doesn't require explicit cleanup - handled by GC
-
-	// Extract PHP constructs from the syntax tree
-	structure, err := extractor.ExtractAllConstructs(tree)
-	if err != nil {
-		return fileDuration, fmt.Errorf("failed to extract constructs from %s: %w", file.Path, err)
-	}
-
-	// Determine namespace using PSR-4 resolver if available
-	namespace := ""
-	if o.registry.PSR4Resolver != nil {
-		// For now, we'll extract namespace from the PHP file structure
-		// In the future, we could implement reverse PSR-4 lookup
-		// by matching file paths against namespace mappings
-		if structure.Namespace != nil {
-			namespace = structure.Namespace.Name
-		}
-	} else if structure.Namespace != nil {
-		namespace = structure.Namespace.Name
-	}
-
-	// Extract Laravel patterns if enabled
-	var laravelPatterns *parser.LaravelPatterns
-	if o.config.ParserConfig.EnableLaravelPatterns {
-		laravelPatterns, err = extractor.ExtractLaravelPatterns(tree)
-		if err != nil {
-			// Laravel pattern extraction is not critical, continue without it
-			laravelPatterns = &parser.LaravelPatterns{}
-		}
-	}
-
-	// Create parsed file record
-	parsedFile := ParsedFile{
-		FilePath:        file.AbsPath,
-		RelativePath:    file.Path, // Path is already relative from base directory
-		Namespace:       namespace,
-		FileStructure:   structure,
-		LaravelPatterns: laravelPatterns,
-		ParsedFromCache: false, // Would need cache integration for this
-		ParseDuration:   structure.ParseDuration,
-	}
-
-	results.ParsedFiles = append(results.ParsedFiles, parsedFile)
-
-	// Aggregate constructs across all files
-	results.Classes = append(results.Classes, structure.Classes...)
-	results.Interfaces = append(results.Interfaces, structure.Interfaces...)
-	results.Traits = append(results.Traits, structure.Traits...)
-	if structure.Namespace != nil {
-		results.Namespaces = append(results.Namespaces, *structure.Namespace)
-	}
-
-	// Extract methods from classes and add to results
-	for _, class := range structure.Classes {
-		results.Methods = append(results.Methods, class.Methods...)
-	}
-
-	return structure.ParseDuration, nil
-}
 
 // sortParseResults sorts all parsed constructs for deterministic output.
 func (o *DefaultOrchestrator) sortParseResults(results *ParseResults) {
@@ -705,28 +619,33 @@ func (o *DefaultOrchestrator) groupRequestPatternsByMethod(patterns []*matchers.
 	for _, pattern := range patterns {
 		// Create a key from controller class and method context
 		// In a more sophisticated implementation, this would extract method info from pattern context
-		key := o.extractMethodKeyFromPattern(pattern)
-		grouped[key] = append(grouped[key], pattern)
+		if key, ok := o.extractMethodKeyFromPattern(pattern); ok {
+			grouped[key] = append(grouped[key], pattern)
+		}
+		// Skip patterns that cannot be resolved to valid method keys
 	}
 
 	return grouped
 }
 
 // extractMethodKeyFromPattern extracts a method key from a request usage pattern.
-func (o *DefaultOrchestrator) extractMethodKeyFromPattern(pattern *matchers.RequestUsageMatch) string {
-	// RequestUsageMatch doesn't contain context information, so we'll need
-	// to use a simplified approach for now. In a real implementation, the
-	// matchers would provide context about where the pattern was found.
+// Returns empty string and false if cannot resolve to a valid method key.
+func (o *DefaultOrchestrator) extractMethodKeyFromPattern(pattern *matchers.RequestUsageMatch) (string, bool) {
+	// RequestUsageMatch doesn't contain sufficient context information for reliable extraction.
+	// In a real implementation, the matchers would provide context about where the pattern was found,
+	// including controller class name and method name from the AST context.
 	
-	// For now, create a key based on the methods used in the pattern
-	if len(pattern.Methods) > 0 {
-		// Use the first method as a key component
-		firstMethod := pattern.Methods[0]
-		return fmt.Sprintf("Controller::%s", firstMethod)
-	}
-
-	// Fallback to a default key
-	return "DefaultController::index"
+	// Without proper AST context, we cannot generate valid Controller::method keys.
+	// Rather than inventing placeholder keys, skip these patterns cleanly.
+	
+	// TODO: T1.3 - Enhance RequestUsageMatch to include controller context from tree-sitter analysis
+	// The matchers should extract and provide:
+	// - Controller FQCN from class declaration AST node
+	// - Method name from method declaration AST node  
+	// - File path context for proper FQCN resolution
+	// This requires coordination between pattern matching and AST context extraction.
+	
+	return "", false
 }
 
 // updateProgress updates the pipeline progress and notifies callbacks.

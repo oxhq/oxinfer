@@ -67,9 +67,9 @@ func ParseFlags(args []string) (*CLIConfig, error) {
 
 	// Set custom usage function
 	fs.Usage = func() {
-		fmt.Fprintf(fs.Output(), "Oxinfer - Laravel/PHP static analysis tool\n\n")
-		fmt.Fprintf(fs.Output(), "Usage:\n")
-		fmt.Fprintf(fs.Output(), "  oxinfer --manifest manifest.json\n")
+		_, _ = fmt.Fprintf(fs.Output(), "Oxinfer - Laravel/PHP static analysis tool\n\n")
+		_, _ = fmt.Fprintf(fs.Output(), "Usage:\n")
+		_, _ = fmt.Fprintf(fs.Output(), "  oxinfer --manifest manifest.json\n")
 		fmt.Fprintf(fs.Output(), "  oxinfer --manifest -                # read manifest from stdin\n")
 		fmt.Fprintf(fs.Output(), "  cat manifest.json | oxinfer         # stdin when piped\n")
 		fmt.Fprintf(fs.Output(), "  oxinfer --manifest manifest.json --out delta.json\n")

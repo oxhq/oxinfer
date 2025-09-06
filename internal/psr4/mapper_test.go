@@ -9,19 +9,19 @@ import (
 
 func TestDefaultClassMapper_MapClass(t *testing.T) {
 	tests := []struct {
-		name          string
-		composerData  *ComposerData
-		includeDev    bool
-		fqcn          string
-		expected      []string
-		expectError   bool
-		errorType     error
+		name         string
+		composerData *ComposerData
+		includeDev   bool
+		fqcn         string
+		expected     []string
+		expectError  bool
+		errorType    error
 	}{
 		{
 			name: "basic Laravel App namespace",
 			composerData: &ComposerData{
 				Autoload: PSR4Config{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -35,27 +35,27 @@ func TestDefaultClassMapper_MapClass(t *testing.T) {
 			name: "multiple path mappings",
 			composerData: &ComposerData{
 				Autoload: PSR4Config{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": []string{"app/", "src/"},
 					},
 				},
 			},
-			includeDev: false,
-			fqcn:       "App\\Models\\User",
-			expected:   []string{"app/Models/User.php", "src/Models/User.php"},
+			includeDev:  false,
+			fqcn:        "App\\Models\\User",
+			expected:    []string{"app/Models/User.php", "src/Models/User.php"},
 			expectError: false,
 		},
 		{
 			name: "Laravel standard mappings",
 			composerData: &ComposerData{
 				Autoload: PSR4Config{
-					PSR4: map[string]interface{}{
-						"App\\": "app/",
+					PSR4: map[string]any{
+						"App\\":               "app/",
 						"Database\\Seeders\\": "database/seeders/",
 					},
 				},
 				AutoloadDev: PSR4Config{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"Tests\\": "tests/",
 					},
 				},
@@ -69,12 +69,12 @@ func TestDefaultClassMapper_MapClass(t *testing.T) {
 			name: "exclude dev dependencies",
 			composerData: &ComposerData{
 				Autoload: PSR4Config{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
 				AutoloadDev: PSR4Config{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"Tests\\": "tests/",
 					},
 				},
@@ -88,9 +88,9 @@ func TestDefaultClassMapper_MapClass(t *testing.T) {
 			name: "longest namespace prefix wins",
 			composerData: &ComposerData{
 				Autoload: PSR4Config{
-					PSR4: map[string]interface{}{
-						"App\\": "app/",
-						"App\\Http\\": "app/Http/",
+					PSR4: map[string]any{
+						"App\\":                    "app/",
+						"App\\Http\\":              "app/Http/",
 						"App\\Http\\Controllers\\": "app/Http/Controllers/",
 					},
 				},
@@ -104,7 +104,7 @@ func TestDefaultClassMapper_MapClass(t *testing.T) {
 			name: "root namespace mapping",
 			composerData: &ComposerData{
 				Autoload: PSR4Config{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"": "src/",
 					},
 				},
@@ -118,7 +118,7 @@ func TestDefaultClassMapper_MapClass(t *testing.T) {
 			name: "invalid FQCN with forward slashes",
 			composerData: &ComposerData{
 				Autoload: PSR4Config{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -132,7 +132,7 @@ func TestDefaultClassMapper_MapClass(t *testing.T) {
 			name: "empty FQCN",
 			composerData: &ComposerData{
 				Autoload: PSR4Config{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -146,7 +146,7 @@ func TestDefaultClassMapper_MapClass(t *testing.T) {
 			name: "unmappable class",
 			composerData: &ComposerData{
 				Autoload: PSR4Config{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -160,7 +160,7 @@ func TestDefaultClassMapper_MapClass(t *testing.T) {
 			name: "single character namespace parts",
 			composerData: &ComposerData{
 				Autoload: PSR4Config{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"A\\B\\": "src/",
 					},
 				},
@@ -219,13 +219,13 @@ func TestDefaultClassMapper_GetNamespaces(t *testing.T) {
 			name: "production namespaces only",
 			composerData: &ComposerData{
 				Autoload: PSR4Config{
-					PSR4: map[string]interface{}{
-						"App\\": "app/",
+					PSR4: map[string]any{
+						"App\\":               "app/",
 						"Database\\Seeders\\": "database/seeders/",
 					},
 				},
 				AutoloadDev: PSR4Config{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"Tests\\": "tests/",
 					},
 				},
@@ -237,12 +237,12 @@ func TestDefaultClassMapper_GetNamespaces(t *testing.T) {
 			name: "include dev namespaces",
 			composerData: &ComposerData{
 				Autoload: PSR4Config{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
 				AutoloadDev: PSR4Config{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"Tests\\": "tests/",
 					},
 				},
@@ -263,7 +263,7 @@ func TestDefaultClassMapper_GetNamespaces(t *testing.T) {
 			name: "root namespace",
 			composerData: &ComposerData{
 				Autoload: PSR4Config{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"": "src/",
 					},
 				},
@@ -304,7 +304,7 @@ func TestNewClassMapper(t *testing.T) {
 			name: "valid composer data",
 			composerData: &ComposerData{
 				Autoload: PSR4Config{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -313,16 +313,16 @@ func TestNewClassMapper(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:        "nil composer data",
+			name:         "nil composer data",
 			composerData: nil,
-			includeDev:  false,
-			expectError: true,
+			includeDev:   false,
+			expectError:  true,
 		},
 		{
-			name: "empty composer data",
+			name:         "empty composer data",
 			composerData: &ComposerData{},
-			includeDev:  false,
-			expectError: false,
+			includeDev:   false,
+			expectError:  false,
 		},
 	}
 
@@ -366,7 +366,7 @@ func TestStaticClassMapper_MapClassToFile(t *testing.T) {
 			fqcn: "App\\Http\\Controllers\\UserController",
 			composerConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -379,7 +379,7 @@ func TestStaticClassMapper_MapClassToFile(t *testing.T) {
 			fqcn: "Database\\Seeders\\UserSeeder",
 			composerConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"Database\\Seeders\\": "database/seeders/",
 					},
 				},
@@ -388,18 +388,18 @@ func TestStaticClassMapper_MapClassToFile(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "nil composer config",
-			fqcn: "App\\Models\\User",
+			name:           "nil composer config",
+			fqcn:           "App\\Models\\User",
 			composerConfig: nil,
-			expectError: true,
-			errorType:   ErrInvalidFQCN,
+			expectError:    true,
+			errorType:      ErrInvalidFQCN,
 		},
 		{
 			name: "empty FQCN",
 			fqcn: "",
 			composerConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -412,7 +412,7 @@ func TestStaticClassMapper_MapClassToFile(t *testing.T) {
 			fqcn: "Vendor\\Package\\SomeClass",
 			composerConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -465,7 +465,7 @@ func TestStaticClassMapper_MapFileToClass(t *testing.T) {
 			filePath: "app/Http/Controllers/UserController.php",
 			composerConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -478,7 +478,7 @@ func TestStaticClassMapper_MapFileToClass(t *testing.T) {
 			filePath: "app/Models/User.php",
 			composerConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -491,7 +491,7 @@ func TestStaticClassMapper_MapFileToClass(t *testing.T) {
 			filePath: "database/seeders/UserSeeder.php",
 			composerConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"Database\\Seeders\\": "database/seeders/",
 					},
 				},
@@ -504,7 +504,7 @@ func TestStaticClassMapper_MapFileToClass(t *testing.T) {
 			filePath: "app/Models/User",
 			composerConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -524,7 +524,7 @@ func TestStaticClassMapper_MapFileToClass(t *testing.T) {
 			filePath: "",
 			composerConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -537,7 +537,7 @@ func TestStaticClassMapper_MapFileToClass(t *testing.T) {
 			filePath: "vendor/package/src/SomeClass.php",
 			composerConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -590,7 +590,7 @@ func TestStaticClassMapper_GetNamespaceForPath(t *testing.T) {
 			filePath: "app/Http/Controllers/UserController.php",
 			composerConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -603,7 +603,7 @@ func TestStaticClassMapper_GetNamespaceForPath(t *testing.T) {
 			filePath: "app/Models/User.php",
 			composerConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -616,7 +616,7 @@ func TestStaticClassMapper_GetNamespaceForPath(t *testing.T) {
 			filePath: "app/SomeClass.php",
 			composerConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -636,7 +636,7 @@ func TestStaticClassMapper_GetNamespaceForPath(t *testing.T) {
 			filePath: "",
 			composerConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -649,7 +649,7 @@ func TestStaticClassMapper_GetNamespaceForPath(t *testing.T) {
 			filePath: "vendor/package/src/SomeClass.php",
 			composerConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -703,7 +703,7 @@ func TestStaticClassMapper_ValidateClassMapping(t *testing.T) {
 			filePath: "app/Http/Controllers/UserController.php",
 			composerConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -716,7 +716,7 @@ func TestStaticClassMapper_ValidateClassMapping(t *testing.T) {
 			filePath: "app/Controllers/UserController.php",
 			composerConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -738,7 +738,7 @@ func TestStaticClassMapper_ValidateClassMapping(t *testing.T) {
 			filePath: "app/Models/User.php",
 			composerConfig: &ComposerConfig{
 				Autoload: AutoloadSection{
-					PSR4: map[string]interface{}{
+					PSR4: map[string]any{
 						"App\\": "app/",
 					},
 				},
@@ -776,13 +776,13 @@ func TestBidirectionalMapping(t *testing.T) {
 	// Test that class-to-file-to-class mapping is consistent
 	composerConfig := &ComposerConfig{
 		Autoload: AutoloadSection{
-			PSR4: map[string]interface{}{
-				"App\\": "app/",
+			PSR4: map[string]any{
+				"App\\":               "app/",
 				"Database\\Seeders\\": "database/seeders/",
 			},
 		},
 		AutoloadDev: AutoloadSection{
-			PSR4: map[string]interface{}{
+			PSR4: map[string]any{
 				"Tests\\": "tests/",
 			},
 		},
@@ -829,14 +829,14 @@ func TestBidirectionalMapping(t *testing.T) {
 func BenchmarkClassMapper_MapClass(b *testing.B) {
 	composerData := &ComposerData{
 		Autoload: PSR4Config{
-			PSR4: map[string]interface{}{
-				"App\\": "app/",
+			PSR4: map[string]any{
+				"App\\":                 "app/",
 				"Database\\Factories\\": "database/factories/",
-				"Database\\Seeders\\": "database/seeders/",
+				"Database\\Seeders\\":   "database/seeders/",
 			},
 		},
 		AutoloadDev: PSR4Config{
-			PSR4: map[string]interface{}{
+			PSR4: map[string]any{
 				"Tests\\": "tests/",
 			},
 		},
@@ -850,7 +850,7 @@ func BenchmarkClassMapper_MapClass(b *testing.B) {
 	testFQCNs := []string{
 		"App\\Http\\Controllers\\UserController",
 		"App\\Models\\User",
-		"Database\\Seeders\\UserSeeder", 
+		"Database\\Seeders\\UserSeeder",
 		"Tests\\Feature\\UserTest",
 		"App\\Http\\Middleware\\AuthMiddleware",
 	}
@@ -868,14 +868,14 @@ func BenchmarkClassMapper_MapClass(b *testing.B) {
 func BenchmarkClassMapper_GetNamespaces(b *testing.B) {
 	composerData := &ComposerData{
 		Autoload: PSR4Config{
-			PSR4: map[string]interface{}{
-				"App\\": "app/",
+			PSR4: map[string]any{
+				"App\\":                 "app/",
 				"Database\\Factories\\": "database/factories/",
-				"Database\\Seeders\\": "database/seeders/",
+				"Database\\Seeders\\":   "database/seeders/",
 			},
 		},
 		AutoloadDev: PSR4Config{
-			PSR4: map[string]interface{}{
+			PSR4: map[string]any{
 				"Tests\\": "tests/",
 			},
 		},
@@ -895,13 +895,13 @@ func BenchmarkClassMapper_GetNamespaces(b *testing.B) {
 func BenchmarkStaticClassMapper_MapClassToFile(b *testing.B) {
 	composerConfig := &ComposerConfig{
 		Autoload: AutoloadSection{
-			PSR4: map[string]interface{}{
-				"App\\": "app/",
+			PSR4: map[string]any{
+				"App\\":               "app/",
 				"Database\\Seeders\\": "database/seeders/",
 			},
 		},
 		AutoloadDev: AutoloadSection{
-			PSR4: map[string]interface{}{
+			PSR4: map[string]any{
 				"Tests\\": "tests/",
 			},
 		},
@@ -927,8 +927,8 @@ func BenchmarkStaticClassMapper_MapClassToFile(b *testing.B) {
 func BenchmarkStaticClassMapper_MapFileToClass(b *testing.B) {
 	composerConfig := &ComposerConfig{
 		Autoload: AutoloadSection{
-			PSR4: map[string]interface{}{
-				"App\\": "app/",
+			PSR4: map[string]any{
+				"App\\":               "app/",
 				"Database\\Seeders\\": "database/seeders/",
 			},
 		},
@@ -993,8 +993,8 @@ func BenchmarkValidateFQCNFormat(b *testing.B) {
 func TestMappingPerformance(t *testing.T) {
 	composerData := &ComposerData{
 		Autoload: PSR4Config{
-			PSR4: map[string]interface{}{
-				"App\\": "app/",
+			PSR4: map[string]any{
+				"App\\":               "app/",
 				"Database\\Seeders\\": "database/seeders/",
 			},
 		},
@@ -1037,7 +1037,7 @@ func TestMappingPerformance(t *testing.T) {
 func TestDeterministicMapping(t *testing.T) {
 	composerData := &ComposerData{
 		Autoload: PSR4Config{
-			PSR4: map[string]interface{}{
+			PSR4: map[string]any{
 				"Multi\\": []string{"src/Multi", "lib/Multi", "app/Multi"},
 			},
 		},
@@ -1050,14 +1050,14 @@ func TestDeterministicMapping(t *testing.T) {
 
 	// Test that multiple calls return the same ordered results
 	fqcn := "Multi\\Package\\SomeClass"
-	
+
 	var firstResult, secondResult []string
-	
+
 	firstResult, err = mapper.MapClass(fqcn)
 	if err != nil {
 		t.Fatalf("MapClass() failed: %v", err)
 	}
-	
+
 	secondResult, err = mapper.MapClass(fqcn)
 	if err != nil {
 		t.Fatalf("MapClass() failed: %v", err)
@@ -1076,4 +1076,3 @@ func TestDeterministicMapping(t *testing.T) {
 		t.Errorf("Results are not sorted: %v", firstResult)
 	}
 }
-

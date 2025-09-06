@@ -17,22 +17,22 @@ type QueryDefinition struct {
 
 // HTTPStatusQueries contains tree-sitter queries for HTTP status detection.
 var HTTPStatusQueries = []QueryDefinition{
-    {
-        Name:        "response_direct_status",
-        Description: "Detect response(data, status) direct calls",
-        Pattern: `
+	{
+		Name:        "response_direct_status",
+		Description: "Detect response(data, status) direct calls",
+		Pattern: `
 (function_call_expression
   function: (name) @function (#eq? @function "response")
   arguments: (arguments
     (argument)
     (argument (integer) @status)))
 `,
-        Confidence: 0.90,
-    },
-    {
-        Name:        "response_status_method",
-        Description: "Detect ->status() method calls on response objects",
-        Pattern: `
+		Confidence: 0.90,
+	},
+	{
+		Name:        "response_status_method",
+		Description: "Detect ->status() method calls on response objects",
+		Pattern: `
 (member_call_expression
   object: (function_call_expression
     function: (name) @function (#eq? @function "response"))
@@ -40,12 +40,12 @@ var HTTPStatusQueries = []QueryDefinition{
   arguments: (arguments
     (argument (integer) @status)))
 `,
-        Confidence: 0.95,
-    },
-    {
-        Name:        "response_json_with_status",
-        Description: "Detect response()->json(data, status) patterns",
-        Pattern: `
+		Confidence: 0.95,
+	},
+	{
+		Name:        "response_json_with_status",
+		Description: "Detect response()->json(data, status) patterns",
+		Pattern: `
 (member_call_expression
   object: (member_call_expression
     object: (function_call_expression
@@ -55,12 +55,12 @@ var HTTPStatusQueries = []QueryDefinition{
     (argument)
     (argument (integer) @status)))
 `,
-        Confidence: 0.95,
-    },
-    {
-        Name:        "return_response_json_status",
-        Description: "Detect return response()->json(data, status) patterns",
-        Pattern: `
+		Confidence: 0.95,
+	},
+	{
+		Name:        "return_response_json_status",
+		Description: "Detect return response()->json(data, status) patterns",
+		Pattern: `
 (return_statement
   (member_call_expression
     object: (member_call_expression
@@ -71,12 +71,12 @@ var HTTPStatusQueries = []QueryDefinition{
       (argument)
       (argument (integer) @status))))
 `,
-        Confidence: 0.95,
-    },
-    {
-        Name:        "variable_response_status",
-        Description: "Detect status assignment to response variables",
-        Pattern: `
+		Confidence: 0.95,
+	},
+	{
+		Name:        "variable_response_status",
+		Description: "Detect status assignment to response variables",
+		Pattern: `
 (assignment_expression
   left: (variable_name)
   right: (member_call_expression
@@ -86,19 +86,19 @@ var HTTPStatusQueries = []QueryDefinition{
     arguments: (arguments
       (argument (integer) @status))))
 `,
-        Confidence: 0.85,
-    },
-    {
-        Name:        "abort_call",
-        Description: "Detect abort() calls with status codes",
-        Pattern: `
+		Confidence: 0.85,
+	},
+	{
+		Name:        "abort_call",
+		Description: "Detect abort() calls with status codes",
+		Pattern: `
 (function_call_expression
   function: (name) @function (#eq? @function "abort")
   arguments: (arguments
     (argument (integer) @status)))
 `,
-        Confidence: 1.0,
-    },
+		Confidence: 0.95,
+	},
 }
 
 // RequestUsageQueries contains tree-sitter queries for request usage detection.
@@ -155,30 +155,30 @@ var RequestUsageQueries = []QueryDefinition{
 `,
 		Confidence: 0.88,
 	},
-    {
-        Name:        "request_only",
-        Description: "Detect $request->only() calls with parameter arrays",
-        Pattern: `
+	{
+		Name:        "request_only",
+		Description: "Detect $request->only() calls with parameter arrays",
+		Pattern: `
 (member_call_expression
   object: (variable_name) @request (#match? @request "\\$request")
   name: (name) @method (#eq? @method "only")
   arguments: (arguments
     (argument (array_creation_expression) @arr)))
 `,
-        Confidence: 0.87,
-    },
-    {
-        Name:        "request_except",
-        Description: "Detect $request->except() calls with parameter arrays",
-        Pattern: `
+		Confidence: 0.87,
+	},
+	{
+		Name:        "request_except",
+		Description: "Detect $request->except() calls with parameter arrays",
+		Pattern: `
 (member_call_expression
   object: (variable_name) @request (#match? @request "\\$request")
   name: (name) @method (#eq? @method "except")
   arguments: (arguments
     (argument (array_creation_expression) @arr)))
 `,
-        Confidence: 0.85,
-    },
+		Confidence: 0.85,
+	},
 	{
 		Name:        "request_validate",
 		Description: "Detect $request->validate() calls",
@@ -187,51 +187,51 @@ var RequestUsageQueries = []QueryDefinition{
   object: (variable_name) @request (#match? @request "\\$request")
   name: (name) @method (#eq? @method "validate"))
 `,
-		Confidence: 0.80,
+		Confidence: 0.85,
 	},
 }
 
 // ResourceUsageQueries contains tree-sitter queries for Laravel Resource detection.
 var ResourceUsageQueries = []QueryDefinition{
-    {
-        Name:        "resource_collection_static",
-        Description: "Detect ResourceClass::collection() static calls",
-        Pattern: `
+	{
+		Name:        "resource_collection_static",
+		Description: "Detect ResourceClass::collection() static calls",
+		Pattern: `
 (scoped_call_expression
   scope: (_) @class (#match? @class ".*Resource$")
   name: (name) @method (#eq? @method "collection"))
 `,
-        Confidence: 1.0,
-    },
-    {
-        Name:        "resource_make_static",
-        Description: "Detect ResourceClass::make() static calls",
-        Pattern: `
+		Confidence: 0.95,
+	},
+	{
+		Name:        "resource_make_static",
+		Description: "Detect ResourceClass::make() static calls",
+		Pattern: `
 (scoped_call_expression
   scope: (_) @class (#match? @class ".*Resource$")
   name: (name) @method (#eq? @method "make"))
 `,
-        Confidence: 0.95,
-    },
-    {
-        Name:        "new_resource_instantiation",
-        Description: "Detect new ResourceClass() instantiation",
-        Pattern: `
+		Confidence: 0.95,
+	},
+	{
+		Name:        "new_resource_instantiation",
+		Description: "Detect new ResourceClass() instantiation",
+		Pattern: `
 (object_creation_expression
   (_) @class (#match? @class ".*Resource$"))
 `,
-        Confidence: 0.95,
-    },
-    {
-        Name:        "return_new_resource",
-        Description: "Detect return new ResourceClass() patterns",
-        Pattern: `
+		Confidence: 0.95,
+	},
+	{
+		Name:        "return_new_resource",
+		Description: "Detect return new ResourceClass() patterns",
+		Pattern: `
 (return_statement
   (object_creation_expression
     (_) @class (#match? @class ".*Resource$")))
 `,
-        Confidence: 0.98,
-    },
+		Confidence: 0.95,
+	},
 	{
 		Name:        "return_resource_collection",
 		Description: "Detect return ResourceClass::collection() patterns",
@@ -241,7 +241,7 @@ var ResourceUsageQueries = []QueryDefinition{
     scope: (name) @class (#match? @class ".*Resource$")
     name: (name) @method (#eq? @method "collection")))
 `,
-		Confidence: 1.0,
+		Confidence: 0.95,
 	},
 	{
 		Name:        "variable_resource_assignment",
@@ -266,7 +266,7 @@ var PivotUsageQueries = []QueryDefinition{
   name: (name) @method (#eq? @method "withPivot")
   arguments: (arguments) @args)
 `,
-		Confidence: 1.0,
+		Confidence: 0.95,
 	},
 	{
 		Name:        "with_timestamps_method",
@@ -275,7 +275,7 @@ var PivotUsageQueries = []QueryDefinition{
 (member_call_expression
   name: (name) @method (#eq? @method "withTimestamps"))
 `,
-		Confidence: 1.0,
+		Confidence: 0.95,
 	},
 	{
 		Name:        "pivot_accessor_alias",
@@ -310,7 +310,7 @@ var PivotUsageQueries = []QueryDefinition{
   name: (name) @pivot_method (#match? @pivot_method "^(withPivot|withTimestamps|as)$")
   arguments: (arguments) @args)
 `,
-		Confidence: 1.0,
+		Confidence: 0.95,
 	},
 }
 
@@ -324,7 +324,7 @@ var AttributeUsageQueries = []QueryDefinition{
   name: (name) @method_name
   return_type: (named_type (name) @return_type (#eq? @return_type "Attribute")))
 `,
-		Confidence: 1.0,
+		Confidence: 0.95,
 	},
 	{
 		Name:        "legacy_get_attribute",
@@ -431,7 +431,7 @@ var ScopeUsageQueries = []QueryDefinition{
   name: (name) @scope_name
   arguments: (arguments) @args)
 `,
-		Confidence: 0.70,
+		Confidence: 0.85,
 	},
 	{
 		Name:        "scope_without_prefix_on_model_query",
@@ -488,7 +488,7 @@ var ScopeUsageQueries = []QueryDefinition{
   name: (name) @scope_method
   arguments: (arguments) @args)
 `,
-		Confidence: 0.70,
+		Confidence: 0.85,
 	},
 	{
 		Name:        "whereable_scope_pattern",
@@ -497,7 +497,7 @@ var ScopeUsageQueries = []QueryDefinition{
 (member_call_expression
   name: (name) @method_name)
 `,
-		Confidence: 0.50,
+		Confidence: 0.85,
 	},
 }
 
@@ -512,7 +512,7 @@ var PolymorphicUsageQueries = []QueryDefinition{
   name: (name) @method (#eq? @method "morphTo")
   arguments: (arguments) @args)
 `,
-		Confidence: 1.0,
+		Confidence: 0.95,
 	},
 	{
 		Name:        "morph_one_relationship",
@@ -524,7 +524,7 @@ var PolymorphicUsageQueries = []QueryDefinition{
   arguments: (arguments
     (argument) @model_arg) @args)
 `,
-		Confidence: 1.0,
+		Confidence: 0.95,
 	},
 	{
 		Name:        "morph_many_relationship",
@@ -536,7 +536,7 @@ var PolymorphicUsageQueries = []QueryDefinition{
   arguments: (arguments
     (argument) @model_arg) @args)
 `,
-		Confidence: 1.0,
+		Confidence: 0.95,
 	},
 	{
 		Name:        "relation_morph_map",
@@ -548,7 +548,7 @@ var PolymorphicUsageQueries = []QueryDefinition{
   arguments: (arguments
     (argument (array_creation_expression) @mapping_array)))
 `,
-		Confidence: 1.0,
+		Confidence: 0.95,
 	},
 	{
 		Name:        "polymorphic_in_return_statement",
@@ -586,7 +586,7 @@ var PolymorphicUsageQueries = []QueryDefinition{
     (argument (string) @type_arg)
     (argument (string) @id_arg) @args))
 `,
-		Confidence: 0.98,
+		Confidence: 0.95,
 	},
 	{
 		Name:        "morph_one_with_name",
@@ -642,7 +642,7 @@ var PolymorphicUsageQueries = []QueryDefinition{
 		Pattern: `
 (string) @type_column (#match? @type_column ".*_type$")
 `,
-		Confidence: 0.70,
+		Confidence: 0.85,
 	},
 	{
 		Name:        "dynamic_polymorphic_id_column",
@@ -650,7 +650,7 @@ var PolymorphicUsageQueries = []QueryDefinition{
 		Pattern: `
 (string) @id_column (#match? @id_column ".*_id$")
 `,
-		Confidence: 0.70,
+		Confidence: 0.85,
 	},
 	{
 		Name:        "polymorphic_method_definition",
@@ -660,7 +660,7 @@ var PolymorphicUsageQueries = []QueryDefinition{
   name: (name) @method_name (#match? @method_name "^(.*able|.*morphic)$")
   body: (compound_statement) @body)
 `,
-		Confidence: 0.60,
+		Confidence: 0.85,
 	},
 }
 
@@ -699,7 +699,7 @@ func (qc *QueryCompiler) CompileQuery(def QueryDefinition) (*sitter.Query, error
 // CompileQueries compiles multiple query definitions.
 func (qc *QueryCompiler) CompileQueries(definitions []QueryDefinition) ([]*sitter.Query, error) {
 	queries := make([]*sitter.Query, 0, len(definitions))
-	
+
 	for _, def := range definitions {
 		query, err := qc.CompileQuery(def)
 		if err != nil {
@@ -707,7 +707,7 @@ func (qc *QueryCompiler) CompileQueries(definitions []QueryDefinition) ([]*sitte
 		}
 		queries = append(queries, query)
 	}
-	
+
 	return queries, nil
 }
 
@@ -789,7 +789,7 @@ var BroadcastUsageQueries = []QueryDefinition{
     (argument (string) @channel_name)
     (argument) @callback) @args)
 `,
-		Confidence: 1.0,
+		Confidence: 0.95,
 	},
 	{
 		Name:        "broadcast_private_channel",
@@ -802,7 +802,7 @@ var BroadcastUsageQueries = []QueryDefinition{
     (argument (string) @channel_name)
     (argument) @callback) @args)
 `,
-		Confidence: 1.0,
+		Confidence: 0.95,
 	},
 	{
 		Name:        "broadcast_presence_channel",
@@ -815,7 +815,7 @@ var BroadcastUsageQueries = []QueryDefinition{
     (argument (string) @channel_name)
     (argument) @callback) @args)
 `,
-		Confidence: 1.0,
+		Confidence: 0.95,
 	},
 	{
 		Name:        "broadcast_channel_with_namespace",
@@ -861,7 +861,7 @@ var BroadcastUsageQueries = []QueryDefinition{
     (argument (string) @channel_name)
     (argument) @callback) @args)
 `,
-		Confidence: 0.80,
+		Confidence: 0.85,
 	},
 	{
 		Name:        "closure_with_user_param",
@@ -873,7 +873,7 @@ var BroadcastUsageQueries = []QueryDefinition{
       name: (variable_name) @user_param (#match? @user_param "\\$(user|auth)")))
   body: (compound_statement) @closure_body)
 `,
-		Confidence: 0.75,
+		Confidence: 0.85,
 	},
 	{
 		Name:        "return_auth_check",
@@ -884,7 +884,7 @@ var BroadcastUsageQueries = []QueryDefinition{
     object: (variable_name) @user_var
     name: (name) @method) @auth_check)
 `,
-		Confidence: 0.70,
+		Confidence: 0.85,
 	},
 	{
 		Name:        "broadcast_channel_class_usage",
@@ -896,7 +896,7 @@ var BroadcastUsageQueries = []QueryDefinition{
     name: (name) @method)
   arguments: (arguments) @args)
 `,
-		Confidence: 0.65,
+		Confidence: 0.85,
 	},
 }
 

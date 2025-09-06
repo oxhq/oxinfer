@@ -16,23 +16,23 @@ type StatsCollector interface {
 	RecordTotalFiles(count int)
 	RecordProcessingTime(phase string, duration time.Duration)
 	RecordError(phase string, err error)
-	
+
 	// Pattern matching statistics
 	RecordMatch(matchType string, count int)
-	
+
 	// Shape inference statistics
 	RecordInferenceOperation(operation string, count int)
 	RecordPropertiesInferred(count int)
-	
+
 	// Cache statistics
 	RecordCacheHit()
 	RecordCacheMiss()
-	
+
 	// Processing state management
 	SetPartialFlag(partial bool)
 	MarkProcessingStart()
 	MarkProcessingEnd()
-	
+
 	// Results access
 	GetStats() *ProcessingStats
 	Reset()
@@ -78,11 +78,11 @@ func (c *DefaultStatsCollector) RecordProcessingTime(phase string, duration time
 	if duration <= 0 {
 		return
 	}
-	
+
 	durationMs := duration.Nanoseconds() / int64(time.Millisecond)
 	counter := c.stats.initializePhaseCounter(phase)
 	atomic.AddInt64(counter, durationMs)
-	
+
 	// Also update total duration
 	atomic.AddInt64(&c.stats.DurationMs, durationMs)
 }
@@ -93,9 +93,9 @@ func (c *DefaultStatsCollector) RecordError(phase string, err error) {
 	if err == nil {
 		return
 	}
-	
+
 	atomic.AddInt64(&c.stats.ErrorCount, 1)
-	
+
 	// Track phase-specific error timing (increment by 1ms as a marker)
 	if phase != "" {
 		errorPhase := phase + "_errors"
@@ -109,7 +109,7 @@ func (c *DefaultStatsCollector) RecordMatch(matchType string, count int) {
 	if count <= 0 || matchType == "" {
 		return
 	}
-	
+
 	counter := c.stats.initializeMatchCounter(matchType)
 	atomic.AddInt64(counter, int64(count))
 }
@@ -119,9 +119,9 @@ func (c *DefaultStatsCollector) RecordInferenceOperation(operation string, count
 	if count <= 0 || operation == "" {
 		return
 	}
-	
+
 	atomic.AddInt64(&c.stats.InferenceOps, int64(count))
-	
+
 	// Track operation-specific metrics as phase stats
 	if operation != "" {
 		phaseKey := "inference_" + operation
@@ -198,7 +198,7 @@ func (c *DefaultStatsCollector) BatchRecordMatches(matches map[string]int) {
 	for matchType := range matches {
 		matchTypes = append(matchTypes, matchType)
 	}
-	
+
 	// Simple sort implementation to avoid additional dependencies
 	for i := 0; i < len(matchTypes); i++ {
 		for j := i + 1; j < len(matchTypes); j++ {
@@ -207,7 +207,7 @@ func (c *DefaultStatsCollector) BatchRecordMatches(matches map[string]int) {
 			}
 		}
 	}
-	
+
 	// Process matches in deterministic order
 	for _, matchType := range matchTypes {
 		c.RecordMatch(matchType, matches[matchType])
@@ -269,11 +269,11 @@ func (c *DefaultStatsCollector) GetCacheHitRate() float64 {
 	hits := atomic.LoadInt64(&c.stats.CacheHits)
 	misses := atomic.LoadInt64(&c.stats.CacheMisses)
 	total := hits + misses
-	
+
 	if total == 0 {
 		return 0.0
 	}
-	
+
 	return float64(hits) / float64(total) * 100.0
 }
 
@@ -288,11 +288,11 @@ func (c *DefaultStatsCollector) GetTotalProcessingTime() time.Duration {
 func (c *DefaultStatsCollector) GetProcessingThroughput() float64 {
 	files := atomic.LoadInt64(&c.stats.FilesParsed)
 	durationMs := atomic.LoadInt64(&c.stats.DurationMs)
-	
+
 	if durationMs == 0 {
 		return 0.0
 	}
-	
+
 	durationSec := float64(durationMs) / 1000.0
 	return float64(files) / durationSec
 }
@@ -301,10 +301,10 @@ func (c *DefaultStatsCollector) GetProcessingThroughput() float64 {
 func (c *DefaultStatsCollector) GetErrorRate() float64 {
 	errors := atomic.LoadInt64(&c.stats.ErrorCount)
 	total := atomic.LoadInt64(&c.stats.TotalFiles)
-	
+
 	if total == 0 {
 		return 0.0
 	}
-	
+
 	return float64(errors) / float64(total) * 100.0
 }

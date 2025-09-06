@@ -80,7 +80,7 @@ func execute(config *cli.CLIConfig) error {
 	}
 	defer func() {
 		if manifestReader != os.Stdin {
-			manifestReader.Close()
+			_ = manifestReader.Close()
 		}
 	}()
 
@@ -111,28 +111,28 @@ func execute(config *cli.CLIConfig) error {
 		return err
 	}
 
-    // Create pipeline configuration from defaults and CLI config
-    pipelineConfig := pipeline.DefaultPipelineConfig()
-    pipelineConfig.EnableStamp = config.Stamp
+	// Create pipeline configuration from defaults and CLI config
+	pipelineConfig := pipeline.DefaultPipelineConfig()
+	pipelineConfig.EnableStamp = config.Stamp
 
 	// Configure pipeline from manifest
 	if err := pipelineConfig.ConfigureFromManifest(manifestData); err != nil {
 		return cli.WrapInternalError("failed to configure pipeline from manifest", err)
 	}
 
-    // Create and configure the pipeline orchestrator
-    orchestrator, err := pipeline.NewOrchestrator(pipelineConfig)
-    if err != nil {
-        return cli.WrapInternalError("failed to create pipeline orchestrator", err)
-    }
-    defer orchestrator.Close()
+	// Create and configure the pipeline orchestrator
+	orchestrator, err := pipeline.NewOrchestrator(pipelineConfig)
+	if err != nil {
+		return cli.WrapInternalError("failed to create pipeline orchestrator", err)
+	}
+	defer orchestrator.Close()
 
-    // Honor cache directory precedence: if --cache-dir provided, export to env for downstream cache initialization
-    if config.CacheDir != "" {
-        // Resolve final cache directory using CLI precedence rules
-        cacheDir := config.GetCacheDir(manifestData.Project.Root)
-        _ = os.Setenv("OXINFER_CACHE_DIR", cacheDir)
-    }
+	// Honor cache directory precedence: if --cache-dir provided, export to env for downstream cache initialization
+	if config.CacheDir != "" {
+		// Resolve final cache directory using CLI precedence rules
+		cacheDir := config.GetCacheDir(manifestData.Project.Root)
+		_ = os.Setenv("OXINFER_CACHE_DIR", cacheDir)
+	}
 
 	// Set up progress callback if verbose mode is enabled
 	if config.ShouldLogInfo() {
@@ -182,37 +182,37 @@ func execute(config *cli.CLIConfig) error {
 			stats.FilesDiscovered, stats.FilesProcessed, stats.PatternsDetected, stats.ShapesInferred, stats.TotalDuration)
 	}
 
-    // Write output: stdout or file; if file, write atomically.
-    // When a relative file path is provided, write under <projectRoot>/.oxinfer/outputs/<basename>.
-    if config.IsStdoutOutput() || config.OutputPath == "-" {
-        if _, err := os.Stdout.Write(data); err != nil {
-            return cli.WrapInternalError("failed to write JSON to stdout", err)
-        }
-    } else {
-        outPath := config.OutputPath
-        if !filepath.IsAbs(outPath) {
-            // Redirect relative output to project .oxinfer/outputs directory
-            outputsDir := filepath.Join(manifestData.Project.Root, ".oxinfer", "outputs")
-            if err := os.MkdirAll(outputsDir, 0o755); err != nil {
-                return cli.WrapInternalError("failed to create outputs directory", err)
-            }
-            outPath = filepath.Join(outputsDir, filepath.Base(outPath))
-        } else {
-            // Ensure destination directory exists for absolute paths
-            if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
-                return cli.WrapInternalError("failed to create output directory", err)
-            }
-        }
+	// Write output: stdout or file; if file, write atomically.
+	// When a relative file path is provided, write under <projectRoot>/.oxinfer/outputs/<basename>.
+	if config.IsStdoutOutput() || config.OutputPath == "-" {
+		if _, err := os.Stdout.Write(data); err != nil {
+			return cli.WrapInternalError("failed to write JSON to stdout", err)
+		}
+	} else {
+		outPath := config.OutputPath
+		if !filepath.IsAbs(outPath) {
+			// Redirect relative output to project .oxinfer/outputs directory
+			outputsDir := filepath.Join(manifestData.Project.Root, ".oxinfer", "outputs")
+			if err := os.MkdirAll(outputsDir, 0o755); err != nil {
+				return cli.WrapInternalError("failed to create outputs directory", err)
+			}
+			outPath = filepath.Join(outputsDir, filepath.Base(outPath))
+		} else {
+			// Ensure destination directory exists for absolute paths
+			if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+				return cli.WrapInternalError("failed to create output directory", err)
+			}
+		}
 
-        base := filepath.Base(outPath)
-        tmp := filepath.Join(filepath.Dir(outPath), "."+base+".tmp")
-        if err := os.WriteFile(tmp, data, 0644); err != nil {
-            return cli.WrapInternalError("failed to write temp output file", err)
-        }
-        if err := os.Rename(tmp, outPath); err != nil {
-            return cli.WrapInternalError("failed to atomically rename output file", err)
-        }
-    }
+		base := filepath.Base(outPath)
+		tmp := filepath.Join(filepath.Dir(outPath), "."+base+".tmp")
+		if err := os.WriteFile(tmp, data, 0644); err != nil {
+			return cli.WrapInternalError("failed to write temp output file", err)
+		}
+		if err := os.Rename(tmp, outPath); err != nil {
+			return cli.WrapInternalError("failed to atomically rename output file", err)
+		}
+	}
 
 	return nil
 }

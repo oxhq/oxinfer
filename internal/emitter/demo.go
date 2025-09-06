@@ -14,30 +14,30 @@ func DemoEmitter() error {
 
 	// Generate a stub delta (no actual parsing yet)
 	fmt.Println("=== Stub Delta Generation ===")
-	
+
 	stub, err := emitter.EmitStub()
 	if err != nil {
 		return fmt.Errorf("failed to generate stub: %w", err)
 	}
 
-	fmt.Printf("Generated stub with partial=%t, filesParsed=%d\n", 
+	fmt.Printf("Generated stub with partial=%t, filesParsed=%d\n",
 		stub.Meta.Partial, stub.Meta.Stats.FilesParsed)
 
-    // Marshal to deterministic JSON
-    jsonData, err := emitter.MarshalDeterministic(stub)
-    if err != nil {
-        return fmt.Errorf("failed to marshal: %w", err)
-    }
+	// Marshal to deterministic JSON
+	jsonData, err := emitter.MarshalDeterministic(stub)
+	if err != nil {
+		return fmt.Errorf("failed to marshal: %w", err)
+	}
 
 	fmt.Printf("JSON size: %d bytes\n", len(jsonData))
 	fmt.Printf("Stub JSON: %s\n\n", string(jsonData))
 
-    // Demonstrate writing to stdout (what CLI will do)
-    fmt.Println("=== Writing to stdout (CLI simulation) ===")
-    err = emitter.WriteJSON(os.Stdout, stub)
-    if err != nil {
-        return fmt.Errorf("failed to write JSON: %w", err)
-    }
+	// Demonstrate writing to stdout (what CLI will do)
+	fmt.Println("=== Writing to stdout (CLI simulation) ===")
+	err = emitter.WriteJSON(os.Stdout, stub)
+	if err != nil {
+		return fmt.Errorf("failed to write JSON: %w", err)
+	}
 	fmt.Println() // Add newline after JSON output
 
 	return nil
@@ -49,7 +49,7 @@ func DemoComplexDelta() error {
 
 	// Simulate what would come from parsing Laravel code
 	fmt.Println("\n=== Future enhancement: Complex Delta Example ===")
-	
+
 	delta := &Delta{
 		Meta: MetaInfo{
 			Partial: false, // Complete analysis
@@ -69,7 +69,7 @@ func DemoComplexDelta() error {
 				},
 				Request: &RequestInfo{
 					ContentTypes: []string{"application/json"},
-					Body:         NewOrderedObjectFromMap(map[string]interface{}{"name": map[string]interface{}{}, "email": map[string]interface{}{}}),
+					Body:         NewOrderedObjectFromMap(map[string]any{"name": map[string]any{}, "email": map[string]any{}}),
 				},
 				Resources: []Resource{
 					{Class: "UserResource", Collection: false},

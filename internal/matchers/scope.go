@@ -12,6 +12,55 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
+// ScopeRegistry tracks custom scope methods declared in model classes for T3 compliance.
+type ScopeRegistry struct {
+	// modelScopes maps model FQCN to set of declared custom scope names
+	modelScopes map[string]map[string]bool
+	// builderMethods contains Laravel Query Builder methods that should be excluded
+	builderMethods map[string]bool
+}
+
+// NewScopeRegistry creates a new scope registry with T3-compliant builder exclusions.
+func NewScopeRegistry() *ScopeRegistry {
+	builderMethods := map[string]bool{
+		"where": true, "whereIn": true, "whereNull": true, "whereBetween": true,
+		"whereHas": true, "get": true, "first": true, "firstOrFail": true,
+		"pluck": true, "count": true, "groupBy": true, "orderBy": true,
+		"orderByDesc": true, "toResponse": true, "resolve": true, "only": true,
+		"middleware": true, "subDays": true, "toDateString": true,
+		// Additional common builder methods
+		"select": true, "join": true, "leftJoin": true, "having": true,
+		"limit": true, "offset": true, "skip": true, "take": true,
+		"distinct": true, "exists": true, "doesntExist": true,
+	}
+
+	return &ScopeRegistry{
+		modelScopes:    make(map[string]map[string]bool),
+		builderMethods: builderMethods,
+	}
+}
+
+// RegisterScope adds a custom scope for a model FQCN.
+func (sr *ScopeRegistry) RegisterScope(modelFQCN, scopeName string) {
+	if sr.modelScopes[modelFQCN] == nil {
+		sr.modelScopes[modelFQCN] = make(map[string]bool)
+	}
+	sr.modelScopes[modelFQCN][scopeName] = true
+}
+
+// IsCustomScope returns true if the method is a registered custom scope for the model.
+func (sr *ScopeRegistry) IsCustomScope(modelFQCN, methodName string) bool {
+	if scopes, exists := sr.modelScopes[modelFQCN]; exists {
+		return scopes[methodName]
+	}
+	return false
+}
+
+// IsBuilderMethod returns true if the method is a Laravel Query Builder method (should be excluded).
+func (sr *ScopeRegistry) IsBuilderMethod(methodName string) bool {
+	return sr.builderMethods[methodName]
+}
+
 // DefaultScopeMatcher implements ScopeMatcher interface.
 type DefaultScopeMatcher struct {
 	config           *MatcherConfig
@@ -20,7 +69,8 @@ type DefaultScopeMatcher struct {
 	compiler         *QueryCompiler
 	initialized      bool
 	confidenceLevels *ConfidenceLevel
-	
+	scopeRegistry    *ScopeRegistry
+
 	// Patterns for scope name extraction
 	scopeMethodPattern *regexp.Regexp
 	whereMethodPattern *regexp.Regexp
@@ -31,7 +81,7 @@ func NewScopeMatcher(language *sitter.Language, config *MatcherConfig) (*Default
 	if language == nil {
 		return nil, fmt.Errorf("language cannot be nil")
 	}
-	
+
 	if config == nil {
 		config = DefaultMatcherConfig()
 	}
@@ -41,7 +91,7 @@ func NewScopeMatcher(language *sitter.Language, config *MatcherConfig) (*Default
 	if err != nil {
 		return nil, fmt.Errorf("failed to compile scope method pattern: %w", err)
 	}
-	
+
 	whereMethodPattern, err := regexp.Compile(`^where([A-Z][a-zA-Z0-9]*)$`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compile where method pattern: %w", err)
@@ -52,6 +102,7 @@ func NewScopeMatcher(language *sitter.Language, config *MatcherConfig) (*Default
 		queryDefs:          ScopeUsageQueries,
 		compiler:           NewQueryCompiler(language),
 		confidenceLevels:   DefaultConfidenceLevels(),
+		scopeRegistry:      NewScopeRegistry(),
 		scopeMethodPattern: scopeMethodPattern,
 		whereMethodPattern: whereMethodPattern,
 	}
@@ -70,7 +121,7 @@ func (m *DefaultScopeMatcher) initialize() error {
 	if err != nil {
 		return fmt.Errorf("failed to compile scope queries: %w", err)
 	}
-	
+
 	m.queries = queries
 	m.initialized = true
 	return nil
@@ -120,8 +171,11 @@ func (m *DefaultScopeMatcher) Match(ctx context.Context, tree *parser.SyntaxTree
 				break
 			}
 
-			// Process scope matches
-			result := m.processScopeMatch(match, query, queryDef, tree, filePath)
+			// Process scope matches using comprehensive implementation
+			result, err := m.processMatch(match, queryDef, tree, filePath)
+			if err != nil {
+				continue // Log error but continue processing
+			}
 			if result != nil {
 				allResults = append(allResults, result)
 
@@ -226,7 +280,7 @@ func (m *DefaultScopeMatcher) processMatch(match *sitter.QueryMatch, queryDef Qu
 
 	// Extract class context if available
 	className := m.extractClassName(tree, filePath)
-	
+
 	return &MatchResult{
 		Type:       PatternTypeScope,
 		Position:   position,
@@ -244,28 +298,37 @@ func (m *DefaultScopeMatcher) processMatch(match *sitter.QueryMatch, queryDef Qu
 // processLocalScopeDefinition processes scope method definitions in models.
 func (m *DefaultScopeMatcher) processLocalScopeDefinition(match *sitter.QueryMatch, tree *parser.SyntaxTree) *ScopeMatch {
 	captures := m.mapCaptures(match)
-	
+
 	methodName, ok := captures["method_name"]
 	if !ok {
 		return nil
 	}
-	
+
 	methodNameStr := methodName.Content(tree.Source)
 	scopeName := m.extractScopeName(methodNameStr)
-	
+
 	if scopeName == "" {
 		return nil
 	}
 
+	// Get model FQCN - skip if we can't resolve it properly (T3 requirement)
+	modelFQCN := m.extractClassName(tree, "")
+	if modelFQCN == "" || modelFQCN == "UnknownClass" {
+		return nil // Skip emitting if FQCN can't be resolved
+	}
+
+	// Register this scope in the registry for T3 compliance
+	m.scopeRegistry.RegisterScope(modelFQCN, scopeName)
+
 	// Extract parameters if available
-	var args []interface{}
+	var args []any
 	if bodyCapture, ok := captures["body"]; ok {
 		args = m.extractScopeArguments(bodyCapture, tree)
 	}
 
 	return &ScopeMatch{
 		Name:     scopeName,
-		On:       m.extractClassName(tree, ""),
+		On:       modelFQCN,
 		Args:     args,
 		IsGlobal: false,
 		IsLocal:  true,
@@ -278,20 +341,25 @@ func (m *DefaultScopeMatcher) processLocalScopeDefinition(match *sitter.QueryMat
 // processScopeMethodCall processes direct scope method calls.
 func (m *DefaultScopeMatcher) processScopeMethodCall(match *sitter.QueryMatch, tree *parser.SyntaxTree, context string) *ScopeMatch {
 	captures := m.mapCaptures(match)
-	
+
 	var methodName, modelClass string
-	var args []interface{}
-	
+	var args []any
+
 	if scopeMethod, ok := captures["scope_method"]; ok {
 		methodName = scopeMethod.Content(tree.Source)
 	}
-	
+
 	if modelCapture, ok := captures["model_class"]; ok {
 		modelClass = modelCapture.Content(tree.Source)
 	}
-	
+
 	if argsCapture, ok := captures["args"]; ok {
 		args = m.extractScopeArguments(argsCapture, tree)
+	}
+
+	// T3 compliance: Exclude builder methods
+	if m.scopeRegistry.IsBuilderMethod(methodName) {
+		return nil
 	}
 
 	scopeName := m.extractScopeName(methodName)
@@ -302,6 +370,16 @@ func (m *DefaultScopeMatcher) processScopeMethodCall(match *sitter.QueryMatch, t
 	onClass := modelClass
 	if onClass == "" {
 		onClass = m.extractClassName(tree, "")
+	}
+
+	// T3 compliance: Skip if FQCN can't be resolved or if scope isn't registered
+	if onClass == "" || onClass == "UnknownClass" {
+		return nil
+	}
+
+	// Only emit if this is a registered custom scope for the model
+	if !m.scopeRegistry.IsCustomScope(onClass, scopeName) {
+		return nil
 	}
 
 	return &ScopeMatch{
@@ -319,21 +397,21 @@ func (m *DefaultScopeMatcher) processScopeMethodCall(match *sitter.QueryMatch, t
 // processScopeWithoutPrefix processes scope calls without 'scope' prefix.
 func (m *DefaultScopeMatcher) processScopeWithoutPrefix(match *sitter.QueryMatch, tree *parser.SyntaxTree, context string) *ScopeMatch {
 	captures := m.mapCaptures(match)
-	
+
 	var scopeName, modelClass string
-	var args []interface{}
-	
+	var args []any
+
 	if scopeCapture, ok := captures["scope_name"]; ok {
 		scopeName = scopeCapture.Content(tree.Source)
 	}
-	
+
 	if modelCapture, ok := captures["model_class"]; ok {
 		modelClass = modelCapture.Content(tree.Source)
 	} else if varCapture, ok := captures["model_var"]; ok {
 		// Try to infer model class from variable usage context
 		modelClass = m.inferModelFromVariable(varCapture, tree)
 	}
-	
+
 	if argsCapture, ok := captures["args"]; ok {
 		args = m.extractScopeArguments(argsCapture, tree)
 	}
@@ -358,12 +436,12 @@ func (m *DefaultScopeMatcher) processScopeWithoutPrefix(match *sitter.QueryMatch
 // processGlobalScopeClass processes global scope class definitions.
 func (m *DefaultScopeMatcher) processGlobalScopeClass(match *sitter.QueryMatch, tree *parser.SyntaxTree) *ScopeMatch {
 	captures := m.mapCaptures(match)
-	
+
 	className, ok := captures["class_name"]
 	if !ok {
 		return nil
 	}
-	
+
 	classNameStr := className.Content(tree.Source)
 	scopeName := strings.TrimSuffix(classNameStr, "Scope")
 	scopeName = strings.ToLower(scopeName)
@@ -371,7 +449,7 @@ func (m *DefaultScopeMatcher) processGlobalScopeClass(match *sitter.QueryMatch, 
 	return &ScopeMatch{
 		Name:     scopeName,
 		On:       classNameStr,
-		Args:     []interface{}{},
+		Args:     []any{},
 		IsGlobal: true,
 		IsLocal:  false,
 		Pattern:  "global_definition",
@@ -383,8 +461,8 @@ func (m *DefaultScopeMatcher) processGlobalScopeClass(match *sitter.QueryMatch, 
 // processGlobalScopeApply processes apply methods in global scopes.
 func (m *DefaultScopeMatcher) processGlobalScopeApply(match *sitter.QueryMatch, tree *parser.SyntaxTree) *ScopeMatch {
 	captures := m.mapCaptures(match)
-	
-	var args []interface{}
+
+	var args []any
 	if bodyCapture, ok := captures["body"]; ok {
 		args = m.extractScopeArguments(bodyCapture, tree)
 	}
@@ -408,8 +486,8 @@ func (m *DefaultScopeMatcher) processGlobalScopeApply(match *sitter.QueryMatch, 
 // processScopeRegistration processes scope registration in boot methods.
 func (m *DefaultScopeMatcher) processScopeRegistration(match *sitter.QueryMatch, tree *parser.SyntaxTree) *ScopeMatch {
 	captures := m.mapCaptures(match)
-	
-	var args []interface{}
+
+	var args []any
 	if argsCapture, ok := captures["scope_arg"]; ok {
 		args = m.extractScopeArguments(argsCapture, tree)
 	}
@@ -437,18 +515,18 @@ func (m *DefaultScopeMatcher) processScopeRegistration(match *sitter.QueryMatch,
 // processRelationshipScope processes scope usage in relationships.
 func (m *DefaultScopeMatcher) processRelationshipScope(match *sitter.QueryMatch, tree *parser.SyntaxTree) *ScopeMatch {
 	captures := m.mapCaptures(match)
-	
+
 	var scopeMethod, relationMethod string
-	var args []interface{}
-	
+	var args []any
+
 	if scopeCapture, ok := captures["scope_method"]; ok {
 		scopeMethod = scopeCapture.Content(tree.Source)
 	}
-	
+
 	if relationCapture, ok := captures["relation_method"]; ok {
 		relationMethod = relationCapture.Content(tree.Source)
 	}
-	
+
 	if argsCapture, ok := captures["args"]; ok {
 		args = m.extractScopeArguments(argsCapture, tree)
 	}
@@ -473,23 +551,23 @@ func (m *DefaultScopeMatcher) processRelationshipScope(match *sitter.QueryMatch,
 // processWhereableScope processes dynamic whereable scopes.
 func (m *DefaultScopeMatcher) processWhereableScope(match *sitter.QueryMatch, tree *parser.SyntaxTree) *ScopeMatch {
 	captures := m.mapCaptures(match)
-	
+
 	methodName, ok := captures["method_name"]
 	if !ok {
 		return nil
 	}
-	
+
 	methodNameStr := methodName.Content(tree.Source)
-	
+
 	// Extract scope name from whereXxx pattern
 	matches := m.whereMethodPattern.FindStringSubmatch(methodNameStr)
 	if len(matches) < 2 {
 		return nil
 	}
-	
+
 	scopeName := strings.ToLower(matches[1])
-	
-	var args []interface{}
+
+	var args []any
 	if argsCapture, ok := captures["args"]; ok {
 		args = m.extractScopeArguments(argsCapture, tree)
 	}
@@ -518,17 +596,17 @@ func (m *DefaultScopeMatcher) extractScopeName(methodName string) string {
 }
 
 // extractScopeArguments extracts arguments from a scope call.
-func (m *DefaultScopeMatcher) extractScopeArguments(node *sitter.Node, tree *parser.SyntaxTree) []interface{} {
-	var args []interface{}
-	
-	// This is a simplified implementation - in practice you'd want to 
+func (m *DefaultScopeMatcher) extractScopeArguments(node *sitter.Node, tree *parser.SyntaxTree) []any {
+	var args []any
+
+	// This is a simplified implementation - in practice you'd want to
 	// walk the argument nodes and extract literal values
 	content := node.Content(tree.Source)
 	if strings.TrimSpace(content) != "()" {
 		// For now, just indicate that arguments are present
 		args = append(args, content)
 	}
-	
+
 	return args
 }
 
@@ -587,7 +665,7 @@ func (m *DefaultScopeMatcher) inferClassNameFromFilePath(filePath string) string
 
 	// Convert to PascalCase (common PHP class naming convention)
 	if fileName != "" {
-		return strings.Title(fileName)
+		return strings.ToUpper(fileName[:1]) + fileName[1:]
 	}
 
 	return "UnknownClass"
@@ -608,11 +686,9 @@ func (m *DefaultScopeMatcher) inferModelFromVariable(node *sitter.Node, tree *pa
 	// Try to trace back to variable assignment or type declaration
 	// This is a simplified implementation - in practice you'd want to
 	// walk the AST to find variable assignments or type hints
-	
+
 	// Look for common Laravel model variable naming patterns
-	if strings.HasPrefix(varName, "$") {
-		varName = strings.TrimPrefix(varName, "$")
-	}
+	varName = strings.TrimPrefix(varName, "$")
 
 	// Convert from camelCase/snake_case to PascalCase
 	modelName := m.variableNameToClassName(varName)
@@ -633,14 +709,14 @@ func (m *DefaultScopeMatcher) variableNameToClassName(varName string) string {
 	if strings.Contains(varName, "_") {
 		parts := strings.Split(varName, "_")
 		for i, part := range parts {
-			parts[i] = strings.Title(part)
+			parts[i] = strings.ToUpper(part[:1]) + part[1:]
 		}
 		return strings.Join(parts, "")
 	}
 
 	// Convert camelCase to PascalCase
 	if varName != "" {
-		return strings.Title(varName)
+		return strings.ToUpper(varName[:1]) + varName[1:]
 	}
 
 	return ""
@@ -649,13 +725,13 @@ func (m *DefaultScopeMatcher) variableNameToClassName(varName string) string {
 // mapCaptures converts captures array to a map for easier access.
 func (m *DefaultScopeMatcher) mapCaptures(match *sitter.QueryMatch) map[string]*sitter.Node {
 	captures := make(map[string]*sitter.Node)
-	
+
 	for _, capture := range match.Captures {
 		// This requires the query to define capture names
 		// We'll need to use the capture index to match with query definition
 		captures[fmt.Sprintf("capture_%d", capture.Index)] = capture.Node
 	}
-	
+
 	return captures
 }
 
@@ -685,85 +761,6 @@ func (m *DefaultScopeMatcher) convertToSitterNode(tree *parser.SyntaxTree) (*sit
 	}
 
 	return rootNode, sitterTree, nil
-}
-
-// processScopeMatch processes individual scope matches.
-func (m *DefaultScopeMatcher) processScopeMatch(
-	match *sitter.QueryMatch,
-	query *sitter.Query,
-	queryDef QueryDefinition,
-	tree *parser.SyntaxTree,
-	filePath string,
-) *MatchResult {
-	var scopeName string
-	var position parser.Point
-
-	// Extract captures
-	for _, capture := range match.Captures {
-		captureName := query.CaptureNameForId(capture.Index)
-
-		switch captureName {
-		case "scope_name":
-			scopeNode := capture.Node
-			scopeName = string(scopeNode.Content(tree.Source))
-			position = parser.Point{Row: int(scopeNode.StartPoint().Row), Column: int(scopeNode.StartPoint().Column)}
-		case "method_name":
-			if scopeName == "" {
-				methodNode := capture.Node
-				methodName := string(methodNode.Content(tree.Source))
-				// Extract scope name from method name (remove "scope" prefix)
-				if strings.HasPrefix(strings.ToLower(methodName), "scope") {
-					scopeName = strings.TrimPrefix(methodName, "scope")
-					scopeName = strings.ToLower(scopeName[:1]) + scopeName[1:]
-				}
-				position = parser.Point{Row: int(methodNode.StartPoint().Row), Column: int(methodNode.StartPoint().Column)}
-			}
-		}
-	}
-
-	// Skip if we don't have essential information
-	if scopeName == "" {
-		return nil
-	}
-
-	// Create scope match
-	scopeMatch := &ScopeMatch{
-		Name:     scopeName,
-		On:       "Model",
-		Args:     []interface{}{},
-		IsGlobal: false,
-		IsLocal:  true,
-		Pattern:  queryDef.Name,
-		Method:   "scope" + strings.Title(scopeName),
-		Context:  "model_method",
-	}
-
-	return &MatchResult{
-		Type:       PatternTypeScope,
-		Position:   position,
-		Content:    m.buildDisplayContent(scopeName),
-		Confidence: queryDef.Confidence,
-		Data:       scopeMatch,
-		Context: &MatchContext{
-			FilePath: filePath,
-			Explicit: m.isExplicitScopeUsage(queryDef.Name),
-		},
-	}
-}
-
-// buildDisplayContent creates a human-readable string representation of the scope.
-func (m *DefaultScopeMatcher) buildDisplayContent(scopeName string) string {
-	return fmt.Sprintf("scope%s()", strings.Title(scopeName))
-}
-
-// isExplicitScopeUsage determines if scope usage is explicit.
-func (m *DefaultScopeMatcher) isExplicitScopeUsage(patternName string) bool {
-	switch patternName {
-	case "model_scope_method", "query_scope_call":
-		return true
-	default:
-		return false
-	}
 }
 
 // filterByConfidence removes matches below the minimum confidence threshold.

@@ -10,19 +10,19 @@ import (
 type PSR4Cache struct {
 	mu    sync.RWMutex
 	items map[string]*cacheItem
-	
+
 	// Configuration
-	maxSize int
+	maxSize    int
 	defaultTTL time.Duration
-	
+
 	// LRU tracking
 	accessOrder []string
 }
 
 // cacheItem represents a cached resolution result.
 type cacheItem struct {
-	value     string
-	expiresAt time.Time
+	value      string
+	expiresAt  time.Time
 	lastAccess time.Time
 }
 
@@ -32,7 +32,7 @@ func NewPSR4Cache(maxSize int) *PSR4Cache {
 	if maxSize <= 0 {
 		maxSize = 1000
 	}
-	
+
 	return &PSR4Cache{
 		items:       make(map[string]*cacheItem),
 		maxSize:     maxSize,
@@ -53,23 +53,23 @@ func NewPSR4CacheWithTTL(maxSize int, ttl time.Duration) *PSR4Cache {
 func (c *PSR4Cache) GetClass(fqcn string) (string, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	item, exists := c.items[fqcn]
 	if !exists {
 		return "", false
 	}
-	
+
 	// Check if expired
 	if time.Now().After(item.expiresAt) {
 		delete(c.items, fqcn)
 		c.removeFromAccessOrder(fqcn)
 		return "", false
 	}
-	
+
 	// Update access time and order
 	item.lastAccess = time.Now()
 	c.updateAccessOrder(fqcn)
-	
+
 	return item.value, true
 }
 
@@ -83,16 +83,16 @@ func (c *PSR4Cache) SetClass(fqcn, filePath string) {
 func (c *PSR4Cache) SetClassWithTTL(fqcn, filePath string, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	now := time.Now()
-	
+
 	// Create or update cache item
 	item := &cacheItem{
 		value:      filePath,
 		expiresAt:  now.Add(ttl),
 		lastAccess: now,
 	}
-	
+
 	// Check if we need to evict items to make room
 	if _, exists := c.items[fqcn]; !exists {
 		// New item - check if we need to evict
@@ -100,7 +100,7 @@ func (c *PSR4Cache) SetClassWithTTL(fqcn, filePath string, ttl time.Duration) {
 			c.evictLRU()
 		}
 	}
-	
+
 	c.items[fqcn] = item
 	c.updateAccessOrder(fqcn)
 }
@@ -109,7 +109,7 @@ func (c *PSR4Cache) SetClassWithTTL(fqcn, filePath string, ttl time.Duration) {
 func (c *PSR4Cache) InvalidateClass(fqcn string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	delete(c.items, fqcn)
 	c.removeFromAccessOrder(fqcn)
 }
@@ -118,7 +118,7 @@ func (c *PSR4Cache) InvalidateClass(fqcn string) {
 func (c *PSR4Cache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	c.items = make(map[string]*cacheItem)
 	c.accessOrder = c.accessOrder[:0]
 }
@@ -144,7 +144,7 @@ type CacheStats struct {
 func (c *PSR4Cache) GetStats() CacheStats {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	
+
 	// Count expired items
 	now := time.Now()
 	expiredCount := 0
@@ -153,7 +153,7 @@ func (c *PSR4Cache) GetStats() CacheStats {
 			expiredCount++
 		}
 	}
-	
+
 	return CacheStats{
 		Size:         len(c.items),
 		MaxSize:      c.maxSize,
@@ -166,23 +166,23 @@ func (c *PSR4Cache) GetStats() CacheStats {
 func (c *PSR4Cache) Cleanup() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	now := time.Now()
 	var expiredKeys []string
-	
+
 	// Find expired items
 	for key, item := range c.items {
 		if now.After(item.expiresAt) {
 			expiredKeys = append(expiredKeys, key)
 		}
 	}
-	
+
 	// Remove expired items
 	for _, key := range expiredKeys {
 		delete(c.items, key)
 		c.removeFromAccessOrder(key)
 	}
-	
+
 	return len(expiredKeys)
 }
 
@@ -192,10 +192,10 @@ func (c *PSR4Cache) evictLRU() {
 	if len(c.accessOrder) == 0 {
 		return
 	}
-	
+
 	// Find the least recently used item
 	lruKey := c.accessOrder[0]
-	
+
 	// Remove from cache and access order
 	delete(c.items, lruKey)
 	c.accessOrder = c.accessOrder[1:]
@@ -206,7 +206,7 @@ func (c *PSR4Cache) evictLRU() {
 func (c *PSR4Cache) updateAccessOrder(key string) {
 	// Remove key from current position if it exists
 	c.removeFromAccessOrder(key)
-	
+
 	// Add to end (most recently used)
 	c.accessOrder = append(c.accessOrder, key)
 }
@@ -251,7 +251,7 @@ func NewPSR4CacheWithConfig(config CacheConfig) *PSR4Cache {
 	if !config.Enabled {
 		return nil
 	}
-	
+
 	return NewPSR4CacheWithTTL(config.MaxSize, config.DefaultTTL)
 }
 
@@ -267,12 +267,12 @@ func (c *PSR4Cache) IsEmpty() bool {
 func (c *PSR4Cache) ContainsClass(fqcn string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	
+
 	item, exists := c.items[fqcn]
 	if !exists {
 		return false
 	}
-	
+
 	// Check if expired
 	return !time.Now().After(item.expiresAt)
 }

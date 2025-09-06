@@ -47,10 +47,10 @@ func (e ExitCode) String() string {
 // CLIError represents an error that occurred during CLI execution
 // It includes both the error message and the appropriate exit code
 type CLIError struct {
-	Type     string                 `json:"type"`
-	Message  string                 `json:"message"`
-	Details  map[string]interface{} `json:"details,omitempty"`
-	ExitCode ExitCode               `json:"exit_code"`
+	Type     string         `json:"type"`
+	Message  string         `json:"message"`
+	Details  map[string]any `json:"details,omitempty"`
+	ExitCode ExitCode       `json:"exit_code"`
 }
 
 // Error implements the error interface
@@ -69,7 +69,7 @@ func NewInputError(message string) *CLIError {
 
 // WrapInputError wraps an error as an input validation failure
 func WrapInputError(message string, err error) *CLIError {
-	details := make(map[string]interface{})
+	details := make(map[string]any)
 	if err != nil {
 		details["underlying_error"] = err.Error()
 	}
@@ -92,7 +92,7 @@ func NewInternalError(message string) *CLIError {
 
 // WrapInternalError wraps an error as an internal processing failure
 func WrapInternalError(message string, err error) *CLIError {
-	details := make(map[string]interface{})
+	details := make(map[string]any)
 	if err != nil {
 		details["underlying_error"] = err.Error()
 	}
@@ -115,7 +115,7 @@ func NewSchemaError(message string) *CLIError {
 
 // WrapSchemaError wraps an error as a schema validation failure
 func WrapSchemaError(message string, err error) *CLIError {
-	details := make(map[string]interface{})
+	details := make(map[string]any)
 	if err != nil {
 		details["underlying_error"] = err.Error()
 	}

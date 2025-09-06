@@ -6,7 +6,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/garaekz/oxinfer/internal/infer"
 	"github.com/garaekz/oxinfer/internal/manifest"
 	"github.com/garaekz/oxinfer/internal/matchers"
 	"github.com/garaekz/oxinfer/internal/parser"
@@ -419,11 +418,11 @@ func TestPipelinePhase_String(t *testing.T) {
 
 func TestPipelineError(t *testing.T) {
 	cause := errors.New("underlying cause")
-	
+
 	tests := []struct {
-		name        string
-		pipelineErr *PipelineError
-		expectedMsg string
+		name         string
+		pipelineErr  *PipelineError
+		expectedMsg  string
 		expectedType string
 	}{
 		{
@@ -564,9 +563,9 @@ func (m *mockPSR4Resolver) Refresh() error {
 
 type mockPHPParser struct{}
 
-func (m *mockPHPParser) ProcessFile(ctx context.Context, file interface{}) (interface{}, error) {
-	return &map[string]interface{}{
-		"filePath": "test.php",
+func (m *mockPHPParser) ProcessFile(ctx context.Context, file any) (any, error) {
+	return &map[string]any{
+		"filePath":  "test.php",
 		"namespace": "Test",
 	}, nil
 }
@@ -625,15 +624,6 @@ func (m *mockPatternMatcher) Close() error {
 	return nil
 }
 
-type mockShapeInferencer struct{}
-
-func (m *mockShapeInferencer) InferRequestShape(patterns []matchers.RequestUsageMatch) (*infer.RequestInfo, error) {
-	return &infer.RequestInfo{}, nil
-}
-
-func (m *mockShapeInferencer) ConsolidatePatterns(patterns []matchers.RequestUsageMatch) (*infer.ConsolidatedRequest, error) {
-	return &infer.ConsolidatedRequest{}, nil
-}
 
 // Helper functions for tests
 func boolPtr(b bool) *bool {

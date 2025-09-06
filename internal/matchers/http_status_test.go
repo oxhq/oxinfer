@@ -4,7 +4,7 @@ package matchers
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,18 +21,18 @@ func TestHTTPStatusMatcher_Match(t *testing.T) {
 		t.Fatal("Failed to get PHP language")
 	}
 
-    testCases := []struct {
-        name               string
-        phpContent         string
-        expectedMatches    int // use -1 to skip count assertion
-        expectedStatusCode *int
-        expectedExplicit   bool
-        expectedConfidence float64
-        expectedPattern    string
-    }{
-        {
-            name: "explicit_response_status_method",
-            phpContent: `<?php
+	testCases := []struct {
+		name               string
+		phpContent         string
+		expectedMatches    int // use -1 to skip count assertion
+		expectedStatusCode *int
+		expectedExplicit   bool
+		expectedConfidence float64
+		expectedPattern    string
+	}{
+		{
+			name: "explicit_response_status_method",
+			phpContent: `<?php
 namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 class TestController extends Controller {
@@ -40,12 +40,12 @@ class TestController extends Controller {
         return response()->status(201);
     }
 }`,
-            expectedMatches:    -1,
-            expectedStatusCode: intPtr(201),
-            expectedExplicit:   true,
-            expectedConfidence: 0.95,
-            expectedPattern:    "response_status_method",
-        },
+			expectedMatches:    -1,
+			expectedStatusCode: intPtr(201),
+			expectedExplicit:   true,
+			expectedConfidence: 0.95,
+			expectedPattern:    "response_status_method",
+		},
 		{
 			name: "response_with_direct_status",
 			phpContent: `<?php
@@ -56,12 +56,12 @@ class TestController extends Controller {
         return response($data, 201);
     }
 }`,
-            expectedMatches:    -1,
-            expectedStatusCode: intPtr(201),
-            expectedExplicit:   true,
-            expectedConfidence: 0.90,
-            expectedPattern:    "response_direct_status",
-        },
+			expectedMatches:    -1,
+			expectedStatusCode: intPtr(201),
+			expectedExplicit:   true,
+			expectedConfidence: 0.90,
+			expectedPattern:    "response_direct_status",
+		},
 		{
 			name: "abort_function_call",
 			phpContent: `<?php
@@ -72,14 +72,14 @@ class TestController extends Controller {
         abort(403, 'Access denied');
     }
 }`,
-            expectedMatches:    -1,
-            expectedStatusCode: intPtr(403),
-            expectedExplicit:   true,
-            expectedConfidence: 1.0,
-            expectedPattern:    "abort_call",
-        },
-        {
-            name: "return_response_json_with_status",
+			expectedMatches:    -1,
+			expectedStatusCode: intPtr(403),
+			expectedExplicit:   true,
+			expectedConfidence: 1.0,
+			expectedPattern:    "abort_call",
+		},
+		{
+			name: "return_response_json_with_status",
 			phpContent: `<?php
 namespace App\Http\Controllers;
 use Illuminate\Http\Request;
@@ -88,12 +88,12 @@ class TestController extends Controller {
         return response()->json($data, 200);
     }
 }`,
-            expectedMatches:    -1,
-            expectedStatusCode: intPtr(200),
-            expectedExplicit:   true,
-            expectedConfidence: 0.95,
-            expectedPattern:    "", // accept any matching pattern
-        },
+			expectedMatches:    -1,
+			expectedStatusCode: intPtr(200),
+			expectedExplicit:   true,
+			expectedConfidence: 0.95,
+			expectedPattern:    "", // accept any matching pattern
+		},
 		{
 			name: "no_explicit_status",
 			phpContent: `<?php
@@ -104,8 +104,8 @@ class TestController extends Controller {
         return ['data' => 'test'];
     }
 }`,
-            expectedMatches: 0,
-        },
+			expectedMatches: 0,
+		},
 		{
 			name: "multiple_status_patterns",
 			phpContent: `<?php
@@ -119,10 +119,10 @@ class TestController extends Controller {
         return response()->json(['data' => $value], 201);
     }
 }`,
-            expectedMatches: -1, // skip count; validate presence of patterns
-        },
-        {
-            name: "variable_response_assignment",
+			expectedMatches: -1, // skip count; validate presence of patterns
+		},
+		{
+			name: "variable_response_assignment",
 			phpContent: `<?php
 namespace App\Http\Controllers;
 use Illuminate\Http\Request;
@@ -132,12 +132,12 @@ class TestController extends Controller {
         return $response->json(['errors' => 'validation failed']);
     }
 }`,
-            expectedMatches:    -1,
-            expectedStatusCode: intPtr(422),
-            expectedExplicit:   true,
-            expectedConfidence: 0.95,
-            expectedPattern:    "",
-        },
+			expectedMatches:    -1,
+			expectedStatusCode: intPtr(422),
+			expectedExplicit:   true,
+			expectedConfidence: 0.95,
+			expectedPattern:    "",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -170,38 +170,38 @@ class TestController extends Controller {
 				t.Fatalf("Matcher failed: %v", err)
 			}
 
-        // Verify match count when asserted
-        if tc.expectedMatches >= 0 {
-            if len(results) != tc.expectedMatches {
-                t.Errorf("Expected %d matches, got %d", tc.expectedMatches, len(results))
-                for i, result := range results {
-                    t.Logf("Match %d: %+v", i, result)
-                }
-                return
-            }
-            if tc.expectedMatches == 0 {
-                return // No further validation needed
-            }
-        }
+			// Verify match count when asserted
+			if tc.expectedMatches >= 0 {
+				if len(results) != tc.expectedMatches {
+					t.Errorf("Expected %d matches, got %d", tc.expectedMatches, len(results))
+					for i, result := range results {
+						t.Logf("Match %d: %+v", i, result)
+					}
+					return
+				}
+				if tc.expectedMatches == 0 {
+					return // No further validation needed
+				}
+			}
 
-        // Choose the match that corresponds to expectedPattern when provided
-        var httpData *HTTPStatusMatch
-        var result *MatchResult
-        for _, res := range results {
-            if data, ok := res.Data.(*HTTPStatusMatch); ok {
-                if tc.expectedPattern == "" || data.Pattern == tc.expectedPattern {
-                    httpData = data
-                    result = res
-                    if tc.expectedPattern != "" {
-                        break
-                    }
-                }
-            }
-        }
-        if httpData == nil {
-            t.Fatalf("No match found for expected pattern %q", tc.expectedPattern)
-        }
-			
+			// Choose the match that corresponds to expectedPattern when provided
+			var httpData *HTTPStatusMatch
+			var result *MatchResult
+			for _, res := range results {
+				if data, ok := res.Data.(*HTTPStatusMatch); ok {
+					if tc.expectedPattern == "" || data.Pattern == tc.expectedPattern {
+						httpData = data
+						result = res
+						if tc.expectedPattern != "" {
+							break
+						}
+					}
+				}
+			}
+			if httpData == nil {
+				t.Fatalf("No match found for expected pattern %q", tc.expectedPattern)
+			}
+
 			if tc.expectedStatusCode != nil {
 				if httpData.Status != *tc.expectedStatusCode {
 					t.Errorf("Expected status code %d, got %d", *tc.expectedStatusCode, httpData.Status)
@@ -232,23 +232,23 @@ func TestHTTPStatusMatcher_GoldenFiles(t *testing.T) {
 		t.Fatal("Failed to get PHP language")
 	}
 
-    testCases := []struct {
-        name           string
-        fixture        string
-        expectedOutput string
-    }{
-        {
-            name:           "simple_controller_patterns",
-            fixture:        "simple_controller.php",
-            expectedOutput: "simple_controller.json",
-        },
-    }
+	testCases := []struct {
+		name           string
+		fixture        string
+		expectedOutput string
+	}{
+		{
+			name:           "simple_controller_patterns",
+			fixture:        "simple_controller.php",
+			expectedOutput: "simple_controller.json",
+		},
+	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Load test fixture
 			phpContent := loadTestFixture(t, tc.fixture)
-			
+
 			// Parse PHP content
 			tree, err := parsePHPContent(phpContent, language)
 			if err != nil {
@@ -277,34 +277,34 @@ func TestHTTPStatusMatcher_GoldenFiles(t *testing.T) {
 			}
 
 			// Load expected output
-        expected := loadExpectedOutputArray(t, tc.expectedOutput)
-			
+			expected := loadExpectedOutputArray(t, tc.expectedOutput)
+
 			// Convert results to comparable format
-        actual := convertHTTPStatusResults(results)
-			
+			actual := convertHTTPStatusResults(results)
+
 			// Compare results (simplified comparison for now)
-        actualJSON, _ := json.MarshalIndent(actual, "", "  ")
-        expectedJSON, _ := json.MarshalIndent(expected, "", "  ")
-        
-        if !strings.Contains(string(actualJSON), "status") && len(expected) > 0 {
-            t.Errorf("Golden file test failed for %s", tc.name)
-            t.Logf("Expected: %s", string(expectedJSON))
-            t.Logf("Actual: %s", string(actualJSON))
-        }
-    })
-    }
+			actualJSON, _ := json.MarshalIndent(actual, "", "  ")
+			expectedJSON, _ := json.MarshalIndent(expected, "", "  ")
+
+			if !strings.Contains(string(actualJSON), "status") && len(expected) > 0 {
+				t.Errorf("Golden file test failed for %s", tc.name)
+				t.Logf("Expected: %s", string(expectedJSON))
+				t.Logf("Actual: %s", string(actualJSON))
+			}
+		})
+	}
 }
 
 // convertHTTPStatusResults converts MatchResult array to comparable format
-func convertHTTPStatusResults(results []*MatchResult) []map[string]interface{} {
-	converted := make([]map[string]interface{}, len(results))
+func convertHTTPStatusResults(results []*MatchResult) []map[string]any {
+	converted := make([]map[string]any, len(results))
 	for i, result := range results {
 		httpData, ok := result.Data.(*HTTPStatusMatch)
 		if !ok {
 			continue
 		}
-		
-		converted[i] = map[string]interface{}{
+
+		converted[i] = map[string]any{
 			"type":       result.Type,
 			"position":   result.Position,
 			"confidence": result.Confidence,
@@ -353,8 +353,8 @@ class TestController extends Controller {
 			expectedConfidence: 0.95,
 			expectedExplicit:   true,
 		},
-        {
-            name: "variable_assignment_lower_confidence",
+		{
+			name: "variable_assignment_lower_confidence",
 			phpContent: `<?php
 class TestController extends Controller {
     public function variable() {
@@ -362,9 +362,9 @@ class TestController extends Controller {
         return $response;
     }
 }`,
-            expectedConfidence: 0.95,
-            expectedExplicit:   true,
-            },
+			expectedConfidence: 0.95,
+			expectedExplicit:   true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -390,26 +390,26 @@ class TestController extends Controller {
 				t.Fatal("Expected at least one match")
 			}
 
-        // Select a result whose confidence matches expectation when multiple exist
-        sel := results[0]
-        for _, r := range results {
-            if r.Confidence >= tc.expectedConfidence-0.01 && r.Confidence <= tc.expectedConfidence+0.01 {
-                sel = r
-                break
-            }
-        }
-        if sel.Confidence < tc.expectedConfidence-0.01 || sel.Confidence > tc.expectedConfidence+0.01 {
-            t.Errorf("Expected confidence %.2f, got %.2f", tc.expectedConfidence, sel.Confidence)
-        }
+			// Select a result whose confidence matches expectation when multiple exist
+			sel := results[0]
+			for _, r := range results {
+				if r.Confidence >= tc.expectedConfidence-0.01 && r.Confidence <= tc.expectedConfidence+0.01 {
+					sel = r
+					break
+				}
+			}
+			if sel.Confidence < tc.expectedConfidence-0.01 || sel.Confidence > tc.expectedConfidence+0.01 {
+				t.Errorf("Expected confidence %.2f, got %.2f", tc.expectedConfidence, sel.Confidence)
+			}
 
-        httpData, ok := sel.Data.(*HTTPStatusMatch)
-        if !ok {
-            t.Fatal("Expected HTTPStatusMatch data")
-        }
+			httpData, ok := sel.Data.(*HTTPStatusMatch)
+			if !ok {
+				t.Fatal("Expected HTTPStatusMatch data")
+			}
 
-        if httpData.Explicit != tc.expectedExplicit {
-            t.Errorf("Expected explicit=%t, got %t", tc.expectedExplicit, httpData.Explicit)
-        }
+			if httpData.Explicit != tc.expectedExplicit {
+				t.Errorf("Expected explicit=%t, got %t", tc.expectedExplicit, httpData.Explicit)
+			}
 		})
 	}
 }
@@ -437,7 +437,7 @@ func TestHTTPStatusMatcher_GetQueries(t *testing.T) {
 
 	queries := matcher.GetQueries()
 	expectedQueryCount := len(HTTPStatusQueries)
-	
+
 	if len(queries) != expectedQueryCount {
 		t.Errorf("Expected %d queries, got %d", expectedQueryCount, len(queries))
 	}
@@ -522,7 +522,7 @@ class TestController extends Controller {
 	// Run multiple times to ensure deterministic results
 	const iterations = 5
 	var results [][]*MatchResult
-	
+
 	for i := 0; i < iterations; i++ {
 		ctx := context.Background()
 		matchResults, err := matcher.Match(ctx, syntaxTree, "test.php")
@@ -562,12 +562,12 @@ func intPtr(i int) *int {
 func parsePHPContent(content string, language *sitter.Language) (*sitter.Tree, error) {
 	parser := sitter.NewParser()
 	parser.SetLanguage(language)
-	
+
 	tree, err := parser.ParseCtx(context.Background(), nil, []byte(content))
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return tree, nil
 }
 
@@ -590,7 +590,7 @@ func convertNode(node *sitter.Node) *parser.SyntaxNode {
 func loadTestFixture(t *testing.T, filename string) string {
 	t.Helper()
 	path := filepath.Join("../../test/fixtures/matchers/controllers", filename)
-	content, err := ioutil.ReadFile(path)
+	content, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("Failed to read fixture %s: %v", filename, err)
 	}
@@ -598,18 +598,18 @@ func loadTestFixture(t *testing.T, filename string) string {
 }
 
 // loadExpectedOutput loads expected test output from JSON fixture
-func loadExpectedOutputArray(t *testing.T, filename string) []map[string]interface{} {
-    t.Helper()
-    path := filepath.Join("../../test/fixtures/matchers/expected/http_status", filename)
-    content, err := ioutil.ReadFile(path)
-    if err != nil {
-        t.Fatalf("Failed to read expected output %s: %v", filename, err)
-    }
-    
-    var expected []map[string]interface{}
-    if err := json.Unmarshal(content, &expected); err != nil {
-        t.Fatalf("Failed to parse expected output %s: %v", filename, err)
-    }
-    
-    return expected
+func loadExpectedOutputArray(t *testing.T, filename string) []map[string]any {
+	t.Helper()
+	path := filepath.Join("../../test/fixtures/matchers/expected/http_status", filename)
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read expected output %s: %v", filename, err)
+	}
+
+	var expected []map[string]any
+	if err := json.Unmarshal(content, &expected); err != nil {
+		t.Fatalf("Failed to parse expected output %s: %v", filename, err)
+	}
+
+	return expected
 }

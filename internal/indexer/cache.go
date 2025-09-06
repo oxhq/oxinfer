@@ -19,20 +19,20 @@ import (
 
 // Cache validation modes
 const (
-	CacheModeModTime      = "mtime"
+	CacheModeModTime     = "mtime"
 	CacheModeSHA256MTime = "sha256+mtime"
 	DefaultCacheSize     = 1000
 )
 
 var (
-	ErrCacheNotFound       = errors.New("cache entry not found")
-	ErrCacheInvalid        = errors.New("cache entry is invalid")
-	ErrInvalidCacheKey     = errors.New("invalid cache key")
-	ErrFileNotFound        = errors.New("file not found")
-	ErrCacheFull           = errors.New("cache is full")
-	ErrProjectKeyMismatch  = errors.New("project key mismatch")
-	ErrCacheDirNotFound    = errors.New("cache directory not found")
-	ErrPersistenceFailed   = errors.New("cache persistence failed")
+	ErrCacheNotFound      = errors.New("cache entry not found")
+	ErrCacheInvalid       = errors.New("cache entry is invalid")
+	ErrInvalidCacheKey    = errors.New("invalid cache key")
+	ErrFileNotFound       = errors.New("file not found")
+	ErrCacheFull          = errors.New("cache is full")
+	ErrProjectKeyMismatch = errors.New("project key mismatch")
+	ErrCacheDirNotFound   = errors.New("cache directory not found")
+	ErrPersistenceFailed  = errors.New("cache persistence failed")
 )
 
 // CacheError wraps cache-related errors with additional context
@@ -78,15 +78,15 @@ type FileCacheImpl struct {
 	tail        *lruNode // LRU list tail (least recently used)
 	hitCount    int64
 	missCount   int64
-	cacheDir    string   // Directory for on-disk cache persistence
-	projectKey  string   // Project key for cache validation
-	persistLoad bool     // Flag to track if persistence has been loaded
+	cacheDir    string // Directory for on-disk cache persistence
+	projectKey  string // Project key for cache validation
+	persistLoad bool   // Flag to track if persistence has been loaded
 }
 
 // NewFileCache creates a new FileCacheImpl with the provided configuration
 func NewFileCache(config *manifest.CacheConfig) *FileCacheImpl {
 	maxSize := DefaultCacheSize
-	
+
 	cache := &FileCacheImpl{
 		cache:   make(map[string]*lruNode),
 		config:  config,
@@ -96,13 +96,13 @@ func NewFileCache(config *manifest.CacheConfig) *FileCacheImpl {
 			LastCleanup: time.Now(),
 		},
 	}
-	
+
 	// Initialize LRU list with dummy head and tail nodes
 	cache.head = &lruNode{}
 	cache.tail = &lruNode{}
 	cache.head.next = cache.tail
 	cache.tail.prev = cache.head
-	
+
 	return cache
 }
 
@@ -110,7 +110,7 @@ func NewFileCache(config *manifest.CacheConfig) *FileCacheImpl {
 // It automatically loads existing cache entries from disk if available
 func NewFileCacheWithDir(config *manifest.CacheConfig, cacheDir, projectKey string) (*FileCacheImpl, error) {
 	maxSize := DefaultCacheSize
-	
+
 	cache := &FileCacheImpl{
 		cache:      make(map[string]*lruNode),
 		config:     config,
@@ -122,13 +122,13 @@ func NewFileCacheWithDir(config *manifest.CacheConfig, cacheDir, projectKey stri
 			LastCleanup: time.Now(),
 		},
 	}
-	
+
 	// Initialize LRU list with dummy head and tail nodes
 	cache.head = &lruNode{}
 	cache.tail = &lruNode{}
 	cache.head.next = cache.tail
 	cache.tail.prev = cache.head
-	
+
 	// Load from disk if cache directory exists
 	if cacheDir != "" {
 		if err := cache.loadFromDisk(); err != nil {
@@ -137,7 +137,7 @@ func NewFileCacheWithDir(config *manifest.CacheConfig, cacheDir, projectKey stri
 		}
 		cache.persistLoad = true // Mark as loaded to enable persistence
 	}
-	
+
 	return cache, nil
 }
 

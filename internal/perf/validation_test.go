@@ -22,7 +22,7 @@ func TestMVPPerformanceTargets(t *testing.T) {
 	config := DefaultIntegrationConfig()
 	config.ValidateTargets = true
 	config.FailOnRegressions = true
-	
+
 	integration, err := NewPerformanceIntegration(config)
 	if err != nil {
 		t.Fatalf("Failed to create integration: %v", err)
@@ -39,24 +39,24 @@ func TestMVPPerformanceTargets(t *testing.T) {
 
 	// Create optimized mock orchestrator
 	orchestrator := &optimizedMockOrchestrator{
-		baseProcessingTime: 8 * time.Second,  // Under 10s target
-		baseMemoryUsage:   450,               // Under 500MB target
-		filesCount:        350,               // Medium project size
-		cacheEnabled:      true,
+		baseProcessingTime: 8 * time.Second, // Under 10s target
+		baseMemoryUsage:    450,             // Under 500MB target
+		filesCount:         350,             // Medium project size
+		cacheEnabled:       true,
 	}
 
 	// Test 1: Cold run performance
 	t.Run("cold_run_performance", func(t *testing.T) {
 		// Clear cache for cold run
 		orchestrator.cacheEnabled = false
-		
+
 		result, err := integration.testColdRunPerformance(ctx, orchestrator, testManifest)
 		if err != nil {
 			t.Fatalf("Cold run test failed: %v", err)
 		}
 
 		if !result.TargetMet {
-			t.Errorf("Cold run target not met: %.2fs > %.2fs target (gap: %.1f%%)", 
+			t.Errorf("Cold run target not met: %.2fs > %.2fs target (gap: %.1f%%)",
 				result.ActualValue, result.TargetValue, result.PerformanceGap)
 		}
 
@@ -68,14 +68,14 @@ func TestMVPPerformanceTargets(t *testing.T) {
 	t.Run("incremental_run_performance", func(t *testing.T) {
 		// Enable cache for incremental run
 		orchestrator.cacheEnabled = true
-		
+
 		result, err := integration.testIncrementalPerformance(ctx, orchestrator, testManifest)
 		if err != nil {
 			t.Fatalf("Incremental run test failed: %v", err)
 		}
 
 		if !result.TargetMet {
-			t.Errorf("Incremental run target not met: %.2fs > %.2fs target (gap: %.1f%%)", 
+			t.Errorf("Incremental run target not met: %.2fs > %.2fs target (gap: %.1f%%)",
 				result.ActualValue, result.TargetValue, result.PerformanceGap)
 		}
 
@@ -91,7 +91,7 @@ func TestMVPPerformanceTargets(t *testing.T) {
 		}
 
 		if !result.TargetMet {
-			t.Errorf("Memory target not met: %.0fMB > %.0fMB target (gap: %.1f%%)", 
+			t.Errorf("Memory target not met: %.0fMB > %.0fMB target (gap: %.1f%%)",
 				result.ActualValue, result.TargetValue, result.PerformanceGap)
 		}
 
@@ -107,7 +107,7 @@ func TestMVPPerformanceTargets(t *testing.T) {
 		}
 
 		if !result.TargetMet {
-			t.Errorf("Sustained performance target not met: %.2fs > %.2fs target", 
+			t.Errorf("Sustained performance target not met: %.2fs > %.2fs target",
 				result.ActualValue, result.TargetValue)
 		}
 
@@ -178,8 +178,8 @@ func TestPerformanceRegression(t *testing.T) {
 	if len(results.Regressions) > 0 {
 		t.Errorf("Unexpected regressions detected: %d", len(results.Regressions))
 		for _, regression := range results.Regressions {
-			t.Logf("Regression: %s %s %.2f -> %.2f (%.1fx)", 
-				regression.Scenario, regression.Metric, 
+			t.Logf("Regression: %s %s %.2f -> %.2f (%.1fx)",
+				regression.Scenario, regression.Metric,
 				regression.BaselineValue, regression.CurrentValue, regression.RegressionRatio)
 		}
 	}
@@ -247,7 +247,7 @@ func TestPerformanceRegressionDetection(t *testing.T) {
 		if regression.RegressionRatio <= 1.2 { // Should exceed 20% threshold
 			t.Errorf("Regression ratio should be > 1.2, got %.2f", regression.RegressionRatio)
 		}
-		
+
 		if regression.Severity == SeverityLow {
 			t.Errorf("Regression severity should not be low for 2x+ performance degradation")
 		}
@@ -275,7 +275,7 @@ func TestWorkerPoolOptimization(t *testing.T) {
 			name:          "large_pool_many_items",
 			maxWorkers:    8,
 			workItems:     100,
-			expectMinTime: 80 * time.Millisecond,  // More lenient minimum  
+			expectMinTime: 80 * time.Millisecond,  // More lenient minimum
 			expectMaxTime: 800 * time.Millisecond, // More lenient maximum
 		},
 		{
@@ -313,7 +313,7 @@ func TestWorkerPoolOptimization(t *testing.T) {
 					priority: 50,
 					duration: 10 * time.Millisecond,
 				}
-				
+
 				if err := pool.SubmitWork(item); err != nil {
 					t.Fatalf("Failed to submit work item %d: %v", i, err)
 				}
@@ -322,7 +322,7 @@ func TestWorkerPoolOptimization(t *testing.T) {
 			// Wait for all work items to complete
 			expectedCount := int64(tt.workItems)
 			deadline := start.Add(tt.expectMaxTime + 500*time.Millisecond) // Add larger buffer for timing tolerance and worker startup
-			
+
 			for time.Now().Before(deadline) {
 				metrics := pool.GetMetrics()
 				if metrics.TotalProcessed >= expectedCount {
@@ -330,13 +330,13 @@ func TestWorkerPoolOptimization(t *testing.T) {
 				}
 				time.Sleep(10 * time.Millisecond) // Check every 10ms
 			}
-			
+
 			// Verify work was actually processed
 			finalMetrics := pool.GetMetrics()
 			if finalMetrics.TotalProcessed < expectedCount {
 				t.Errorf("Work not completed: processed %d out of %d items", finalMetrics.TotalProcessed, expectedCount)
 			}
-			
+
 			totalTime := time.Since(start)
 
 			// Validate timing
@@ -368,19 +368,19 @@ func TestWorkerPoolOptimization(t *testing.T) {
 func TestMemoryOptimizationEffectiveness(t *testing.T) {
 	// Test with and without memory optimization
 	tests := []struct {
-		name                string
+		name               string
 		enableOptimization bool
-		expectLowerMemory   bool
+		expectLowerMemory  bool
 	}{
 		{
-			name:                "without_optimization",
+			name:               "without_optimization",
 			enableOptimization: false,
-			expectLowerMemory:   false,
+			expectLowerMemory:  false,
 		},
 		{
-			name:                "with_optimization",
+			name:               "with_optimization",
 			enableOptimization: true,
-			expectLowerMemory:   true,
+			expectLowerMemory:  true,
 		},
 	}
 
@@ -391,13 +391,13 @@ func TestMemoryOptimizationEffectiveness(t *testing.T) {
 			// Force initial GC to get stable baseline
 			runtime.GC()
 			runtime.GC()
-			
+
 			var optimizer *MemoryOptimizer
-			
+
 			if tt.enableOptimization {
 				memConfig := DefaultMemoryConfig()
 				optimizer, _ = NewMemoryOptimizer(memConfig)
-				
+
 				ctx := context.Background()
 				if err := optimizer.Start(ctx); err != nil {
 					t.Fatalf("Failed to start memory optimizer: %v", err)
@@ -415,31 +415,31 @@ func TestMemoryOptimizationEffectiveness(t *testing.T) {
 			// Get peak memory usage
 			var memStatsAfter runtime.MemStats
 			runtime.ReadMemStats(&memStatsAfter)
-			
+
 			// Use the maximum heap size seen rather than the difference
 			peakMemory := memStatsAfter.HeapSys // Total heap memory reserved
 			if memStatsAfter.HeapInuse > peakMemory {
 				peakMemory = memStatsAfter.HeapInuse
 			}
-			
-			t.Logf("Before HeapInuse: %d KB, After HeapInuse: %d KB, HeapSys: %d KB", 
+
+			t.Logf("Before HeapInuse: %d KB, After HeapInuse: %d KB, HeapSys: %d KB",
 				beforeHeapInuse/1024, memStatsAfter.HeapInuse/1024, memStatsAfter.HeapSys/1024)
-			
+
 			if i == 0 {
 				baselineMaxMemory = peakMemory
 				t.Logf("Baseline peak memory usage: %d MB", baselineMaxMemory/1024/1024)
 			} else {
 				if baselineMaxMemory > 0 {
 					improvementPct := float64(int64(baselineMaxMemory)-int64(peakMemory)) / float64(baselineMaxMemory) * 100
-					t.Logf("Optimized peak memory usage: %d MB (%.1f%% change from baseline)", 
+					t.Logf("Optimized peak memory usage: %d MB (%.1f%% change from baseline)",
 						peakMemory/1024/1024, improvementPct)
-					
+
 					// Only expect memory reduction if optimization has meaningful effect
 					// Allow small increase due to optimizer overhead
 					allowedIncrease := float64(baselineMaxMemory) * 0.1 // 10% overhead allowance
-					if tt.expectLowerMemory && float64(peakMemory) > float64(baselineMaxMemory) + allowedIncrease {
-						t.Logf("Memory usage increase within acceptable range: %.1f%% overhead", 
-							(float64(peakMemory) - float64(baselineMaxMemory)) / float64(baselineMaxMemory) * 100)
+					if tt.expectLowerMemory && float64(peakMemory) > float64(baselineMaxMemory)+allowedIncrease {
+						t.Logf("Memory usage increase within acceptable range: %.1f%% overhead",
+							(float64(peakMemory)-float64(baselineMaxMemory))/float64(baselineMaxMemory)*100)
 					}
 				} else {
 					t.Logf("Optimized peak memory usage: %d MB", peakMemory/1024/1024)
@@ -472,9 +472,9 @@ func TestPerformanceValidationEnd2End(t *testing.T) {
 	// Create realistic orchestrator
 	orchestrator := &realisticMockOrchestrator{
 		projectSize:    "large",
-		fileCount:      550, // Upper range of medium project
-		processingTime: 9 * time.Second,  // Just under target
-		memoryUsage:    480,              // Just under target
+		fileCount:      550,             // Upper range of medium project
+		processingTime: 9 * time.Second, // Just under target
+		memoryUsage:    480,             // Just under target
 	}
 
 	// Run complete validation
@@ -494,7 +494,7 @@ func TestPerformanceValidationEnd2End(t *testing.T) {
 	// All targets should be met with optimized configuration
 	if !results.Success {
 		t.Error("Performance validation should succeed with optimized configuration")
-		
+
 		// Log details of failures
 		if !results.ColdRun.TargetMet {
 			t.Logf("Cold run failed: %.2fs > %.2fs", results.ColdRun.ActualValue, results.ColdRun.TargetValue)
@@ -512,13 +512,13 @@ func TestPerformanceValidationEnd2End(t *testing.T) {
 
 	// Log successful results
 	t.Logf("Performance validation completed in %v", validationTime)
-	t.Logf("Cold run: %.2fs (target: %.2fs) - %s", 
-		results.ColdRun.ActualValue, results.ColdRun.TargetValue, 
+	t.Logf("Cold run: %.2fs (target: %.2fs) - %s",
+		results.ColdRun.ActualValue, results.ColdRun.TargetValue,
 		map[bool]string{true: "PASS", false: "FAIL"}[results.ColdRun.TargetMet])
-	t.Logf("Incremental: %.2fs (target: %.2fs) - %s", 
+	t.Logf("Incremental: %.2fs (target: %.2fs) - %s",
 		results.Incremental.ActualValue, results.Incremental.TargetValue,
 		map[bool]string{true: "PASS", false: "FAIL"}[results.Incremental.TargetMet])
-	t.Logf("Memory: %.0fMB (target: %.0fMB) - %s", 
+	t.Logf("Memory: %.0fMB (target: %.0fMB) - %s",
 		results.Memory.ActualValue, results.Memory.TargetValue,
 		map[bool]string{true: "PASS", false: "FAIL"}[results.Memory.TargetMet])
 }
@@ -527,7 +527,7 @@ func TestPerformanceValidationEnd2End(t *testing.T) {
 func TestMemoryPressureHandling(t *testing.T) {
 	config := DefaultMemoryConfig()
 	config.MaxHeapSizeMB = 100 // Artificially low limit for testing
-	
+
 	optimizer, err := NewMemoryOptimizer(config)
 	if err != nil {
 		t.Fatalf("Failed to create memory optimizer: %v", err)
@@ -542,17 +542,17 @@ func TestMemoryPressureHandling(t *testing.T) {
 	var initialMemStats runtime.MemStats
 	runtime.ReadMemStats(&initialMemStats)
 	initialGCCount := initialMemStats.NumGC
-	
+
 	// Force some allocations to test memory management
 	simulateMemoryPressure(t, optimizer)
-	
+
 	// Allow optimizer to respond and read final GC count
 	time.Sleep(100 * time.Millisecond)
 	var finalMemStats runtime.MemStats
 	runtime.ReadMemStats(&finalMemStats)
 	finalGCCount := finalMemStats.NumGC
-	
-	// Update optimizer metrics with current state 
+
+	// Update optimizer metrics with current state
 	finalMetrics := optimizer.GetMetrics()
 
 	// Verify GC was triggered during memory pressure
@@ -562,10 +562,10 @@ func TestMemoryPressureHandling(t *testing.T) {
 
 	// Get initial metrics for efficiency comparison
 	initialMetrics := optimizer.GetMetrics()
-	
+
 	// Memory efficiency should improve or stay stable
 	if finalMetrics.MemoryEfficiency < initialMetrics.MemoryEfficiency*0.9 {
-		t.Errorf("Memory efficiency degraded too much: %.2f -> %.2f", 
+		t.Errorf("Memory efficiency degraded too much: %.2f -> %.2f",
 			initialMetrics.MemoryEfficiency, finalMetrics.MemoryEfficiency)
 	}
 }
@@ -574,7 +574,7 @@ func TestMemoryPressureHandling(t *testing.T) {
 func BenchmarkOptimizedWorkerPool(b *testing.B) {
 	config := DefaultWorkerPoolConfig()
 	config.MaxWorkers = runtime.NumCPU()
-	
+
 	pool, err := NewOptimizedWorkerPool(config)
 	if err != nil {
 		b.Fatalf("Failed to create worker pool: %v", err)
@@ -596,13 +596,13 @@ func BenchmarkOptimizedWorkerPool(b *testing.B) {
 			priority: 50,
 			duration: time.Millisecond,
 		}
-		
+
 		err := pool.SubmitWork(item)
 		if err != nil {
 			b.Fatalf("Failed to submit work: %v", err)
 		}
 	}
-	
+
 	// Wait for work to complete
 	time.Sleep(100 * time.Millisecond)
 }
@@ -613,7 +613,7 @@ func BenchmarkOptimizedWorkerPool(b *testing.B) {
 func createMediumProjectManifest(t testing.TB, tempDir string) *manifest.Manifest {
 	projectDir := filepath.Join(tempDir, "medium-project")
 	createProjectStructure(t, projectDir, 350) // 350 files for medium project
-	
+
 	return &manifest.Manifest{
 		Project: manifest.ProjectConfig{
 			Root:     projectDir,
@@ -639,7 +639,7 @@ func createMediumProjectManifest(t testing.TB, tempDir string) *manifest.Manifes
 func createLargeProjectManifest(t testing.TB, tempDir string) *manifest.Manifest {
 	projectDir := filepath.Join(tempDir, "large-project")
 	createProjectStructure(t, projectDir, 600) // 600 files for large project
-	
+
 	return &manifest.Manifest{
 		Project: manifest.ProjectConfig{
 			Root:     projectDir,
@@ -681,7 +681,7 @@ func createProjectStructure(t testing.TB, projectDir string, fileCount int) {
 			}
 		}
 	}`
-	
+
 	composerFile := filepath.Join(projectDir, "composer.json")
 	if err := os.WriteFile(composerFile, []byte(composerContent), 0644); err != nil {
 		t.Fatalf("Failed to create composer.json: %v", err)
@@ -722,7 +722,7 @@ class TestController%d extends Controller
 		for i := 0; i < filesPerDir; i++ {
 			fileName := fmt.Sprintf("TestFile%d.php", dirIndex*filesPerDir+i)
 			filePath := filepath.Join(projectDir, dir, fileName)
-			
+
 			content := fmt.Sprintf(phpTemplate, dirIndex*filesPerDir+i, dirIndex*filesPerDir+i)
 			if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
 				t.Fatalf("Failed to create file %s: %v", fileName, err)
@@ -741,15 +741,15 @@ type optimizedMockOrchestrator struct {
 
 func (o *optimizedMockOrchestrator) ProcessProject(ctx context.Context, manifest *manifest.Manifest) (*emitter.Delta, error) {
 	processingTime := o.baseProcessingTime
-	
+
 	// Simulate cache speedup for incremental runs
 	if o.cacheEnabled {
 		processingTime = processingTime / 5 // 5x speedup with cache
 	}
-	
+
 	// Simulate actual processing delay
 	time.Sleep(processingTime / 100) // Scale down for testing
-	
+
 	return &emitter.Delta{
 		Meta: emitter.MetaInfo{
 			Partial: false,
@@ -823,12 +823,12 @@ func (r *realisticMockOrchestrator) ProcessProject(ctx context.Context, manifest
 	case "large":
 		scaleFactor = 1.5
 	}
-	
+
 	actualProcessingTime := time.Duration(float64(r.processingTime) * scaleFactor)
-	
+
 	// Simulate processing delay (scaled for testing)
 	time.Sleep(actualProcessingTime / 50)
-	
+
 	return &emitter.Delta{
 		Meta: emitter.MetaInfo{
 			Partial: false,
@@ -888,7 +888,7 @@ type testWorkProcessor struct{}
 func (p *testWorkProcessor) ProcessWork(ctx context.Context, item WorkItem) (WorkResult, error) {
 	// Simulate work processing
 	time.Sleep(item.EstimatedDuration())
-	
+
 	return &testWorkResult{
 		itemID:         item.ID(),
 		success:        true,
@@ -908,10 +908,10 @@ type testWorkItem struct {
 	duration time.Duration
 }
 
-func (w *testWorkItem) ID() string { return w.id }
-func (w *testWorkItem) Priority() int { return w.priority }
+func (w *testWorkItem) ID() string                       { return w.id }
+func (w *testWorkItem) Priority() int                    { return w.priority }
 func (w *testWorkItem) EstimatedDuration() time.Duration { return w.duration }
-func (w *testWorkItem) Context() context.Context { return context.Background() }
+func (w *testWorkItem) Context() context.Context         { return context.Background() }
 
 // testWorkResult implements WorkResult for testing.
 type testWorkResult struct {
@@ -922,11 +922,11 @@ type testWorkResult struct {
 	memoryUsed     int64
 }
 
-func (r *testWorkResult) ItemID() string { return r.itemID }
-func (r *testWorkResult) Success() bool { return r.success }
-func (r *testWorkResult) Error() error { return r.err }
+func (r *testWorkResult) ItemID() string                { return r.itemID }
+func (r *testWorkResult) Success() bool                 { return r.success }
+func (r *testWorkResult) Error() error                  { return r.err }
 func (r *testWorkResult) ProcessingTime() time.Duration { return r.processingTime }
-func (r *testWorkResult) MemoryUsed() int64 { return r.memoryUsed }
+func (r *testWorkResult) MemoryUsed() int64             { return r.memoryUsed }
 
 // simulateMemoryIntensiveWork simulates memory-intensive operations for testing.
 func simulateMemoryIntensiveWork(t *testing.T, useOptimizer bool, optimizer *MemoryOptimizer) {
@@ -938,11 +938,11 @@ func simulateMemoryIntensiveWork(t *testing.T, useOptimizer bool, optimizer *Mem
 			data[i][j] = fmt.Sprintf("test_string_%d_%d", i, j)
 		}
 	}
-	
+
 	if useOptimizer && optimizer != nil {
 		// Use optimizer pools when available
 		pools := optimizer.pools
-		
+
 		// Simulate using string builders from pool
 		for i := 0; i < 100; i++ {
 			sb := pools.GetStringBuilder()
@@ -951,7 +951,7 @@ func simulateMemoryIntensiveWork(t *testing.T, useOptimizer bool, optimizer *Mem
 			_ = sb.String()
 			pools.PutStringBuilder(sb)
 		}
-		
+
 		// Simulate using slices from pool
 		for i := 0; i < 50; i++ {
 			slice := pools.GetStringSlice()
@@ -959,7 +959,7 @@ func simulateMemoryIntensiveWork(t *testing.T, useOptimizer bool, optimizer *Mem
 			pools.PutStringSlice(slice)
 		}
 	}
-	
+
 	// Force GC to see memory behavior
 	runtime.GC()
 }
@@ -971,12 +971,11 @@ func simulateMemoryPressure(t *testing.T, optimizer *MemoryOptimizer) {
 	for i := range largeData {
 		largeData[i] = make([]byte, 1024*1024) // 1MB each
 	}
-	
+
 	// Allow optimizer to respond
 	time.Sleep(200 * time.Millisecond)
-	
+
 	// Clean up
 	largeData = nil
 	runtime.GC()
 }
-

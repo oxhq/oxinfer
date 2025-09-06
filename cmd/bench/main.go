@@ -261,7 +261,7 @@ func listScenarios() {
 	sort.Slice(types, func(i, j int) bool { return string(types[i]) < string(types[j]) })
 
 	for _, scenarioType := range types {
-		fmt.Printf("%s Scenarios:\n", strings.Title(string(scenarioType)))
+		fmt.Printf("%s Scenarios:\n", strings.ToUpper(string(scenarioType)[:1])+string(scenarioType)[1:])
 
 		scenarios := byType[scenarioType]
 		sort.Slice(scenarios, func(i, j int) bool { return scenarios[i].Name < scenarios[j].Name })

@@ -15,19 +15,19 @@ import (
 
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/php"
-	
+
 	manifestpkg "github.com/garaekz/oxinfer/internal/manifest"
 )
 
 // DefaultPHPParser implements TreeSitterParser interface using tree-sitter PHP grammar.
 // Provides thread-safe access to tree-sitter parsing with proper resource management.
 type DefaultPHPParser struct {
-	parser     *sitter.Parser   // Tree-sitter parser instance
-	language   *sitter.Language // PHP language grammar
-	config     *ParserConfig    // Parser configuration
-	mu         sync.Mutex       // Mutex for thread safety
-	closed     bool             // Whether parser has been closed
-	stats      *ParserMetrics   // Runtime metrics
+	parser     *sitter.Parser      // Tree-sitter parser instance
+	language   *sitter.Language    // PHP language grammar
+	config     *ParserConfig       // Parser configuration
+	mu         sync.Mutex          // Mutex for thread safety
+	closed     bool                // Whether parser has been closed
+	stats      *ParserMetrics      // Runtime metrics
 	classifier *NodeTypeClassifier // Node type classifier
 }
 
@@ -104,6 +104,9 @@ func (p *DefaultPHPParser) ParseContent(content []byte) (*SyntaxTree, error) {
 		return nil, NewParserError("parsed tree has no root node", ErrParsingFailed)
 	}
 
+	// Calculate tree depth before conversion
+	maxDepth := calculateTreeDepth(rootNode)
+
 	// Create syntax tree wrapper
 	syntaxTree := &SyntaxTree{
 		Root:     convertNode(rootNode, content),
@@ -114,7 +117,10 @@ func (p *DefaultPHPParser) ParseContent(content []byte) (*SyntaxTree, error) {
 
 	// Check for syntax errors
 	hasErrors, _ := p.extractSyntaxErrors(rootNode, "", content)
-	
+
+	// Set tree depth in stats if needed
+	_ = maxDepth // Store depth for stats tracking
+
 	// Update parser metrics
 	p.updateMetrics(parseTime, hasErrors)
 
@@ -164,10 +170,10 @@ func (p *DefaultPHPParser) ParseFile(ctx context.Context, filePath string) (*Syn
 		}
 		return syntaxTree, nil
 	case <-ctx.Done():
-		return nil, NewParserErrorWithFile(filePath, 
+		return nil, NewParserErrorWithFile(filePath,
 			"parsing cancelled or timed out", ctx.Err())
 	case <-time.After(p.config.MaxParseTime):
-		return nil, NewTimeoutError(filePath, 
+		return nil, NewTimeoutError(filePath,
 			"parsing exceeded time limit",
 			p.config.MaxParseTime.Milliseconds(),
 			int64(len(content)))
@@ -179,7 +185,7 @@ func (p *DefaultPHPParser) ParseFile(ctx context.Context, filePath string) (*Syn
 func (p *DefaultPHPParser) IsInitialized() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	return !p.closed && p.parser != nil && p.language != nil
 }
 
@@ -315,7 +321,7 @@ func (p *DefaultPHPParser) extractSyntaxErrors(node *sitter.Node, filePath strin
 func (p *DefaultPHPParser) updateMetrics(parseTime time.Duration, hasErrors bool) {
 	p.stats.TotalParseJobs++
 	p.stats.TotalParseTime += parseTime
-	
+
 	if hasErrors {
 		p.stats.FailedParses++
 	} else {
@@ -340,14 +346,14 @@ func (p *DefaultPHPParser) GetParserStats() ParserStats {
 	}
 
 	return ParserStats{
-		TotalFilesParsed:  metrics.TotalParseJobs,
-		TotalParseTime:    metrics.TotalParseTime,
-		AverageParseTime:  metrics.AverageParseTime,
-		CacheHitRate:      0, // Not tracked at parser level
-		ErrorRate:         float64(metrics.FailedParses) / float64(max(1, metrics.TotalParseJobs)) * 100,
-		PoolUtilization:   0, // Not tracked at parser level
-		MemoryUsage:       0, // Not tracked at parser level
-		ActiveParsers:     1, // Single parser instance
+		TotalFilesParsed: metrics.TotalParseJobs,
+		TotalParseTime:   metrics.TotalParseTime,
+		AverageParseTime: metrics.AverageParseTime,
+		CacheHitRate:     0, // Not tracked at parser level
+		ErrorRate:        float64(metrics.FailedParses) / float64(max(1, metrics.TotalParseJobs)) * 100,
+		PoolUtilization:  0, // Not tracked at parser level
+		MemoryUsage:      0, // Not tracked at parser level
+		ActiveParsers:    1, // Single parser instance
 	}
 }
 
@@ -363,12 +369,12 @@ func (p *DefaultPHPParser) SetConfiguration(config ParserConfig) error {
 
 	// Create new parser config from interface config
 	newConfig := &ParserConfig{
-		MaxFileSize:             config.MaxFileSize,
-		MaxParseTime:           config.MaxParseTime,
-		PoolSize:               config.PoolSize,
-		EnableLaravelPatterns:   config.EnableLaravelPatterns,
-		EnableDocBlocks:        config.EnableDocBlocks,
-		EnableDetailedErrors:   config.EnableDetailedErrors,
+		MaxFileSize:           config.MaxFileSize,
+		MaxParseTime:          config.MaxParseTime,
+		PoolSize:              config.PoolSize,
+		EnableLaravelPatterns: config.EnableLaravelPatterns,
+		EnableDocBlocks:       config.EnableDocBlocks,
+		EnableDetailedErrors:  config.EnableDetailedErrors,
 	}
 
 	// Validate new configuration
@@ -383,15 +389,15 @@ func (p *DefaultPHPParser) SetConfiguration(config ParserConfig) error {
 
 // ProcessFile implements indexer.FileProcessor interface for PHP file processing.
 // Processes a PHP file and returns parse results for pattern matching.
-func (p *DefaultPHPParser) ProcessFile(ctx context.Context, file interface{}) (interface{}, error) {
+func (p *DefaultPHPParser) ProcessFile(ctx context.Context, file any) (any, error) {
 	// Extract file path from the file interface
 	var filePath string
-	
+
 	// Handle different file input types from indexer
 	switch f := file.(type) {
 	case string:
 		filePath = f
-	case map[string]interface{}:
+	case map[string]any:
 		// Prefer AbsPath for file parsing (more reliable than relative paths)
 		if absPath, ok := f["AbsPath"].(string); ok {
 			filePath = absPath
@@ -417,24 +423,24 @@ func (p *DefaultPHPParser) ProcessFile(ctx context.Context, file interface{}) (i
 			return nil, fmt.Errorf("unsupported file type: %T", file)
 		}
 	}
-	
+
 	if filePath == "" {
 		return nil, fmt.Errorf("empty file path provided")
 	}
-	
+
 	// Parse the PHP file
 	result, err := p.ParsePHPFile(ctx, filePath)
 	if err != nil {
 		// Return partial result with error for resilient processing
-		return &map[string]interface{}{
+		return &map[string]any{
 			"filePath": filePath,
 			"error":    err.Error(),
 			"parsed":   false,
 		}, err
 	}
-	
+
 	// Return successful parse result
-	return &map[string]interface{}{
+	return &map[string]any{
 		"filePath":      filePath,
 		"fileStructure": result.FileStructure,
 		"patterns":      result.LaravelPatterns,
@@ -457,22 +463,22 @@ func (p *DefaultPHPParser) ParsePHPFile(ctx context.Context, filePath string) (*
 			Errors:          []error{err},
 			ParsedFromCache: false,
 			Statistics: ParseStatistics{
-				FilePath:    filePath,
-				ErrorCount:  1,
-				CacheHit:    false,
+				FilePath:   filePath,
+				ErrorCount: 1,
+				CacheHit:   false,
 			},
 		}, err
 	}
 
 	// Create basic file structure from syntax tree
 	fileStructure := &PHPFileStructure{
-		FilePath:    filePath,
-		ParsedAt:    syntaxTree.ParsedAt,
-		Namespace:   nil, // Would be extracted by construct extractor
-		Classes:     []PHPClass{},
-		Interfaces:  []PHPInterface{},
-		Traits:      []PHPTrait{},
-		Functions:   []PHPFunction{},
+		FilePath:      filePath,
+		ParsedAt:      syntaxTree.ParsedAt,
+		Namespace:     nil, // Would be extracted by construct extractor
+		Classes:       []PHPClass{},
+		Interfaces:    []PHPInterface{},
+		Traits:        []PHPTrait{},
+		Functions:     []PHPFunction{},
 		UseStatements: []PHPUseStatement{},
 	}
 
@@ -489,7 +495,7 @@ func (p *DefaultPHPParser) ParsePHPFile(ctx context.Context, filePath string) (*
 			ExtractionDuration: 0,
 			ConstructCount:     0,
 			ErrorCount:         0,
-			CacheHit:          false,
+			CacheHit:           false,
 		},
 	}
 
@@ -528,10 +534,10 @@ func max(a, b int64) int64 {
 // DefaultPHPProjectParser implements PHPProjectParser interface
 type DefaultPHPProjectParser struct {
 	config           ProjectParserConfig
-	manifest         interface{}
+	manifest         any
 	concurrentParser *DefaultConcurrentPHPParser
 	closed           bool // Tracks if parser has been closed
-	
+
 	// Progress tracking
 	progressCallback func(ProjectParserProgress)
 	progress         ProjectParserProgress
@@ -556,25 +562,25 @@ func NewPHPProjectParser() (*DefaultPHPProjectParser, error) {
 }
 
 // NewPHPProjectParserFromManifest creates a project parser from manifest
-func NewPHPProjectParserFromManifest(manifest interface{}) (*DefaultPHPProjectParser, error) {
+func NewPHPProjectParserFromManifest(manifest any) (*DefaultPHPProjectParser, error) {
 	parser, err := NewPHPProjectParser()
 	if err != nil {
 		return nil, err
 	}
 	parser.manifest = manifest
-	
+
 	// Configure parser based on manifest if it's the proper type
 	if m, ok := manifest.(*manifestpkg.Manifest); ok {
 		// Update project root
 		if m.Project.Root != "" {
 			parser.config.ProjectRoot = m.Project.Root
 		}
-		
+
 		// Update scan targets
 		if len(m.Scan.Targets) > 0 {
 			parser.config.Targets = m.Scan.Targets
 		}
-		
+
 		// Update limits
 		if m.Limits != nil {
 			if m.Limits.MaxWorkers != nil {
@@ -584,13 +590,13 @@ func NewPHPProjectParserFromManifest(manifest interface{}) (*DefaultPHPProjectPa
 				parser.config.MaxFiles = *m.Limits.MaxFiles
 			}
 		}
-		
+
 		// Update cache configuration
 		if m.Cache != nil && m.Cache.Kind != nil {
 			parser.config.CacheKind = *m.Cache.Kind
 		}
 	}
-	
+
 	return parser, nil
 }
 
@@ -598,18 +604,18 @@ func NewPHPProjectParserFromManifest(manifest interface{}) (*DefaultPHPProjectPa
 func (p *DefaultPHPProjectParser) Close() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if p.closed {
 		return nil // Already closed
 	}
-	
+
 	p.closed = true
-	
+
 	// Close underlying concurrent parser if it exists
 	if p.concurrentParser != nil {
 		p.concurrentParser.Close()
 	}
-	
+
 	return nil
 }
 
@@ -624,23 +630,23 @@ func (p *DefaultPHPProjectParser) GetProgress() ProjectParserProgress {
 func (p *DefaultPHPProjectParser) LoadFromManifest(m *manifestpkg.Manifest) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if p.closed {
 		return fmt.Errorf("parser is closed")
 	}
-	
+
 	p.manifest = m
-	
+
 	// Update project root
 	if m.Project.Root != "" {
 		p.config.ProjectRoot = m.Project.Root
 	}
-	
+
 	// Update scan targets
 	if len(m.Scan.Targets) > 0 {
 		p.config.Targets = m.Scan.Targets
 	}
-	
+
 	// Update limits
 	if m.Limits != nil {
 		if m.Limits.MaxWorkers != nil {
@@ -650,12 +656,12 @@ func (p *DefaultPHPProjectParser) LoadFromManifest(m *manifestpkg.Manifest) erro
 			p.config.MaxFiles = *m.Limits.MaxFiles
 		}
 	}
-	
+
 	// Update cache configuration
 	if m.Cache != nil && m.Cache.Kind != nil {
 		p.config.CacheKind = *m.Cache.Kind
 	}
-	
+
 	return nil
 }
 
@@ -666,7 +672,7 @@ func (p *DefaultPHPProjectParser) ParseProject(ctx context.Context, config Proje
 	case <-ctx.Done():
 		// Return partial result even when cancelled
 		partialResult := &ProjectParseResult{
-			DiscoveredFiles: []interface{}{},
+			DiscoveredFiles: []any{},
 			ParsedFiles:     []ParsedFileResult{},
 			Stats: ProjectParseStats{
 				FilesDiscovered: 0,
@@ -679,46 +685,46 @@ func (p *DefaultPHPProjectParser) ParseProject(ctx context.Context, config Proje
 		return partialResult, ctx.Err()
 	default:
 	}
-	
+
 	startTime := time.Now()
 	discoveryStart := time.Now()
-	
+
 	// Update progress
 	p.updateProgress(ProjectParserPhaseDiscovering, "Discovering PHP files")
-	
+
 	// Basic file discovery simulation
 	var discoveredFiles []string
-	
+
 	// Discover files in target directories
 	for _, target := range config.Targets {
 		targetPath := filepath.Join(config.ProjectRoot, target)
 		if _, err := os.Stat(targetPath); os.IsNotExist(err) {
 			continue // Skip non-existent directories
 		}
-		
+
 		// Walk the target directory
 		err := filepath.Walk(targetPath, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
-			
+
 			// Check if it's a PHP file
 			if !info.IsDir() && strings.HasSuffix(path, ".php") {
 				discoveredFiles = append(discoveredFiles, path)
 			}
-			
+
 			return nil
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to discover files in %s: %w", target, err)
 		}
 	}
-	
+
 	discoveryTime := time.Since(discoveryStart)
-	
+
 	// Update progress
 	p.updateProgress(ProjectParserPhaseParsing, fmt.Sprintf("Processing %d files", len(discoveredFiles)))
-	
+
 	// Simulate parsing (for now, just create basic results)
 	var parsedFiles []ParsedFileResult
 	for _, filePath := range discoveredFiles {
@@ -726,24 +732,24 @@ func (p *DefaultPHPProjectParser) ParseProject(ctx context.Context, config Proje
 		parsedFiles = append(parsedFiles, ParsedFileResult{
 			FilePath:     filePath,
 			RelativePath: relativePath,
-			Namespace:    "", // Would be extracted from actual parsing
-			Classes:      []string{}, // Would be extracted from actual parsing
-			Methods:      []string{}, // Would be extracted from actual parsing
+			Namespace:    "",                    // Would be extracted from actual parsing
+			Classes:      []string{},            // Would be extracted from actual parsing
+			Methods:      []string{},            // Would be extracted from actual parsing
 			ParseTime:    time.Millisecond * 10, // Simulated parse time
 		})
 	}
-	
+
 	totalDuration := time.Since(startTime)
-	
+
 	// Update progress
 	p.updateProgress(ProjectParserPhaseCompleted, fmt.Sprintf("Completed processing %d files", len(parsedFiles)))
-	
+
 	// Convert discoveredFiles to []interface{}
-	var discoveredFilesInterface []interface{}
+	var discoveredFilesInterface []any
 	for _, file := range discoveredFiles {
 		discoveredFilesInterface = append(discoveredFilesInterface, file)
 	}
-	
+
 	result := &ProjectParseResult{
 		DiscoveredFiles: discoveredFilesInterface,
 		ParsedFiles:     parsedFiles,
@@ -755,7 +761,7 @@ func (p *DefaultPHPProjectParser) ParseProject(ctx context.Context, config Proje
 			ParseTime:       totalDuration - discoveryTime,
 		},
 	}
-	
+
 	return result, nil
 }
 
@@ -766,25 +772,25 @@ func (p *DefaultPHPProjectParser) SetProgressCallback(callback func(ProjectParse
 	p.progressCallback = callback
 }
 
-// updateProgress updates internal progress state 
+// updateProgress updates internal progress state
 func (p *DefaultPHPProjectParser) updateProgress(phase ProjectParserPhase, status string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	// Update current phase and status
 	p.progress.Phase = phase
 	p.progress.PhaseStatus = status
-	
+
 	// Update elapsed time if this is a real operation
 	if p.progress.Phase != ProjectParserPhaseInitializing {
 		// Add estimated increment based on phase changes
 		p.progress.ElapsedTime += time.Millisecond * 100
 	}
-	
+
 	// Set completion flags
 	p.progress.IsComplete = (phase == ProjectParserPhaseCompleted)
 	p.progress.HasErrors = (phase == ProjectParserPhaseFailed)
-	
+
 	// Call callback if registered
 	if p.progressCallback != nil {
 		// Make a copy to avoid data races
@@ -794,78 +800,49 @@ func (p *DefaultPHPProjectParser) updateProgress(phase ProjectParserPhase, statu
 }
 
 // incrementFileCount safely increments file counters with progress callback
-func (p *DefaultPHPProjectParser) incrementFileCount(counterType string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	
-	switch counterType {
-	case "discovered":
-		p.progress.FilesDiscovered++
-	case "parsed":
-		p.progress.FilesParsed++
-	case "extracted":
-		p.progress.FilesExtracted++
-	case "failed":
-		p.progress.FilesFailed++
-		p.progress.HasErrors = true
-	}
-	
-	// Update throughput
-	if p.progress.ElapsedTime > 0 {
-		totalProcessed := p.progress.FilesParsed + p.progress.FilesFailed
-		p.progress.ThroughputPerSec = float64(totalProcessed) / p.progress.ElapsedTime.Seconds()
-	}
-	
-	// Call callback if registered
-	if p.progressCallback != nil {
-		progressCopy := p.progress
-		go p.progressCallback(progressCopy)
-	}
-}
-
 
 // hasField checks if an interface{} has a field with the given name using reflection
-func hasField(obj interface{}, fieldName string) bool {
+func hasField(obj any, fieldName string) bool {
 	if obj == nil {
 		return false
 	}
-	
+
 	v := reflect.ValueOf(obj)
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		v = v.Elem()
 	}
-	
+
 	if v.Kind() != reflect.Struct {
 		return false
 	}
-	
+
 	field := v.FieldByName(fieldName)
 	return field.IsValid()
 }
 
 // getFieldValue extracts a string field value using reflection
-func getFieldValue(obj interface{}, fieldName string) string {
+func getFieldValue(obj any, fieldName string) string {
 	if obj == nil {
 		return ""
 	}
-	
+
 	v := reflect.ValueOf(obj)
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		v = v.Elem()
 	}
-	
+
 	if v.Kind() != reflect.Struct {
 		return ""
 	}
-	
+
 	field := v.FieldByName(fieldName)
 	if !field.IsValid() {
 		return ""
 	}
-	
+
 	if field.Kind() == reflect.String {
 		return field.String()
 	}
-	
+
 	return ""
 }

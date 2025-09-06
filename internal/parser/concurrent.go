@@ -33,39 +33,40 @@ func (p *DefaultConcurrentPHPParser) ParseConcurrently(ctx context.Context, file
 		close(resultChan)
 		return resultChan, nil
 	}
-	
+
 	// Create result channel
 	resultChan := make(chan ParseJobResult, len(files))
-	
+
 	// Process files concurrently using goroutines
 	go func() {
 		defer close(resultChan)
-		
+
 		// Create semaphore to limit concurrent workers
 		sem := make(chan struct{}, p.maxWorkers)
-		
+
 		// WaitGroup to wait for all worker goroutines
 		var wg sync.WaitGroup
-		
+
 		// Process each file
+	ProcessLoop:
 		for i, job := range files {
 			// Check context before starting new job
 			select {
 			case <-ctx.Done():
 				// Context cancelled, stop starting new jobs
-				break
+				break ProcessLoop
 			default:
 			}
-			
+
 			// Acquire semaphore slot
 			select {
 			case sem <- struct{}{}:
 				// Got slot, continue
 			case <-ctx.Done():
 				// Context cancelled
-				break
+				break ProcessLoop
 			}
-			
+
 			wg.Add(1)
 			go func(jobIndex int, parseJob ParseJob) {
 				defer func() {
@@ -73,21 +74,21 @@ func (p *DefaultConcurrentPHPParser) ParseConcurrently(ctx context.Context, file
 					// Release semaphore slot
 					<-sem
 				}()
-				
+
 				// Create job-specific result
 				result := ParseJobResult{
 					JobID:    parseJob.ID,
 					WorkerID: fmt.Sprintf("worker-%d", jobIndex%p.maxWorkers),
 					CacheHit: false,
 				}
-				
+
 				// Simple parsing simulation for now
 				if parseJob.Content != nil {
 					// Basic validation to detect malformed PHP
 					content := string(parseJob.Content)
 					hasErrors := false
 					var errors []ParseError
-					
+
 					// Check for empty content
 					if len(content) == 0 {
 						hasErrors = true
@@ -105,7 +106,7 @@ func (p *DefaultConcurrentPHPParser) ParseConcurrently(ctx context.Context, file
 							Column:  1,
 						})
 					}
-					
+
 					// Check for unclosed braces (simple validation)
 					openBraces := strings.Count(content, "{")
 					closeBraces := strings.Count(content, "}")
@@ -117,7 +118,7 @@ func (p *DefaultConcurrentPHPParser) ParseConcurrently(ctx context.Context, file
 							Column:  len(content),
 						})
 					}
-					
+
 					if hasErrors {
 						result.Error = fmt.Errorf("parse validation failed: %s", errors[0].Message)
 					} else {
@@ -162,7 +163,7 @@ func (p *DefaultConcurrentPHPParser) ParseConcurrently(ctx context.Context, file
 					result.Error = fmt.Errorf("no content or file path provided for job %s", parseJob.ID)
 					result.Duration = 0
 				}
-				
+
 				// Update statistics
 				p.mu.Lock()
 				if result.Error != nil {
@@ -174,7 +175,7 @@ func (p *DefaultConcurrentPHPParser) ParseConcurrently(ctx context.Context, file
 				p.stats.TotalJobsProcessed++
 				p.stats.TotalParseTime += result.Duration
 				p.mu.Unlock()
-				
+
 				// Send result
 				select {
 				case resultChan <- result:
@@ -185,11 +186,11 @@ func (p *DefaultConcurrentPHPParser) ParseConcurrently(ctx context.Context, file
 				}
 			}(i, job)
 		}
-		
+
 		// Wait for all workers to complete
 		wg.Wait()
 	}()
-	
+
 	return resultChan, nil
 }
 
@@ -221,19 +222,19 @@ func (p *DefaultConcurrentPHPParser) Shutdown(ctx context.Context) error {
 func (p *DefaultConcurrentPHPParser) GetStats() ParserStats {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	
+
 	// Calculate derived statistics
 	stats := p.stats
 	if stats.TotalJobsProcessed > 0 {
 		stats.AverageParseTime = stats.TotalParseTime / time.Duration(stats.TotalJobsProcessed)
 		stats.ErrorRate = float64(stats.FailedFiles) / float64(stats.TotalJobsProcessed) * 100.0
 	}
-	
+
 	return stats
 }
 
 // NewConcurrentPHPParserFromManifest creates a concurrent parser using manifest configuration.
-func NewConcurrentPHPParserFromManifest(maxWorkers *int, parserConfig interface{}) (*DefaultConcurrentPHPParser, error) {
+func NewConcurrentPHPParserFromManifest(maxWorkers *int, parserConfig any) (*DefaultConcurrentPHPParser, error) {
 	workers := 4 // default
 	if maxWorkers != nil {
 		workers = *maxWorkers
@@ -242,24 +243,24 @@ func NewConcurrentPHPParserFromManifest(maxWorkers *int, parserConfig interface{
 }
 
 // ProcessFilesBatch processes a batch of files concurrently.
-func (p *DefaultConcurrentPHPParser) ProcessFilesBatch(ctx context.Context, files interface{}) (interface{}, error) {
+func (p *DefaultConcurrentPHPParser) ProcessFilesBatch(ctx context.Context, files any) (any, error) {
 	// Convert files to ParseJob slice
 	var jobs []ParseJob
-	
+
 	// Handle different input types
 	switch f := files.(type) {
-	case []interface{}:
+	case []any:
 		for i, file := range f {
 			job := ParseJob{
 				ID:       fmt.Sprintf("batch-job-%d", i),
 				FilePath: "", // Will be extracted from file
 			}
-			
+
 			// Try to extract path from file
 			if filePath := extractFilePath(file); filePath != "" {
 				job.FilePath = filePath
 			}
-			
+
 			jobs = append(jobs, job)
 		}
 	default:
@@ -278,32 +279,32 @@ func (p *DefaultConcurrentPHPParser) ProcessFilesBatch(ctx context.Context, file
 			return nil, fmt.Errorf("unsupported files type: %T", files)
 		}
 	}
-	
+
 	if len(jobs) == 0 {
 		return []ParseJobResult{}, nil
 	}
-	
+
 	// Process concurrently
 	resultChan, err := p.ParseConcurrently(ctx, jobs)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Collect results
 	var results []ParseJobResult
 	for result := range resultChan {
 		results = append(results, result)
 	}
-	
+
 	return results, nil
 }
 
 // extractFilePath tries to extract file path from various file object types
-func extractFilePath(file interface{}) string {
+func extractFilePath(file any) string {
 	switch f := file.(type) {
 	case string:
 		return f
-	case map[string]interface{}:
+	case map[string]any:
 		if path, ok := f["Path"].(string); ok {
 			return path
 		}
@@ -311,7 +312,7 @@ func extractFilePath(file interface{}) string {
 			return path
 		}
 	}
-	
+
 	// Use reflection as fallback
 	if hasField(file, "Path") {
 		return getFieldValue(file, "Path")
@@ -319,6 +320,6 @@ func extractFilePath(file interface{}) string {
 	if hasField(file, "AbsPath") {
 		return getFieldValue(file, "AbsPath")
 	}
-	
+
 	return ""
 }

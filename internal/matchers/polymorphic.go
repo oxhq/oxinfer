@@ -443,9 +443,7 @@ func (m *DefaultPolymorphicMatcher) cleanModelReference(modelRef string) string 
 	modelRef = strings.TrimSpace(modelRef)
 
 	// Remove ::class suffix
-	if strings.HasSuffix(modelRef, "::class") {
-		modelRef = strings.TrimSuffix(modelRef, "::class")
-	}
+	modelRef = strings.TrimSuffix(modelRef, "::class")
 
 	// Remove quotes
 	modelRef = m.extractStringLiteral(modelRef)

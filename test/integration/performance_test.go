@@ -66,7 +66,7 @@ func TestManifestProcessingPerformance(t *testing.T) {
 	for i := range 100 {
 		// Create a copy to avoid modifying the original
 		testCopy := *testManifest
-		
+
 		err := validator.ValidatePaths(&testCopy)
 		if err != nil {
 			t.Fatalf("Manifest validation failed on iteration %d: %v", i, err)
@@ -121,11 +121,11 @@ func BenchmarkManifestValidation(b *testing.B) {
 	validator := manifest.NewValidator()
 
 	b.ResetTimer()
-	
+
 	for range b.N {
 		// Create a copy to avoid side effects
 		testCopy := *testManifest
-		
+
 		err := validator.ValidatePaths(&testCopy)
 		if err != nil {
 			b.Fatalf("Validation failed: %v", err)
@@ -166,7 +166,7 @@ func BenchmarkManifestLoadFromReader(b *testing.B) {
 	loader := manifest.NewLoader(validator)
 
 	b.ResetTimer()
-	
+
 	for range b.N {
 		reader := strings.NewReader(manifestJSON)
 		_, err := loader.LoadFromReader(reader)
@@ -179,9 +179,9 @@ func BenchmarkManifestLoadFromReader(b *testing.B) {
 // BenchmarkCLIConfigParsing benchmarks CLI config parsing
 func BenchmarkCLIConfigParsing(b *testing.B) {
 	args := []string{"--manifest", "test.json", "--out", "output.json", "--no-color"}
-	
+
 	b.ResetTimer()
-	
+
 	for range b.N {
 		_, err := cli.ParseFlags(args)
 		if err != nil {
@@ -284,7 +284,7 @@ func TestCLIErrorDeterminism(t *testing.T) {
 			description: "Input validation error",
 		},
 		{
-			name:        "internal_error", 
+			name:        "internal_error",
 			errorFunc:   func() *cli.CLIError { return cli.NewInternalError("test internal error") },
 			description: "Internal processing error",
 		},
@@ -304,7 +304,7 @@ func TestCLIErrorDeterminism(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Generate same error multiple times
 			var errorStrings []string
-			
+
 			for range 3 {
 				err := tt.errorFunc()
 				errorStrings = append(errorStrings, err.Error())
@@ -340,7 +340,7 @@ func TestManifestValidationConsistency(t *testing.T) {
 	if err := os.MkdirAll(appDir, 0755); err != nil {
 		t.Fatalf("failed to create app dir: %v", err)
 	}
-	
+
 	tests := []struct {
 		name     string
 		manifest *manifest.Manifest
@@ -393,14 +393,14 @@ func TestManifestValidationConsistency(t *testing.T) {
 			// Validate same manifest multiple times
 			var results []bool
 			var errorMessages []string
-			
+
 			for range 5 {
 				// Create a copy to avoid side effects
 				testCopy := *tt.manifest
-				
+
 				err := validator.ValidatePaths(&testCopy)
 				results = append(results, err != nil)
-				
+
 				if err != nil {
 					errorMessages = append(errorMessages, err.Error())
 				} else {
@@ -469,14 +469,14 @@ func TestSliceOrderingDeterminism(t *testing.T) {
 	var targetsResults [][]string
 	var whitelistResults [][]string
 	var globsResults [][]string
-	
+
 	for i := range 3 {
 		reader := strings.NewReader(manifestJSON)
 		loadedManifest, err := loader.LoadFromReader(reader)
 		if err != nil {
 			t.Fatalf("LoadFromReader failed on iteration %d: %v", i, err)
 		}
-		
+
 		targetsResults = append(targetsResults, loadedManifest.Scan.Targets)
 		whitelistResults = append(whitelistResults, loadedManifest.Scan.VendorWhitelist)
 		globsResults = append(globsResults, loadedManifest.Scan.Globs)
@@ -488,7 +488,7 @@ func TestSliceOrderingDeterminism(t *testing.T) {
 			t.Errorf("Targets length changed between iterations")
 			continue
 		}
-		
+
 		for j, target := range targetsResults[i] {
 			if target != targetsResults[0][j] {
 				t.Errorf("Targets order changed at index %d between iterations", j)
@@ -501,7 +501,7 @@ func TestSliceOrderingDeterminism(t *testing.T) {
 			t.Errorf("Whitelist length changed between iterations")
 			continue
 		}
-		
+
 		for j, item := range whitelistResults[i] {
 			if item != whitelistResults[0][j] {
 				t.Errorf("Whitelist order changed at index %d between iterations", j)
@@ -552,7 +552,7 @@ func TestMemoryUsageBaseline(t *testing.T) {
 	// Measure processing time for multiple iterations
 	start := time.Now()
 	iterations := 1000
-	
+
 	for i := range iterations {
 		reader := strings.NewReader(manifestJSON)
 		_, err := loader.LoadFromReader(reader)
@@ -560,13 +560,13 @@ func TestMemoryUsageBaseline(t *testing.T) {
 			t.Fatalf("LoadFromReader failed on iteration %d: %v", i, err)
 		}
 	}
-	
+
 	duration := time.Since(start)
 	averageTime := duration / time.Duration(iterations)
-	
+
 	t.Logf("Processed %d manifests in %v", iterations, duration)
 	t.Logf("Average processing time: %v", averageTime)
-	
+
 	// Basic performance expectation - should process at least 100 manifests per second
 	if averageTime > 10*time.Millisecond {
 		t.Errorf("Processing too slow: %v per manifest (expected < 10ms)", averageTime)
@@ -587,7 +587,7 @@ func TestStringDeterminism(t *testing.T) {
 
 	for _, testErr := range testErrors {
 		var results []string
-		
+
 		// Generate same error multiple times
 		for range 3 {
 			var cliErr *cli.CLIError
@@ -596,7 +596,7 @@ func TestStringDeterminism(t *testing.T) {
 			} else {
 				cliErr = cli.NewInputError(testErr.message)
 			}
-			
+
 			results = append(results, cliErr.Error())
 		}
 

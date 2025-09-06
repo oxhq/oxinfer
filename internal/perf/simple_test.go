@@ -230,6 +230,7 @@ func TestOptimizedWorkerPool_BasicFunctionality(t *testing.T) {
 	metrics := pool.GetMetrics()
 	if metrics == nil {
 		t.Error("Metrics should be available")
+		return
 	}
 
 	if metrics.StartTime.IsZero() {
@@ -289,4 +290,3 @@ func BenchmarkPerformanceAnalyzer_CreateAndAnalyze(b *testing.B) {
 		}
 	}
 }
-

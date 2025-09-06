@@ -173,10 +173,10 @@ class Order extends Model {
 			wantErr:          false,
 		},
 		{
-			name:        "invalid_syntax_tree",
-			phpContent:  "", // Empty content
+			name:           "invalid_syntax_tree",
+			phpContent:     "", // Empty content
 			wantMatchCount: 0,
-			wantErr:     false,
+			wantErr:        false,
 		},
 	}
 
@@ -415,10 +415,10 @@ func TestPivotMatcher_ExtractPivotFields(t *testing.T) {
 	defer matcher.Close()
 
 	tests := []struct {
-		name         string
-		phpContent   string
-		wantFields   []string
-		description  string
+		name        string
+		phpContent  string
+		wantFields  []string
+		description string
 	}{
 		{
 			name: "single_field",
@@ -528,7 +528,7 @@ func TestPivotMatcher_Close(t *testing.T) {
 func createTestPivotMatcher(t *testing.T) *DefaultPivotMatcher {
 	config := DefaultMatcherConfig()
 	config.MinConfidenceThreshold = 0.5 // Lower threshold for testing
-	
+
 	matcher, err := NewPivotMatcher(php.GetLanguage(), config)
 	if err != nil {
 		t.Fatalf("Failed to create test pivot matcher: %v", err)
@@ -543,21 +543,21 @@ func createSyntaxTree(t *testing.T, phpContent string) *parser.SyntaxTree {
 			Type: "program",
 			Text: phpContent,
 		},
-		Source:    []byte(phpContent),
-		Language:  "php",
-		ParsedAt:  time.Now(),
+		Source:   []byte(phpContent),
+		Language: "php",
+		ParsedAt: time.Now(),
 	}
 }
 
 func loadFixtureFile(t *testing.T, relativePath string) string {
 	fixturesDir := filepath.Join("..", "..", "test", "fixtures", "matchers")
 	filePath := filepath.Join(fixturesDir, relativePath)
-	
+
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		t.Fatalf("Failed to load fixture file %s: %v", filePath, err)
 	}
-	
+
 	return string(content)
 }
 
@@ -585,13 +585,13 @@ func equalStringSlices(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	
+
 	for i := range a {
 		if a[i] != b[i] {
 			return false
 		}
 	}
-	
+
 	return true
 }
 

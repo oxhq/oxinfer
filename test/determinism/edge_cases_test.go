@@ -14,17 +14,17 @@ import (
 func TestDeterminism_MapIterationStability(t *testing.T) {
 	// This test verifies that map iteration order doesn't affect output
 	// by creating scenarios with large maps and checking hash stability
-	
+
 	hasher := determinism.NewDeltaHasher()
 
 	// Create delta with large map-based structures to test iteration stability
 	createDeltaWithLargeMaps := func(seed int64) *emitter.Delta {
 		rng := rand.New(rand.NewSource(seed))
-		
+
 		// Create controllers with randomly ordered but deterministically named entries
 		controllerCount := 50
 		controllers := make([]emitter.Controller, controllerCount)
-		
+
 		for i := 0; i < controllerCount; i++ {
 			// Use random but reproducible names based on seed
 			controllers[i] = emitter.Controller{
@@ -80,7 +80,7 @@ func TestDeterminism_MapIterationStability(t *testing.T) {
 func TestDeterminism_FloatingPointConsistency(t *testing.T) {
 	// Test that any floating point values (if present) are handled consistently
 	// This is important for cross-platform determinism
-	
+
 	hasher := determinism.NewDeltaHasher()
 
 	createDeltaWithFloats := func() *emitter.Delta {
@@ -132,7 +132,7 @@ func TestDeterminism_MemoryPressureStability(t *testing.T) {
 	// Create a very large delta structure to test memory handling
 	createLargeDelta := func() *emitter.Delta {
 		const largeSize = 10000
-		
+
 		controllers := make([]emitter.Controller, largeSize)
 		for i := 0; i < largeSize; i++ {
 			controllers[i] = emitter.Controller{
@@ -272,7 +272,7 @@ func TestDeterminism_ConcurrentAccess(t *testing.T) {
 		t.Errorf("Expected %d unique hashes, got %d", numGoroutines, len(hashMap))
 	}
 
-	t.Logf("Concurrent access test: %d goroutines produced %d unique hashes", 
+	t.Logf("Concurrent access test: %d goroutines produced %d unique hashes",
 		numGoroutines, len(hashMap))
 }
 
@@ -409,7 +409,7 @@ func TestDeterminism_UnicodeHandling(t *testing.T) {
 func TestDeterminism_CrossPlatformCompatibility(t *testing.T) {
 	// Test that would verify cross-platform consistency
 	// This is a placeholder for the actual implementation
-	
+
 	hasher := determinism.NewDeltaHasher()
 
 	createPlatformTestDelta := func() *emitter.Delta {
@@ -485,8 +485,8 @@ func TestDeterminism_LargeDatasetStability(t *testing.T) {
 	// Create a delta representing a large Laravel application
 	createLargeProductionDelta := func() *emitter.Delta {
 		const (
-			controllerCount = 500
-			modelCount      = 200
+			controllerCount  = 500
+			modelCount       = 200
 			polymorphicCount = 50
 			broadcastCount   = 30
 		)
@@ -500,7 +500,7 @@ func TestDeterminism_LargeDatasetStability(t *testing.T) {
 					Status:   &[]int{200 + (i%5)*100}[0], // Vary status codes
 					Explicit: &[]bool{i%2 == 0}[0],
 				},
-				Resources: generateResources(i % 3),
+				Resources:  generateResources(i % 3),
 				ScopesUsed: generateScopes(i % 5),
 			}
 		}
@@ -528,7 +528,7 @@ func TestDeterminism_LargeDatasetStability(t *testing.T) {
 				Partial: false,
 				Stats: emitter.MetaStats{
 					FilesParsed: int64(controllerCount + modelCount),
-					Skipped:     int64((controllerCount + modelCount) / 20), // 5% skipped
+					Skipped:     int64((controllerCount + modelCount) / 20),   // 5% skipped
 					DurationMs:  int64(5000 + (controllerCount+modelCount)*2), // Scale with size
 				},
 			},
@@ -594,7 +594,7 @@ func generateResources(count int) []emitter.Resource {
 	if count == 0 {
 		return nil
 	}
-	
+
 	resources := make([]emitter.Resource, count)
 	for i := 0; i < count; i++ {
 		resources[i] = emitter.Resource{
@@ -609,10 +609,10 @@ func generateScopes(count int) []emitter.ScopeUsed {
 	if count == 0 {
 		return nil
 	}
-	
+
 	scopes := make([]emitter.ScopeUsed, count)
 	scopeNames := []string{"active", "verified", "published", "featured", "recent"}
-	
+
 	for i := 0; i < count; i++ {
 		scopes[i] = emitter.ScopeUsed{
 			On:   "Model",
@@ -627,7 +627,7 @@ func generatePivots(count int) []emitter.PivotInfo {
 	if count == 0 {
 		return nil
 	}
-	
+
 	pivots := make([]emitter.PivotInfo, count)
 	for i := 0; i < count; i++ {
 		pivots[i] = emitter.PivotInfo{

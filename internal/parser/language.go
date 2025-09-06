@@ -14,10 +14,10 @@ import (
 var (
 	// phpLanguage holds the cached PHP language instance to avoid repeated initialization
 	phpLanguage *sitter.Language
-	
+
 	// languageInitMutex protects the language initialization process
 	languageInitMutex sync.Once
-	
+
 	// languageInitError holds any error that occurred during language initialization
 	languageInitError error
 )
@@ -33,11 +33,11 @@ func GetPHPLanguage() *sitter.Language {
 	languageInitMutex.Do(func() {
 		phpLanguage, languageInitError = initializePHPLanguage()
 	})
-	
+
 	if languageInitError != nil {
 		return nil
 	}
-	
+
 	return phpLanguage
 }
 
@@ -48,7 +48,7 @@ func GetPHPLanguageWithError() (*sitter.Language, error) {
 	languageInitMutex.Do(func() {
 		phpLanguage, languageInitError = initializePHPLanguage()
 	})
-	
+
 	return phpLanguage, languageInitError
 }
 
@@ -59,15 +59,15 @@ func initializePHPLanguage() (*sitter.Language, error) {
 	// Load PHP language from tree-sitter
 	language := php.GetLanguage()
 	if language == nil {
-		return nil, NewInternalError("language_init", 
+		return nil, NewInternalError("language_init",
 			"tree-sitter PHP language returned nil - check tree-sitter installation", nil)
 	}
-	
+
 	// Validate language configuration
 	if err := validateLanguage(language); err != nil {
 		return nil, fmt.Errorf("PHP language validation failed: %w", err)
 	}
-	
+
 	return language, nil
 }
 
@@ -77,17 +77,17 @@ func validateLanguage(language *sitter.Language) error {
 	if language == nil {
 		return NewInternalError("language_validation", "language is nil", nil)
 	}
-	
+
 	// Skip version check as it may not be available in this tree-sitter version
 	// The language validation will continue with symbol count check
-	
+
 	// Check if language has symbols (indicates proper grammar loading)
 	symbolCount := language.SymbolCount()
 	if symbolCount == 0 {
-		return NewInternalError("language_validation", 
+		return NewInternalError("language_validation",
 			"language has no symbols - grammar not properly loaded", nil)
 	}
-	
+
 	return nil
 }
 
@@ -103,20 +103,20 @@ func GetLanguageInfo() LanguageInfo {
 	lang := GetPHPLanguage()
 	if lang == nil {
 		return LanguageInfo{
-			IsLoaded:      false,
-			Version:       0,
-			SymbolCount:   0,
-			FieldCount:    0,
-			LoadError:     languageInitError,
+			IsLoaded:    false,
+			Version:     0,
+			SymbolCount: 0,
+			FieldCount:  0,
+			LoadError:   languageInitError,
 		}
 	}
-	
+
 	return LanguageInfo{
-		IsLoaded:      true,
-		Version:       0, // Version method not available in this tree-sitter version
-		SymbolCount:   lang.SymbolCount(),
-		FieldCount:    0, // FieldCount method not available in this tree-sitter version
-		LoadError:     nil,
+		IsLoaded:    true,
+		Version:     0, // Version method not available in this tree-sitter version
+		SymbolCount: lang.SymbolCount(),
+		FieldCount:  0, // FieldCount method not available in this tree-sitter version
+		LoadError:   nil,
 	}
 }
 
@@ -124,16 +124,16 @@ func GetLanguageInfo() LanguageInfo {
 type LanguageInfo struct {
 	// IsLoaded indicates if the language was successfully loaded
 	IsLoaded bool
-	
+
 	// Version is the tree-sitter language version
 	Version uint32
-	
+
 	// SymbolCount is the number of grammar symbols
 	SymbolCount uint32
-	
+
 	// FieldCount is the number of named fields
 	FieldCount uint32
-	
+
 	// LoadError contains any error that occurred during loading
 	LoadError error
 }
