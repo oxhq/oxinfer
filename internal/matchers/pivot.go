@@ -227,39 +227,106 @@ func (m *DefaultPivotMatcher) processPivotMatch(
 		return nil
 	}
 
-	// Extract pivot fields from withPivot arguments
-	var pivotFields []string
-	if methodName == "withPivot" && argsNode != nil {
-		pivotFields = m.extractPivotFields(argsNode, tree)
-		if len(pivotFields) == 0 {
-			return nil // withPivot without fields is not useful
+	// T5: Validate that withPivot is used in correct context (many-to-many relationships)
+	if methodName == "withPivot" {
+		// Check if it's in a belongsToMany context
+		if !m.isInManyToManyContext(tree, position) {
+			return nil // Skip if not in correct relationship context
+		}
+		
+		// Extract pivot fields
+		if argsNode != nil {
+			pivotFields := m.extractPivotFields(argsNode, tree)
+			if len(pivotFields) == 0 {
+				return nil // withPivot without fields is not useful
+			}
+			
+			// Create pivot match with fields
+			relationName := m.inferRelationshipName(tree, position)
+			pivotMatch := &PivotMatch{
+				Relation:   relationName,
+				Fields:     pivotFields,
+				Timestamps: false,
+				Alias:      "",
+				Pattern:    queryDef.Name,
+				Method:     methodName,
+			}
+
+			return &MatchResult{
+				Type:       PatternTypePivot,
+				Position:   position,
+				Content:    fmt.Sprintf("->%s%s", methodName, m.getMethodArgsDisplay(methodName, pivotFields, "")),
+				Confidence: queryDef.Confidence,
+				Data:       pivotMatch,
+				Context: &MatchContext{
+					FilePath: filePath,
+					Explicit: true,
+				},
+			}
+		}
+		return nil
+	}
+
+	// Handle withTimestamps
+	if methodName == "withTimestamps" {
+		if !m.isInManyToManyContext(tree, position) {
+			return nil
+		}
+		
+		relationName := m.inferRelationshipName(tree, position)
+		pivotMatch := &PivotMatch{
+			Relation:   relationName,
+			Fields:     []string{},
+			Timestamps: true,
+			Alias:      "",
+			Pattern:    queryDef.Name,
+			Method:     methodName,
+		}
+
+		return &MatchResult{
+			Type:       PatternTypePivot,
+			Position:   position,
+			Content:    fmt.Sprintf("->%s()", methodName),
+			Confidence: queryDef.Confidence,
+			Data:       pivotMatch,
+			Context: &MatchContext{
+				FilePath: filePath,
+				Explicit: true,
+			},
 		}
 	}
 
-	// Determine relationship context
-	relationName := m.inferRelationshipName(tree, position)
+	// Handle as() for pivot accessor
+	if methodName == "as" && aliasName != "" {
+		if !m.isInManyToManyContext(tree, position) {
+			return nil
+		}
+		
+		relationName := m.inferRelationshipName(tree, position)
+		pivotMatch := &PivotMatch{
+			Relation:   relationName,
+			Fields:     []string{},
+			Timestamps: false,
+			Alias:      aliasName,
+			Pattern:    queryDef.Name,
+			Method:     methodName,
+		}
 
-	// Create pivot match
-	pivotMatch := &PivotMatch{
-		Relation:   relationName,
-		Fields:     pivotFields,
-		Timestamps: methodName == "withTimestamps",
-		Alias:      aliasName,
-		Pattern:    queryDef.Name,
-		Method:     methodName,
+		return &MatchResult{
+			Type:       PatternTypePivot,
+			Position:   position,
+			Content:    fmt.Sprintf("->%s('%s')", methodName, aliasName),
+			Confidence: queryDef.Confidence,
+			Data:       pivotMatch,
+			Context: &MatchContext{
+				FilePath: filePath,
+				Explicit: true,
+			},
+		}
 	}
 
-	return &MatchResult{
-		Type:       PatternTypePivot,
-		Position:   position,
-		Content:    fmt.Sprintf("->%s%s", methodName, m.getMethodArgsDisplay(methodName, pivotFields, aliasName)),
-		Confidence: queryDef.Confidence,
-		Data:       pivotMatch,
-		Context: &MatchContext{
-			FilePath: filePath,
-			Explicit: m.isExplicitPivotUsage(queryDef.Name),
-		},
-	}
+	// Default case - should not reach here for valid pivot methods
+	return nil
 }
 
 // extractAliasFromArgs extracts alias name from 'as' method arguments.
@@ -294,8 +361,10 @@ func (m *DefaultPivotMatcher) extractAliasFromArgs(argsNode *sitter.Node, tree *
 }
 
 // extractPivotFields extracts field names from withPivot method arguments.
+// T5: Improved extraction with better handling of array syntax and multiple arguments
 func (m *DefaultPivotMatcher) extractPivotFields(argsNode *sitter.Node, tree *parser.SyntaxTree) []string {
 	var fields []string
+	seenFields := make(map[string]bool) // T5: Prevent duplicates
 
 	// Walk through arguments to find string literals
 	for i := uint32(0); i < argsNode.ChildCount(); i++ {
@@ -306,20 +375,45 @@ func (m *DefaultPivotMatcher) extractPivotFields(argsNode *sitter.Node, tree *pa
 
 		// Handle argument nodes
 		if child.Type() == "argument" {
-			fieldName := m.extractStringFromArgument(child, tree)
-			if fieldName != "" {
-				fields = append(fields, fieldName)
+			// Check if it's an array argument
+			if arrayArg := m.extractArrayArgument(child, tree); len(arrayArg) > 0 {
+				for _, field := range arrayArg {
+					if !seenFields[field] {
+						fields = append(fields, field)
+						seenFields[field] = true
+					}
+				}
+			} else {
+				// Single string argument
+				fieldName := m.extractStringFromArgument(child, tree)
+				if fieldName != "" && !seenFields[fieldName] {
+					fields = append(fields, fieldName)
+					seenFields[fieldName] = true
+				}
 			}
 		}
 		// Handle direct string literals (backup case)
 		if child.Type() == "string" || child.Type() == "encapsed_string" {
 			fieldName := m.extractStringContent(child, tree)
-			if fieldName != "" {
+			if fieldName != "" && !seenFields[fieldName] {
 				fields = append(fields, fieldName)
+				seenFields[fieldName] = true
+			}
+		}
+		// T5: Handle array syntax like ['field1', 'field2']
+		if child.Type() == "array_creation_expression" {
+			arrayFields := m.extractArrayFields(child, tree)
+			for _, field := range arrayFields {
+				if !seenFields[field] {
+					fields = append(fields, field)
+					seenFields[field] = true
+				}
 			}
 		}
 	}
 
+	// T5: Sort fields for deterministic output
+	sort.Strings(fields)
 	return fields
 }
 
@@ -576,4 +670,86 @@ func ValidatePivotMethodCall(methodName string, args []string) bool {
 	default:
 		return false
 	}
+}
+
+// extractArrayArgument extracts fields from an array passed as argument
+// T5: Handle ['field1', 'field2'] syntax in withPivot
+func (m *DefaultPivotMatcher) extractArrayArgument(argNode *sitter.Node, tree *parser.SyntaxTree) []string {
+	var fields []string
+	
+	// Look for array_creation_expression in the argument
+	for j := uint32(0); j < argNode.ChildCount(); j++ {
+		child := argNode.Child(int(j))
+		if child == nil {
+			continue
+		}
+		
+		if child.Type() == "array_creation_expression" {
+			return m.extractArrayFields(child, tree)
+		}
+	}
+	
+	return fields
+}
+
+// extractArrayFields extracts string fields from an array creation expression
+// T5: Parse ['field1', 'field2', 'field3'] syntax
+func (m *DefaultPivotMatcher) extractArrayFields(arrayNode *sitter.Node, tree *parser.SyntaxTree) []string {
+	var fields []string
+	
+	// Walk through array elements
+	for i := uint32(0); i < arrayNode.ChildCount(); i++ {
+		child := arrayNode.Child(int(i))
+		if child == nil {
+			continue
+		}
+		
+		// Handle array_element_initializer
+		if child.Type() == "array_element_initializer" {
+			// Look for string value in the initializer
+			for j := uint32(0); j < child.ChildCount(); j++ {
+				elemChild := child.Child(int(j))
+				if elemChild != nil && (elemChild.Type() == "string" || elemChild.Type() == "encapsed_string") {
+					field := m.extractStringContent(elemChild, tree)
+					if field != "" {
+						fields = append(fields, field)
+					}
+				}
+			}
+		}
+		// Direct string in array
+		if child.Type() == "string" || child.Type() == "encapsed_string" {
+			field := m.extractStringContent(child, tree)
+			if field != "" {
+				fields = append(fields, field)
+			}
+		}
+	}
+	
+	return fields
+}
+// isInManyToManyContext checks if the pivot method is used in a belongsToMany relationship
+// T5: Validate that pivot methods are only detected in correct context
+func (m *DefaultPivotMatcher) isInManyToManyContext(tree *parser.SyntaxTree, position parser.Point) bool {
+	sourceLines := strings.Split(string(tree.Source), "\n")
+	
+	// Check current line and surrounding lines for belongsToMany
+	for lineOffset := -5; lineOffset <= 2; lineOffset++ {
+		lineIndex := position.Row + lineOffset
+		if lineIndex >= 0 && lineIndex < len(sourceLines) {
+			line := sourceLines[lineIndex]
+			
+			// Look for belongsToMany relationship
+			if strings.Contains(line, "belongsToMany") {
+				return true
+			}
+			
+			// Also check for morphToMany and morphedByMany (polymorphic many-to-many)
+			if strings.Contains(line, "morphToMany") || strings.Contains(line, "morphedByMany") {
+				return true
+			}
+		}
+	}
+	
+	return false
 }
