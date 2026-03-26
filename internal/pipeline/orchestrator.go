@@ -5,17 +5,21 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"reflect"
+	"runtime"
 	"sort"
 	"sync"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/emitter"
-	"github.com/garaekz/oxinfer/internal/indexer"
-	"github.com/garaekz/oxinfer/internal/infer"
-	"github.com/garaekz/oxinfer/internal/manifest"
-	"github.com/garaekz/oxinfer/internal/matchers"
-	"github.com/garaekz/oxinfer/internal/parser"
-	"github.com/garaekz/oxinfer/internal/psr4"
+	"github.com/oxhq/oxinfer/internal/emitter"
+	"github.com/oxhq/oxinfer/internal/indexer"
+	"github.com/oxhq/oxinfer/internal/infer"
+	"github.com/oxhq/oxinfer/internal/logging"
+	"github.com/oxhq/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/matchers"
+	"github.com/oxhq/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/pipeline/optimizations"
+	"github.com/oxhq/oxinfer/internal/psr4"
 )
 
 // DefaultOrchestrator implements the PipelineOrchestrator interface.
@@ -174,7 +178,7 @@ func (o *DefaultOrchestrator) RunIndexingPhase(ctx context.Context, manifest *ma
 func (o *DefaultOrchestrator) RunParsingPhase(ctx context.Context, files []indexer.FileInfo) (*ParseResults, error) {
 	startTime := time.Now()
 
-	// Initialize Laravel parser if not already done
+	// Initialize Laravel parser pool for thread-safe parsing
 	if o.registry.LaravelParser == nil {
 		laravelParser, err := parser.NewLaravelParser(false)
 		if err != nil {
@@ -182,8 +186,6 @@ func (o *DefaultOrchestrator) RunParsingPhase(ctx context.Context, files []index
 		}
 		o.registry.LaravelParser = laravelParser
 	}
-
-	laravelParser := o.registry.LaravelParser
 
 	// The PHPParser.ProcessFile method handles construct extraction internally
 
@@ -198,43 +200,207 @@ func (o *DefaultOrchestrator) RunParsingPhase(ctx context.Context, files []index
 		ModelScopes: make(map[string][]string),
 	}
 
-	// Process each file using the LaravelParser
-	for _, file := range files {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
+	// Right-size parsing workers for CPU-bound workload
+	cpus := runtime.NumCPU()
+	parseWorkerCount := int(float64(cpus) * 1.5)
+	if parseWorkerCount < cpus {
+		parseWorkerCount = cpus
+	}
+	if o.config.MaxWorkers > 0 && parseWorkerCount > o.config.MaxWorkers {
+		parseWorkerCount = o.config.MaxWorkers
+	}
+	if parseWorkerCount > len(files) {
+		parseWorkerCount = len(files) // Don't create more workers than files
+	}
+	if parseWorkerCount < 2 {
+		parseWorkerCount = 2
+	}
 
-		// Parse Laravel patterns
-		err := laravelParser.ParseFile(ctx, file.Path)
+	// Create a parser pool for thread-safe concurrent parsing
+	parserPool := make(chan *parser.LaravelParser, parseWorkerCount)
+	allParsers := make([]*parser.LaravelParser, 0, parseWorkerCount) // Keep track of all parsers
+	for i := 0; i < parseWorkerCount; i++ {
+		// Create individual parser for each worker to avoid concurrent access
+		laravelParser, err := parser.NewLaravelParser(false)
 		if err != nil {
-			failedFile := FailedFile{
-				FilePath: file.Path,
-				Error:    err,
-			}
-			results.FailedFiles = append(results.FailedFiles, failedFile)
-			results.ParseErrors++
-			continue
+			return nil, fmt.Errorf("failed to create Laravel parser for pool: %w", err)
 		}
+		parserPool <- laravelParser
+		allParsers = append(allParsers, laravelParser) // Store for later aggregation
+	}
 
-		// Track as processed
-		results.FilesProcessed++
-		
-		parsedFile := ParsedFile{
-			FilePath:     file.Path,
-			RelativePath: file.Path, // Can compute relative if needed
+	// Channels for parallel parsing
+	fileJobs := make(chan indexer.FileInfo, len(files))
+	parseResults := make(chan struct {
+		ParsedFile *ParsedFile
+		FailedFile *FailedFile
+	}, len(files))
+
+	// Launch parsing workers
+	var parseWg sync.WaitGroup
+	for i := 0; i < parseWorkerCount; i++ {
+		parseWg.Add(1)
+		go func() {
+			defer parseWg.Done()
+
+			// Get a parser from the pool for this worker
+			workerParser := <-parserPool
+			defer func() {
+				// Return parser to pool when worker finishes
+				parserPool <- workerParser
+			}()
+
+			for file := range fileJobs {
+				select {
+				case <-ctx.Done():
+					parseResults <- struct {
+						ParsedFile *ParsedFile
+						FailedFile *FailedFile
+					}{
+						FailedFile: &FailedFile{
+							FilePath: file.Path,
+							Error:    ctx.Err(),
+						},
+					}
+					return
+				default:
+				}
+
+				// Parse Laravel patterns using absolute path and get syntax tree
+				// Each worker uses its own parser instance for thread safety
+				syntaxTree, err := workerParser.ParseFile(ctx, file.AbsPath)
+				if err != nil {
+					parseResults <- struct {
+						ParsedFile *ParsedFile
+						FailedFile *FailedFile
+					}{
+						FailedFile: &FailedFile{
+							FilePath: file.Path,
+							Error:    err,
+						},
+					}
+					continue
+				}
+
+				parseResults <- struct {
+					ParsedFile *ParsedFile
+					FailedFile *FailedFile
+				}{
+					ParsedFile: &ParsedFile{
+						FilePath:     file.Path,    // Keep relative for display
+						AbsPath:      file.AbsPath, // Add absolute for file operations
+						RelativePath: file.Path,
+						SyntaxTree:   syntaxTree, // Store syntax tree to avoid reparsing
+					},
+				}
+			}
+		}()
+	}
+
+	// Submit all files for parsing; large files first to reduce tail latency
+	sort.Slice(files, func(i, j int) bool { return files[i].Size > files[j].Size })
+	for _, file := range files {
+		fileJobs <- file
+	}
+	close(fileJobs)
+
+	// Close results channel when all workers complete
+	go func() {
+		parseWg.Wait()
+		close(parseResults)
+	}()
+
+	// Collect results from all parsing workers
+	for result := range parseResults {
+		if result.FailedFile != nil {
+			results.FailedFiles = append(results.FailedFiles, *result.FailedFile)
+			results.ParseErrors++
+		} else if result.ParsedFile != nil {
+			results.ParsedFiles = append(results.ParsedFiles, *result.ParsedFile)
+			results.FilesProcessed++
 		}
-		results.ParsedFiles = append(results.ParsedFiles, parsedFile)
 	}
 
 	// Finalize results
 	results.ParseDuration = time.Since(startTime)
 
-	// Extract model scopes if using Laravel-aware parser
-	if laravelParser != nil {
-		results.ModelScopes = laravelParser.GetModelScopes()
+	// Aggregate model scopes, controllers, and models from all worker parsers
+	aggregatedModelScopes := make(map[string][]string)
+	aggregatedControllers := make(map[string][]string)
+	aggregatedModels := make(map[string]parser.ModelInfo)
+
+	for _, workerParser := range allParsers {
+		// Merge model scopes
+		for fqcn, scopes := range workerParser.GetModelScopes() {
+			if existing, exists := aggregatedModelScopes[fqcn]; exists {
+				// Merge scopes, avoiding duplicates
+				for _, scope := range scopes {
+					found := false
+					for _, existingScope := range existing {
+						if existingScope == scope {
+							found = true
+							break
+						}
+					}
+					if !found {
+						existing = append(existing, scope)
+					}
+				}
+				aggregatedModelScopes[fqcn] = existing
+			} else {
+				aggregatedModelScopes[fqcn] = scopes
+			}
+		}
+
+		// Merge controllers
+		for fqcn, methods := range workerParser.GetControllers() {
+			if existing, exists := aggregatedControllers[fqcn]; exists {
+				// Merge methods, avoiding duplicates
+				for _, method := range methods {
+					found := false
+					for _, existingMethod := range existing {
+						if existingMethod == method {
+							found = true
+							break
+						}
+					}
+					if !found {
+						existing = append(existing, method)
+					}
+				}
+				aggregatedControllers[fqcn] = existing
+			} else {
+				aggregatedControllers[fqcn] = methods
+			}
+		}
+
+		// Merge models
+		for fqcn, modelInfo := range workerParser.GetModels() {
+			aggregatedModels[fqcn] = modelInfo // Models are unique by FQCN
+		}
 	}
+
+	// Optional PSR-4 validation (non-fatal): verify classes resolve via resolver
+	if r := o.registry.PSR4Resolver; r != nil && !reflect.ValueOf(r).IsNil() {
+		// Validate models
+		for fqcn, mi := range aggregatedModels {
+			if _, err := r.ResolveClass(ctx, fqcn); err != nil {
+				// Keep non-fatal: log and continue; do not include clearly invalid
+				logging.VerboseFromContext(ctx, "orchestrator", "PSR-4 failed for model %s (%s): %v", fqcn, mi.FilePath, err)
+			}
+		}
+		// Validate controllers
+		for fqcn := range aggregatedControllers {
+			if _, err := r.ResolveClass(ctx, fqcn); err != nil {
+				logging.VerboseFromContext(ctx, "orchestrator", "PSR-4 failed for controller %s: %v", fqcn, err)
+			}
+		}
+	}
+
+	// Set the aggregated results
+	results.ModelScopes = aggregatedModelScopes
+	results.Controllers = aggregatedControllers
+	results.Models = aggregatedModels
 
 	// Sort all constructs for deterministic output
 	o.sortParseResults(results)
@@ -286,48 +452,50 @@ func (o *DefaultOrchestrator) RunMatchingPhase(ctx context.Context, parseResults
 		return parseResults.ParsedFiles[i].FilePath < parseResults.ParsedFiles[j].FilePath
 	})
 
-	// Process each parsed file
-	for _, parsedFile := range parseResults.ParsedFiles {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
+	// Use parallel pattern matching for aggressive performance
+	parsedFiles := make([]*optimizations.ParsedFile, 0, len(parseResults.ParsedFiles))
+	for _, pf := range parseResults.ParsedFiles {
+		if pf.SyntaxTree != nil {
+			parsedFiles = append(parsedFiles, &optimizations.ParsedFile{
+				FilePath:   pf.FilePath,
+				SyntaxTree: pf.SyntaxTree,
+			})
 		}
-
-		// We need to reconstruct the syntax tree for pattern matching
-		// In a full implementation, we'd pass the tree from parsing phase
-		syntaxTree, err := o.parseSyntaxTree(ctx, parsedFile.FilePath)
-		if err != nil {
-			continue // Skip files that can't be parsed for matching
-		}
-
-		patterns, err := o.registry.PatternMatcher.MatchAll(ctx, syntaxTree, parsedFile.FilePath)
-		if err != nil {
-			continue // Skip files with matching errors
-		}
-
-		results.FilePatterns[parsedFile.FilePath] = patterns
-
-		// Aggregate matches by type
-		results.HTTPStatusMatches = append(results.HTTPStatusMatches, patterns.HTTPStatus...)
-		results.RequestUsageMatches = append(results.RequestUsageMatches, patterns.RequestUsage...)
-		results.ResourceMatches = append(results.ResourceMatches, patterns.Resources...)
-		results.PivotMatches = append(results.PivotMatches, patterns.Pivots...)
-		results.AttributeMatches = append(results.AttributeMatches, patterns.Attributes...)
-		results.ScopeMatches = append(results.ScopeMatches, patterns.Scopes...)
-		results.PolymorphicMatches = append(results.PolymorphicMatches, patterns.Polymorphics...)
-		results.BroadcastMatches = append(results.BroadcastMatches, patterns.Broadcasts...)
-
-		results.FilesMatched++
 	}
+
+	// Create parallel pattern matcher with aggressive worker count
+	maxWorkers := runtime.NumCPU() * 2
+	if maxWorkers < 8 {
+		maxWorkers = 8 // Minimum aggressive parallelism
+	}
+	parallelMatcher := optimizations.NewParallelPatternMatcher(o.registry.PatternMatcher, maxWorkers)
+
+	// Process all files in parallel
+	filePatterns, err := parallelMatcher.MatchAllFiles(ctx, parsedFiles)
+	if err != nil {
+		return nil, fmt.Errorf("parallel pattern matching failed: %w", err)
+	}
+
+	// Aggregate results using the parallel matcher's aggregation
+	aggregated := parallelMatcher.AggregateResults(filePatterns)
+
+	// Transfer aggregated results to match results
+	results.FilePatterns = aggregated.FilePatterns
+	results.HTTPStatusMatches = aggregated.HTTPStatusMatches
+	results.RequestUsageMatches = aggregated.RequestUsageMatches
+	results.ResourceMatches = aggregated.ResourceMatches
+	results.PivotMatches = aggregated.PivotMatches
+	results.AttributeMatches = aggregated.AttributeMatches
+	results.ScopeMatches = aggregated.ScopeMatches
+	results.PolymorphicMatches = aggregated.PolymorphicMatches
+	results.BroadcastMatches = aggregated.BroadcastMatches
+	results.FilesMatched = int(aggregated.FilesMatched)
 
 	// Sort file patterns by path for deterministic processing
 	o.sortFilePatterns(results)
 
 	// Calculate total matches
-	results.TotalMatches = len(results.HTTPStatusMatches) + len(results.RequestUsageMatches) +
-		len(results.ResourceMatches) + len(results.PivotMatches) + len(results.AttributeMatches) +
-		len(results.ScopeMatches) + len(results.PolymorphicMatches) + len(results.BroadcastMatches)
+	results.TotalMatches = int(aggregated.TotalMatches)
 
 	results.MatchingDuration = time.Since(startTime)
 	return results, nil
@@ -554,26 +722,6 @@ func (o *DefaultOrchestrator) createPatternMatcher() (matchers.CompositePatternM
 }
 
 // parseSyntaxTree parses a file to get its syntax tree for pattern matching.
-func (o *DefaultOrchestrator) parseSyntaxTree(ctx context.Context, filePath string) (*parser.SyntaxTree, error) {
-	// Use LaravelParser to get syntax tree
-	if o.registry.LaravelParser == nil {
-		laravelParser, err := parser.NewLaravelParser(false)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Laravel parser: %w", err)
-		}
-		o.registry.LaravelParser = laravelParser
-	}
-
-	// Get syntax tree for matchers
-	tree, err := o.registry.LaravelParser.GetSyntaxTree(ctx, filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse file %s: %w", filePath, err)
-	}
-
-	return tree, nil
-}
-
-
 // sortParseResults sorts all parsed constructs for deterministic output.
 func (o *DefaultOrchestrator) sortParseResults(results *ParseResults) {
 	// Sort parsed files by path
@@ -637,17 +785,17 @@ func (o *DefaultOrchestrator) extractMethodKeyFromPattern(pattern *matchers.Requ
 	// RequestUsageMatch doesn't contain sufficient context information for reliable extraction.
 	// In a real implementation, the matchers would provide context about where the pattern was found,
 	// including controller class name and method name from the AST context.
-	
+
 	// Without proper AST context, we cannot generate valid Controller::method keys.
 	// Rather than inventing placeholder keys, skip these patterns cleanly.
-	
+
 	// TODO: Enhance RequestUsageMatch to include controller context from tree-sitter analysis
 	// The matchers should extract and provide:
 	// - Controller FQCN from class declaration AST node
-	// - Method name from method declaration AST node  
+	// - Method name from method declaration AST node
 	// - File path context for proper FQCN resolution
 	// This requires coordination between pattern matching and AST context extraction.
-	
+
 	return "", false
 }
 
@@ -695,9 +843,9 @@ func (o *DefaultOrchestrator) collectTruncationReasons(indexResult *indexer.Inde
 
 // sortFilePatterns ensures files are processed in deterministic order.
 func (o *DefaultOrchestrator) sortFilePatterns(results *MatchResults) {
-	// Since matches are appended in file processing order, we need to ensure
-	// that files are processed deterministically. The file indexer should already
-	// provide files in sorted order, but we may need additional sorting here.
-	// For now, this is a placeholder - the real fix is ensuring the indexer
-	// provides deterministic file ordering.
+	// Normalise per-file pattern slices so downstream consumers see deterministic
+	// ordering regardless of parallel execution.
+	for _, patterns := range results.FilePatterns {
+		optimizations.NormalizeLaravelPatterns(patterns)
+	}
 }

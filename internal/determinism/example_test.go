@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/garaekz/oxinfer/internal/emitter"
+	"github.com/oxhq/oxinfer/internal/emitter"
 )
 
 // TestDeltaHasher_DemoTripleRun demonstrates the core functionality

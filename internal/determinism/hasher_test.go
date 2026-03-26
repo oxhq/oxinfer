@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/emitter"
+	"github.com/oxhq/oxinfer/internal/emitter"
 )
 
 func TestDeltaHasher_HashDelta(t *testing.T) {

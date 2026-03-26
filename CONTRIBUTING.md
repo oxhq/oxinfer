@@ -14,7 +14,7 @@ Thank you for your interest in contributing to Oxinfer! This document provides g
 
 ```bash
 # Clone the repository
-git clone https://github.com/garaekz/oxinfer.git
+git clone https://github.com/oxhq/oxinfer.git
 cd oxinfer
 
 # Install dependencies

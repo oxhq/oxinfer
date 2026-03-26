@@ -33,6 +33,7 @@ mem.prof
 # IDE specific files
 .vscode/
 .idea/
+CLAUDE.md
 *.swp
 *.swo
 *~
@@ -60,6 +61,9 @@ delta.json
 output.json
 *.delta.json
 
+# Test output directory
+temp_test_outputs/
+
 # Demo files (created for testing)
 demo-manifest.json
 invalid-manifest.json
@@ -77,3 +81,6 @@ composer.json
 !.oxinfer/README.md
 .oxinfer/*
 !.oxinfer/README.md
+
+# Nested generated analyzer artifacts
+**/.oxinfer/

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/garaekz/oxinfer/internal/cli"
+	"github.com/oxhq/oxinfer/internal/cli"
 )
 
 func TestRun(t *testing.T) {

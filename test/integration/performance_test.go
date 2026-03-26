@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/cli"
-	"github.com/garaekz/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/cli"
+	"github.com/oxhq/oxinfer/internal/manifest"
 )
 
 // TestManifestProcessingPerformance benchmarks manifest processing performance

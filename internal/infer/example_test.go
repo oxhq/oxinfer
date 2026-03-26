@@ -3,8 +3,8 @@ package infer_test
 import (
 	"fmt"
 
-	"github.com/garaekz/oxinfer/internal/infer"
-	"github.com/garaekz/oxinfer/internal/matchers"
+	"github.com/oxhq/oxinfer/internal/infer"
+	"github.com/oxhq/oxinfer/internal/matchers"
 )
 
 // Example demonstrates how shape inference types integrate with the matchers package.

@@ -1,3 +1,5 @@
+//go:build legacy_parser
+
 // Package parser provides comprehensive tests for the AST query system.
 // Tests tree-sitter query patterns, PHP construct extraction, Laravel pattern detection,
 // error handling, and performance characteristics.

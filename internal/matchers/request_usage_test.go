@@ -8,7 +8,7 @@ import (
 	"encoding/json/v2"
 	"testing"
 
-	"github.com/garaekz/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/parser"
 	"github.com/smacker/go-tree-sitter/php"
 )
 
@@ -564,7 +564,7 @@ func TestRequestUsageMatcher_GoldenFiles(t *testing.T) {
 
 			// For now, just verify we got some results
 			if len(results) > 0 {
-				actualJSON, _ := json.Marshal(actual, json.Deterministic(true), json.Indent("", "  "))
+				actualJSON, _ := json.Marshal(actual, json.Deterministic(true))
 				t.Logf("Request usage results: %s", string(actualJSON))
 			}
 		})

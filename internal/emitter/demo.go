@@ -1,3 +1,5 @@
+//go:build goexperiment.jsonv2
+
 // Package emitter provides delta emission functionality for oxinfer.
 // This file demonstrates the emitter functionality.
 package emitter

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/garaekz/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/parser"
 	"github.com/smacker/go-tree-sitter/php"
 )
 

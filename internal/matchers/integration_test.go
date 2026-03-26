@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/parser"
 	"github.com/smacker/go-tree-sitter/php"
 )
 
@@ -874,7 +874,7 @@ class UserController extends Controller
 		t.Fatal("Expected emitter.Controller result")
 	}
 
-	controllerJSON, _ := json.Marshal(controller, json.Deterministic(true), json.Indent("", "  "))
+	controllerJSON, _ := json.Marshal(controller, json.Deterministic(true))
 	t.Logf("Converted controller format:\n%s", string(controllerJSON))
 
 	// Get final stats

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/bench"
+	"github.com/oxhq/oxinfer/internal/bench"
 )
 
 // PerformanceAnalyzer identifies performance bottlenecks and provides optimization recommendations.

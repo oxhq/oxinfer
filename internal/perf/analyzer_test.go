@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/bench"
-	"github.com/garaekz/oxinfer/internal/stats"
+	"github.com/oxhq/oxinfer/internal/bench"
+	"github.com/oxhq/oxinfer/internal/stats"
 )
 
 func TestPerformanceAnalyzer_AnalyzeProfiles(t *testing.T) {

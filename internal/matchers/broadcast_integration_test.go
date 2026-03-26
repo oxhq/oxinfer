@@ -3,10 +3,12 @@ package matchers
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/parser"
 	"github.com/smacker/go-tree-sitter/php"
 )
 
@@ -264,14 +266,19 @@ func TestBroadcastMatcherIntegration(t *testing.T) {
 
 		for _, testCase := range testCases {
 			t.Run(testCase.name, func(t *testing.T) {
-				// 1. Parse PHP code
-				phpParser, err := parser.NewPHPParser(nil)
+				// 1. Parse PHP code using the Laravel parser helper
+				parserInstance, err := parser.NewLaravelParser(false)
 				if err != nil {
 					t.Fatalf("Failed to create parser: %v", err)
 				}
-				defer phpParser.Close()
 
-				syntaxTree, err := phpParser.ParseContent([]byte(testCase.phpCode))
+				tmpDir := t.TempDir()
+				tmpFile := filepath.Join(tmpDir, "channels.php")
+				if err := os.WriteFile(tmpFile, []byte(testCase.phpCode), 0o600); err != nil {
+					t.Fatalf("Failed to write temp PHP file: %v", err)
+				}
+
+				syntaxTree, err := parserInstance.ParseFile(context.Background(), tmpFile)
 				if err != nil {
 					t.Fatalf("Failed to parse PHP: %v", err)
 				}
@@ -345,13 +352,18 @@ func TestBroadcastMatcherIntegration(t *testing.T) {
 			return true;
 		});`
 
-		phpParser, err := parser.NewPHPParser(nil)
+		parserInstance, err := parser.NewLaravelParser(false)
 		if err != nil {
 			t.Fatalf("Failed to create parser: %v", err)
 		}
-		defer phpParser.Close()
 
-		syntaxTree, err := phpParser.ParseContent([]byte(phpCode))
+		tmpDir := t.TempDir()
+		tmpFile := filepath.Join(tmpDir, "channels.php")
+		if err := os.WriteFile(tmpFile, []byte(phpCode), 0o600); err != nil {
+			t.Fatalf("Failed to write temp PHP file: %v", err)
+		}
+
+		syntaxTree, err := parserInstance.ParseFile(context.Background(), tmpFile)
 		if err != nil {
 			t.Fatalf("Failed to parse PHP: %v", err)
 		}

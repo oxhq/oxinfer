@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/bench"
+	"github.com/oxhq/oxinfer/internal/bench"
 )
 
 // TestMVPTargetsValidation validates MVP performance targets are properly defined.

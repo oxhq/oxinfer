@@ -3,9 +3,9 @@ package pipeline
 import (
 	"testing"
 
-	"github.com/garaekz/oxinfer/internal/emitter"
-	"github.com/garaekz/oxinfer/internal/infer"
-	"github.com/garaekz/oxinfer/internal/matchers"
+	"github.com/oxhq/oxinfer/internal/emitter"
+	"github.com/oxhq/oxinfer/internal/infer"
+	"github.com/oxhq/oxinfer/internal/matchers"
 )
 
 // TestRequestShapeRecursion tests the implementation for nested request structures.
@@ -83,7 +83,7 @@ func TestRequestShapeRecursion(t *testing.T) {
 // TestLaravelPatternIntegration tests request shape recursion with real Laravel patterns.
 func TestLaravelPatternIntegration(t *testing.T) {
 	assembler := NewDeltaAssembler()
-	
+
 	// Create shape inferencer
 	inferencer := infer.NewShapeInferencer(nil, nil, nil, nil)
 
@@ -92,10 +92,10 @@ func TestLaravelPatternIntegration(t *testing.T) {
 		{
 			Methods: []string{"only"},
 			Body: map[string]interface{}{
-				"users.*.email":    "test@example.com",
-				"users.*.name":     "John",
+				"users.*.email":     "test@example.com",
+				"users.*.name":      "John",
 				"filters.date.from": "2024-01-01",
-				"filters.date.to":   "2024-12-31",
+				"filters.date.to":  "2024-12-31",
 			},
 		},
 	}
@@ -141,6 +141,48 @@ func TestLaravelPatternIntegration(t *testing.T) {
 	}
 }
 
+func TestConvertRequestInfoEmitsFieldMetadata(t *testing.T) {
+	assembler := NewDeltaAssembler()
+
+	body := infer.CreateEmptyOrderedObject()
+	body.AddProperty("email", infer.CreateStringProperty("", "email"))
+	body.AddRequired("email")
+
+	tagsItem := infer.CreateStringProperty("", "")
+	body.AddProperty("tags", infer.CreateArrayProperty(tagsItem, ""))
+
+	profile := infer.CreateEmptyOrderedObject()
+	profile.AddProperty("bio", infer.CreateStringProperty("", ""))
+	body.AddProperty("profile", infer.CreateObjectProperty(profile, ""))
+
+	request := assembler.convertRequestInfo(&infer.RequestInfo{
+		ContentTypes: []string{"application/json"},
+		Body:         *body,
+	})
+	if request == nil {
+		t.Fatal("convertRequestInfo() = nil, want request metadata")
+	}
+
+	emailField := findAssemblerRequestField(t, request.Fields, "body", "email")
+	if emailField.Required == nil || !*emailField.Required || emailField.Format != "email" {
+		t.Fatalf("email field = %#v, want required email metadata", emailField)
+	}
+
+	tagsField := findAssemblerRequestField(t, request.Fields, "body", "tags")
+	if tagsField.Collection == nil || !*tagsField.Collection || tagsField.ItemType != "string" {
+		t.Fatalf("tags field = %#v, want string collection metadata", tagsField)
+	}
+
+	profileField := findAssemblerRequestField(t, request.Fields, "body", "profile")
+	if profileField.Kind != "object" || profileField.Type != "object" {
+		t.Fatalf("profile field = %#v, want object metadata", profileField)
+	}
+	bioField := findAssemblerRequestField(t, request.Fields, "body", "profile.bio")
+	if bioField.ScalarType != "string" {
+		t.Fatalf("profile.bio field = %#v, want scalar string", bioField)
+	}
+}
+
 // Helper functions for test data creation
 
 func createRequestInfoWithPath(t *testing.T, path string) *infer.RequestInfo {
@@ -168,7 +210,7 @@ func createRequestInfoWithSimpleProperty(key string) *infer.RequestInfo {
 
 func createComplexNestedRequestInfo() *infer.RequestInfo {
 	parser := infer.NewKeyPathParser(nil)
-	
+
 	// Merge multiple paths
 	paths := []string{
 		"users.*.profile.bio",
@@ -209,4 +251,15 @@ func compareEmitterObjects(t *testing.T, actual emitter.OrderedObject, expected 
 	}
 
 	return true
+}
+
+func findAssemblerRequestField(t *testing.T, fields []emitter.RequestField, location, path string) emitter.RequestField {
+	t.Helper()
+	for _, field := range fields {
+		if field.Location == location && field.Path == path {
+			return field
+		}
+	}
+	t.Fatalf("fields = %#v, want %s:%s", fields, location, path)
+	return emitter.RequestField{}
 }

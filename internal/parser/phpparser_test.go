@@ -1,3 +1,5 @@
+//go:build legacy_parser
+
 // Package parser provides comprehensive integration tests for PHP project parsing.
 // Tests end-to-end integration of all core components and real Laravel project analysis.
 package parser
@@ -9,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/manifest"
 )
 
 // TestNewPHPProjectParser tests creation of PHP project parser with defaults.

@@ -5,8 +5,9 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
-	"github.com/garaekz/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/parser"
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
@@ -125,11 +126,12 @@ func (m *DefaultHTTPStatusMatcher) Match(ctx context.Context, tree *parser.Synta
 						Type:       PatternTypeHTTPStatus,
 						Position:   parser.Point{Row: int(statusNode.StartPoint().Row), Column: int(statusNode.StartPoint().Column)},
 						Content:    statusText,
-						Confidence: queryDef.Confidence,
+						Confidence: m.matchConfidence(queryDef),
 						Data: &HTTPStatusMatch{
 							Status:   statusCode,
 							Explicit: m.determineExplicitness(queryDef.Name, statusCode),
 							Pattern:  queryDef.Name,
+							Method:   m.extractControllerMethodContext(statusNode, tree, filePath),
 						},
 						Context: &MatchContext{
 							FilePath: filePath,
@@ -224,6 +226,13 @@ func (m *DefaultHTTPStatusMatcher) determineExplicitness(patternName string, sta
 	default:
 		return false
 	}
+}
+
+func (m *DefaultHTTPStatusMatcher) matchConfidence(queryDef QueryDefinition) float64 {
+	if queryDef.Name == "abort_call" {
+		return 1.0
+	}
+	return queryDef.Confidence
 }
 
 // filterByConfidence removes matches below the minimum confidence threshold.
@@ -357,4 +366,87 @@ func GetStatusCodeMeaning(code int) string {
 	default:
 		return "Unknown"
 	}
+}
+
+// extractControllerMethodContext walks up the AST to find the controller class and method
+// containing this HTTP status pattern match
+func (m *DefaultHTTPStatusMatcher) extractControllerMethodContext(node *sitter.Node, tree *parser.SyntaxTree, filePath string) string {
+	current := node
+
+	// Walk up the AST to find the method declaration
+	for current != nil {
+		if current.Type() == "method_declaration" {
+			// Found method, get its name
+			methodName := m.getMethodNameFromNode(current, tree.Source)
+
+			// Continue walking up to find the class
+			classNode := current
+			for classNode != nil {
+				if classNode.Type() == "class_declaration" {
+					className := m.getClassNameFromNode(classNode, tree.Source)
+					namespace := m.getNamespaceFromTree(tree.Source)
+
+					// Build FQCN
+					var fqcn string
+					if namespace != "" {
+						fqcn = namespace + "\\" + className
+					} else {
+						fqcn = className
+					}
+
+					return fqcn + "::" + methodName
+				}
+				classNode = classNode.Parent()
+			}
+		}
+		current = current.Parent()
+	}
+
+	// If we can't find method context, return empty (will be marked unresolvable)
+	return ""
+}
+
+// getMethodNameFromNode extracts method name from method_declaration node
+func (m *DefaultHTTPStatusMatcher) getMethodNameFromNode(methodNode *sitter.Node, source []byte) string {
+	for i := uint32(0); i < methodNode.ChildCount(); i++ {
+		child := methodNode.Child(int(i))
+		if child.Type() == "name" {
+			return string(child.Content(source))
+		}
+	}
+	return ""
+}
+
+// getClassNameFromNode extracts class name from class_declaration node
+func (m *DefaultHTTPStatusMatcher) getClassNameFromNode(classNode *sitter.Node, source []byte) string {
+	for i := uint32(0); i < classNode.ChildCount(); i++ {
+		child := classNode.Child(int(i))
+		if child.Type() == "name" {
+			return string(child.Content(source))
+		}
+	}
+	return ""
+}
+
+// getNamespaceFromTree extracts namespace from the file by parsing the source
+func (m *DefaultHTTPStatusMatcher) getNamespaceFromTree(source []byte) string {
+	sourceStr := string(source)
+
+	// Look for namespace declaration
+	lines := strings.Split(sourceStr, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "namespace ") {
+			// Extract namespace
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				namespace := parts[1]
+				// Remove semicolon if present
+				namespace = strings.TrimSuffix(namespace, ";")
+				return namespace
+			}
+		}
+	}
+
+	return ""
 }

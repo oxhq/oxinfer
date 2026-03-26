@@ -17,6 +17,7 @@ type Delta struct {
 	Meta        MetaInfo      `json:"meta"`
 	Controllers []Controller  `json:"controllers"`
 	Models      []Model       `json:"models"`
+	Resources   []ResourceDef `json:"resources,omitempty"`
 	Polymorphic []Polymorphic `json:"polymorphic"`
 	Broadcast   []Broadcast   `json:"broadcast"`
 }
@@ -50,10 +51,10 @@ type MetaStats struct {
 
 // AssemblerStats tracks delta assembly effectiveness for debugging.
 type AssemblerStats struct {
-	SkippedControllers   int `json:"skippedControllers"`   // Controllers that couldn't be processed
-	SkippedModels        int `json:"skippedModels"`        // Models that couldn't be processed  
-	SkippedPatterns      int `json:"skippedPatterns"`      // Patterns that couldn't be matched to methods
-	UnresolvableMatches  int `json:"unresolvableMatches"`  // Matches that couldn't be resolved to valid keys
+	SkippedControllers  int `json:"skippedControllers"`  // Controllers that couldn't be processed
+	SkippedModels       int `json:"skippedModels"`       // Models that couldn't be processed
+	SkippedPatterns     int `json:"skippedPatterns"`     // Patterns that couldn't be matched to methods
+	UnresolvableMatches int `json:"unresolvableMatches"` // Matches that couldn't be resolved to valid keys
 }
 
 // MarshalJSON implements deterministic JSON encoding for MetaStats, ensuring
@@ -171,14 +172,14 @@ func (m MetaStats) MarshalJSON() ([]byte, error) {
 	}
 
 	// AssemblerStats (if not nil and has useful data)
-	if m.AssemblerStats != nil && (m.AssemblerStats.SkippedControllers > 0 || 
-		m.AssemblerStats.SkippedModels > 0 || 
-		m.AssemblerStats.SkippedPatterns > 0 || 
+	if m.AssemblerStats != nil && (m.AssemblerStats.SkippedControllers > 0 ||
+		m.AssemblerStats.SkippedModels > 0 ||
+		m.AssemblerStats.SkippedPatterns > 0 ||
 		m.AssemblerStats.UnresolvableMatches > 0) {
-		
+
 		buf.WriteByte(',')
 		buf.WriteString("\"assemblerStats\":{")
-		
+
 		assemblerWrote := false
 		if m.AssemblerStats.SkippedControllers > 0 {
 			buf.WriteString("\"skippedControllers\":")
@@ -208,7 +209,7 @@ func (m MetaStats) MarshalJSON() ([]byte, error) {
 			buf.WriteString("\"unresolvableMatches\":")
 			buf.WriteString(intToString(int64(m.AssemblerStats.UnresolvableMatches)))
 		}
-		
+
 		buf.WriteByte('}')
 	}
 
@@ -353,12 +354,15 @@ func NewMetaStatsFromProcessingStats(processingStats any) MetaStats {
 
 // Controller represents a Laravel controller method with its detected patterns.
 type Controller struct {
-	FQCN       string       `json:"fqcn"`
-	Method     string       `json:"method"`
-	HTTP       *HTTPInfo    `json:"http,omitempty"`
-	Request    *RequestInfo `json:"request,omitempty"`
-	Resources  []Resource   `json:"resources,omitempty"`
-	ScopesUsed []ScopeUsed  `json:"scopesUsed,omitempty"`
+	FQCN          string                `json:"fqcn"`
+	Method        string                `json:"method"`
+	HTTP          *HTTPInfo             `json:"http,omitempty"`
+	Request       *RequestInfo          `json:"request,omitempty"`
+	Responses     []Response            `json:"responses,omitempty"`
+	Authorization []AuthorizationHint   `json:"authorization,omitempty"`
+	Resources     []Resource            `json:"resources,omitempty"`
+	ScopesUsed    []ScopeUsed           `json:"scopesUsed,omitempty"`
+	Polymorphic   []PolymorphicRelation `json:"polymorphic,omitempty"`
 }
 
 // HTTPInfo captures HTTP-related metadata for controller methods.
@@ -369,10 +373,83 @@ type HTTPInfo struct {
 
 // RequestInfo describes request handling patterns detected in controller methods.
 type RequestInfo struct {
-	ContentTypes []string      `json:"contentTypes,omitempty"`
-	Body         OrderedObject `json:"body,omitempty"`
-	Query        OrderedObject `json:"query,omitempty"`
-	Files        OrderedObject `json:"files,omitempty"`
+	ContentTypes []string       `json:"contentTypes,omitempty"`
+	Body         OrderedObject  `json:"body,omitempty"`
+	Query        OrderedObject  `json:"query,omitempty"`
+	Files        OrderedObject  `json:"files,omitempty"`
+	Fields       []RequestField `json:"fields,omitempty"`
+}
+
+// Response captures detected response semantics for a controller method.
+// It is additive to the existing HTTP status detection and resource catalog.
+type Response struct {
+	Kind        string              `json:"kind"`
+	Status      *int                `json:"status,omitempty"`
+	Explicit    *bool               `json:"explicit,omitempty"`
+	ContentType string              `json:"contentType,omitempty"`
+	Headers     map[string]string   `json:"headers,omitempty"`
+	BodySchema  *ResourceSchemaNode `json:"bodySchema,omitempty"`
+	Redirect    *RedirectInfo       `json:"redirect,omitempty"`
+	Download    *DownloadInfo       `json:"download,omitempty"`
+	Inertia     *InertiaInfo        `json:"inertia,omitempty"`
+	Source      string              `json:"source,omitempty"`
+	Via         string              `json:"via,omitempty"`
+}
+
+type RedirectInfo struct {
+	TargetKind string  `json:"targetKind"`
+	Target     *string `json:"target,omitempty"`
+}
+
+type DownloadInfo struct {
+	Disposition string  `json:"disposition"`
+	Filename    *string `json:"filename,omitempty"`
+}
+
+type InertiaInfo struct {
+	Component   string              `json:"component"`
+	PropsSchema *ResourceSchemaNode `json:"propsSchema,omitempty"`
+	RootView    *string             `json:"rootView,omitempty"`
+	Version     *string             `json:"version,omitempty"`
+}
+
+type AuthorizationHint struct {
+	Kind                    string  `json:"kind"`
+	Ability                 *string `json:"ability,omitempty"`
+	TargetKind              *string `json:"targetKind,omitempty"`
+	Target                  *string `json:"target,omitempty"`
+	Parameter               *string `json:"parameter,omitempty"`
+	Source                  string  `json:"source"`
+	Resolution              string  `json:"resolution"`
+	EnforcesFailureResponse bool    `json:"enforcesFailureResponse"`
+}
+
+func (r *Response) InertiaPropsSchema() *ResourceSchemaNode {
+	if r == nil || r.Inertia == nil {
+		return nil
+	}
+	return r.Inertia.PropsSchema
+}
+
+// RequestField captures richer metadata for a single request field path.
+// It is additive to the existing body/query/files shapes and does not replace them.
+type RequestField struct {
+	Location      string   `json:"location"`
+	Path          string   `json:"path"`
+	Kind          string   `json:"kind,omitempty"`
+	Type          string   `json:"type,omitempty"`
+	ScalarType    string   `json:"scalarType,omitempty"`
+	Format        string   `json:"format,omitempty"`
+	ItemType      string   `json:"itemType,omitempty"`
+	Wrappers      []string `json:"wrappers,omitempty"`
+	AllowedValues []string `json:"allowedValues,omitempty"`
+	Required      *bool    `json:"required,omitempty"`
+	Optional      *bool    `json:"optional,omitempty"`
+	Nullable      *bool    `json:"nullable,omitempty"`
+	IsArray       *bool    `json:"isArray,omitempty"`
+	Collection    *bool    `json:"collection,omitempty"`
+	Source        string   `json:"source,omitempty"`
+	Via           string   `json:"via,omitempty"`
 }
 
 // OrderedObject is a recursive map that marshals to JSON with stable key ordering.
@@ -445,7 +522,26 @@ func NewOrderedObjectFromMap(m map[string]any) OrderedObject {
 // Resource represents a Laravel API resource usage pattern.
 type Resource struct {
 	Class      string `json:"class"`
+	FQCN       string `json:"fqcn,omitempty"`
 	Collection bool   `json:"collection"`
+}
+
+// ResourceDef represents a response resource schema extracted from Laravel API resources.
+type ResourceDef struct {
+	FQCN   string             `json:"fqcn"`
+	Class  string             `json:"class"`
+	Schema ResourceSchemaNode `json:"schema"`
+}
+
+// ResourceSchemaNode captures a reusable response schema node for resources/components.
+type ResourceSchemaNode struct {
+	Type       string                        `json:"type,omitempty"`
+	Format     string                        `json:"format,omitempty"`
+	Ref        string                        `json:"ref,omitempty"`
+	Nullable   *bool                         `json:"nullable,omitempty"`
+	Properties map[string]ResourceSchemaNode `json:"properties,omitempty"`
+	Required   []string                      `json:"required,omitempty"`
+	Items      *ResourceSchemaNode           `json:"items,omitempty"`
 }
 
 // ScopeUsed represents detected Eloquent scope usage in controllers.
@@ -457,9 +553,10 @@ type ScopeUsed struct {
 
 // Model represents an Eloquent model class with its detected features.
 type Model struct {
-	FQCN       string      `json:"fqcn"`
-	WithPivot  []PivotInfo `json:"withPivot,omitempty"`
-	Attributes []Attribute `json:"attributes,omitempty"`
+	FQCN        string                `json:"fqcn"`
+	WithPivot   []PivotInfo           `json:"withPivot,omitempty"`
+	Attributes  []Attribute           `json:"attributes,omitempty"`
+	Polymorphic []PolymorphicRelation `json:"polymorphic,omitempty"`
 }
 
 // PivotInfo describes pivot table configurations in many-to-many relationships.

@@ -1,3 +1,4 @@
+//go:build !goexperiment.jsonv2
 // Package parser provides comprehensive memory management optimization for tree-sitter PHP parsing.
 // Implements memory pools, garbage collection optimization, and resource lifecycle management
 // to ensure stable memory usage under large Laravel project loads.

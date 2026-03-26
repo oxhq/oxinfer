@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/garaekz/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/parser"
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
@@ -233,16 +233,21 @@ func (m *DefaultPivotMatcher) processPivotMatch(
 		if !m.isInManyToManyContext(tree, position) {
 			return nil // Skip if not in correct relationship context
 		}
-		
+
 		// Extract pivot fields
 		if argsNode != nil {
 			pivotFields := m.extractPivotFields(argsNode, tree)
 			if len(pivotFields) == 0 {
 				return nil // withPivot without fields is not useful
 			}
-			
+
 			// Create pivot match with fields
-			relationName := m.inferRelationshipName(tree, position)
+			// Use enclosing method name as relation name
+			relationName := m.getEnclosingMethodName(match.Captures[0].Node, tree)
+			if relationName == "" {
+				return nil
+			}
+
 			pivotMatch := &PivotMatch{
 				Relation:   relationName,
 				Fields:     pivotFields,
@@ -272,8 +277,12 @@ func (m *DefaultPivotMatcher) processPivotMatch(
 		if !m.isInManyToManyContext(tree, position) {
 			return nil
 		}
-		
-		relationName := m.inferRelationshipName(tree, position)
+
+		relationName := m.getEnclosingMethodName(match.Captures[0].Node, tree)
+		if relationName == "" {
+			return nil
+		}
+
 		pivotMatch := &PivotMatch{
 			Relation:   relationName,
 			Fields:     []string{},
@@ -301,8 +310,12 @@ func (m *DefaultPivotMatcher) processPivotMatch(
 		if !m.isInManyToManyContext(tree, position) {
 			return nil
 		}
-		
-		relationName := m.inferRelationshipName(tree, position)
+
+		relationName := m.getEnclosingMethodName(match.Captures[0].Node, tree)
+		if relationName == "" {
+			return nil
+		}
+
 		pivotMatch := &PivotMatch{
 			Relation:   relationName,
 			Fields:     []string{},
@@ -412,8 +425,6 @@ func (m *DefaultPivotMatcher) extractPivotFields(argsNode *sitter.Node, tree *pa
 		}
 	}
 
-	// Sort fields for deterministic output
-	sort.Strings(fields)
 	return fields
 }
 
@@ -522,6 +533,18 @@ func (m *DefaultPivotMatcher) inferRelationshipName(tree *parser.SyntaxTree, pos
 		}
 	}
 
+	return ""
+}
+
+// getEnclosingMethodName finds the containing method name via AST
+func (m *DefaultPivotMatcher) getEnclosingMethodName(node *sitter.Node, tree *parser.SyntaxTree) string {
+	current := node
+	for current != nil {
+		if current.Type() == "method_declaration" {
+			return m.getMethodNameFromNode(current, tree.Source)
+		}
+		current = current.Parent()
+	}
 	return ""
 }
 
@@ -676,19 +699,19 @@ func ValidatePivotMethodCall(methodName string, args []string) bool {
 // Handle ['field1', 'field2'] syntax in withPivot
 func (m *DefaultPivotMatcher) extractArrayArgument(argNode *sitter.Node, tree *parser.SyntaxTree) []string {
 	var fields []string
-	
+
 	// Look for array_creation_expression in the argument
 	for j := uint32(0); j < argNode.ChildCount(); j++ {
 		child := argNode.Child(int(j))
 		if child == nil {
 			continue
 		}
-		
+
 		if child.Type() == "array_creation_expression" {
 			return m.extractArrayFields(child, tree)
 		}
 	}
-	
+
 	return fields
 }
 
@@ -696,14 +719,14 @@ func (m *DefaultPivotMatcher) extractArrayArgument(argNode *sitter.Node, tree *p
 // Parse ['field1', 'field2', 'field3'] syntax
 func (m *DefaultPivotMatcher) extractArrayFields(arrayNode *sitter.Node, tree *parser.SyntaxTree) []string {
 	var fields []string
-	
+
 	// Walk through array elements
 	for i := uint32(0); i < arrayNode.ChildCount(); i++ {
 		child := arrayNode.Child(int(i))
 		if child == nil {
 			continue
 		}
-		
+
 		// Handle array_element_initializer
 		if child.Type() == "array_element_initializer" {
 			// Look for string value in the initializer
@@ -725,31 +748,119 @@ func (m *DefaultPivotMatcher) extractArrayFields(arrayNode *sitter.Node, tree *p
 			}
 		}
 	}
-	
+
 	return fields
 }
+
 // isInManyToManyContext checks if the pivot method is used in a belongsToMany relationship
 // Validate that pivot methods are only detected in correct context
 func (m *DefaultPivotMatcher) isInManyToManyContext(tree *parser.SyntaxTree, position parser.Point) bool {
 	sourceLines := strings.Split(string(tree.Source), "\n")
-	
+
 	// Check current line and surrounding lines for belongsToMany
 	for lineOffset := -5; lineOffset <= 2; lineOffset++ {
 		lineIndex := position.Row + lineOffset
 		if lineIndex >= 0 && lineIndex < len(sourceLines) {
 			line := sourceLines[lineIndex]
-			
+
 			// Look for belongsToMany relationship
 			if strings.Contains(line, "belongsToMany") {
 				return true
 			}
-			
+
 			// Also check for morphToMany and morphedByMany (polymorphic many-to-many)
 			if strings.Contains(line, "morphToMany") || strings.Contains(line, "morphedByMany") {
 				return true
 			}
 		}
 	}
-	
+
 	return false
+}
+
+// extractModelMethodContext walks up the AST to find the model class and method
+// containing this pivot pattern match, returning Model::relationName format
+func (m *DefaultPivotMatcher) extractModelMethodContext(node *sitter.Node, tree *parser.SyntaxTree, relationName string) string {
+	current := node
+
+	// Walk up the AST to find the method declaration
+	for current != nil {
+		if current.Type() == "method_declaration" {
+			// Found method, get the class
+			classNode := current
+			for classNode != nil {
+				if classNode.Type() == "class_declaration" {
+					className := m.getClassNameFromNode(classNode, tree.Source)
+					namespace := m.getNamespaceFromTree(tree.Source)
+
+					// Build FQCN
+					var fqcn string
+					if namespace != "" {
+						fqcn = namespace + "\\" + className
+					} else {
+						fqcn = className
+					}
+
+					// Return Model::relationName format
+					if relationName != "" {
+						return fqcn + "::" + relationName
+					} else {
+						// Fallback to method name if no relation name
+						methodName := m.getMethodNameFromNode(current, tree.Source)
+						return fqcn + "::" + methodName
+					}
+				}
+				classNode = classNode.Parent()
+			}
+		}
+		current = current.Parent()
+	}
+
+	// If we can't find model context, return empty
+	return ""
+}
+
+// getMethodNameFromNode extracts method name from method_declaration node
+func (m *DefaultPivotMatcher) getMethodNameFromNode(methodNode *sitter.Node, source []byte) string {
+	for i := uint32(0); i < methodNode.ChildCount(); i++ {
+		child := methodNode.Child(int(i))
+		if child.Type() == "name" {
+			return string(child.Content(source))
+		}
+	}
+	return ""
+}
+
+// getClassNameFromNode extracts class name from class_declaration node
+func (m *DefaultPivotMatcher) getClassNameFromNode(classNode *sitter.Node, source []byte) string {
+	for i := uint32(0); i < classNode.ChildCount(); i++ {
+		child := classNode.Child(int(i))
+		if child.Type() == "name" {
+			return string(child.Content(source))
+		}
+	}
+	return ""
+}
+
+// getNamespaceFromTree extracts namespace from the file by parsing the source
+func (m *DefaultPivotMatcher) getNamespaceFromTree(source []byte) string {
+	sourceStr := string(source)
+
+	// Look for namespace declaration
+	lines := strings.Split(sourceStr, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "namespace ") {
+			// Extract namespace
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				namespace := parts[1]
+				// Remove semicolon if present
+				namespace = strings.TrimSuffix(namespace, ";")
+				return namespace
+			}
+		}
+	}
+
+	return ""
 }

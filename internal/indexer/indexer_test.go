@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/manifest"
 )
 
 // TestDefaultFileIndexer_EndToEndIndexing tests complete indexing workflow

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/manifest"
 )
 
 // Test fixtures and utilities
@@ -273,6 +273,32 @@ func TestNewPSR4ResolverFromManifest(t *testing.T) {
 				t.Error("Expected resolver to be initialized")
 			}
 		})
+	}
+}
+
+func TestNewPSR4ResolverFromManifestWithAbsoluteComposerPath(t *testing.T) {
+	projectDir, cleanup := createTestProject(t)
+	defer cleanup()
+
+	composerPath := filepath.Join(projectDir, "composer.json")
+	manifest := createTestManifest(projectDir, composerPath)
+
+	resolver, err := NewPSR4ResolverFromManifest(manifest)
+	if err != nil {
+		t.Fatalf("NewPSR4ResolverFromManifest() error = %v", err)
+	}
+
+	resolvedPath, err := resolver.ResolveClass(context.Background(), "App\\Http\\Controllers\\UserController")
+	if err != nil {
+		t.Fatalf("ResolveClass() error = %v", err)
+	}
+
+	wantPath := filepath.Join(projectDir, "app/Http/Controllers/UserController.php")
+	if normalized, err := filepath.EvalSymlinks(wantPath); err == nil {
+		wantPath = normalized
+	}
+	if resolvedPath != wantPath {
+		t.Fatalf("resolved path = %q, want %q", resolvedPath, wantPath)
 	}
 }
 

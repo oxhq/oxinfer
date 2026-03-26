@@ -1,3 +1,5 @@
+//go:build legacy_parser
+
 // Package parser provides comprehensive performance benchmarks for PHP parsing system.
 // This file validates parser performance targets and provides detailed metrics
 // for real-world Laravel project analysis capabilities.

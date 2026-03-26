@@ -4,8 +4,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/garaekz/oxinfer/internal/emitter"
-	"github.com/garaekz/oxinfer/internal/matchers"
+	"github.com/oxhq/oxinfer/internal/emitter"
+	"github.com/oxhq/oxinfer/internal/matchers"
 )
 
 // TestResourceDedup_DirectLogic tests the resource deduplication logic directly

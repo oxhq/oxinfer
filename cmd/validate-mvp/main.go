@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/garaekz/oxinfer/test/production"
+	"github.com/oxhq/oxinfer/test/production"
 )
 
 func main() {

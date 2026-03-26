@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/manifest"
 )
 
 // DefaultProjectParserConfig returns sensible defaults for PHP project parsing.

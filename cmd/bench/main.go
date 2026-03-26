@@ -18,7 +18,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/bench"
+	"github.com/oxhq/oxinfer/internal/bench"
 )
 
 // CliConfig holds configuration for the benchmark CLI.
@@ -405,9 +405,12 @@ func outputResults(result *RunResult, config *CliConfig) error {
 
 // outputJSON outputs results in JSON format.
 func outputJSON(result *RunResult) error {
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(result)
+	data, err := json.Marshal(result, json.Deterministic(true))
+	if err != nil {
+		return fmt.Errorf("failed to marshal JSON results: %w", err)
+	}
+	_, err = os.Stdout.Write(data)
+	return err
 }
 
 // outputTable outputs results in a formatted table.

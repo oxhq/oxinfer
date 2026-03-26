@@ -133,3 +133,25 @@ func (s *StructuredLogger) WithPhase(phase string) Logger {
 		phase:     phase,
 	}
 }
+
+// NoOpLogger implements Logger interface but does nothing
+// Used as fallback when no logger is configured in context
+type NoOpLogger struct{}
+
+func NewNoOpLogger() *NoOpLogger {
+	return &NoOpLogger{}
+}
+
+func (n *NoOpLogger) Error(message string, data map[string]interface{}) {}
+func (n *NoOpLogger) Warn(message string, data map[string]interface{})  {}
+func (n *NoOpLogger) Info(message string, data map[string]interface{})  {}
+func (n *NoOpLogger) Debug(message string, data map[string]interface{}) {}
+func (n *NoOpLogger) Trace(message string, data map[string]interface{}) {}
+
+func (n *NoOpLogger) WithComponent(component string) Logger {
+	return n
+}
+
+func (n *NoOpLogger) WithPhase(phase string) Logger {
+	return n
+}

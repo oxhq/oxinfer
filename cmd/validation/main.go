@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/garaekz/oxinfer/internal/indexer"
+	"github.com/oxhq/oxinfer/internal/indexer"
 )
 
 func init() {

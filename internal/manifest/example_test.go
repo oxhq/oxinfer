@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/garaekz/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/manifest"
 )
 
 // ExampleManifestLoader_LoadFromReader demonstrates how to use the manifest loader

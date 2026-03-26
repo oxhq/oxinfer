@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/garaekz/oxinfer/internal/matchers"
+	"github.com/oxhq/oxinfer/internal/matchers"
 )
 
 // DefaultContentTypeDetector implements ContentTypeDetector interface.
@@ -249,6 +249,32 @@ func (p *DefaultKeyPathParser) ParseKeyPath(path string) ([]PathSegment, error) 
 		}
 
 		segments = append(segments, segment)
+	}
+
+	// Convert wildcard segments ("*") into array semantics on the preceding
+	// segment so that paths like "users.*.email" infer array structures.
+	if len(segments) > 0 {
+		processed := make([]PathSegment, 0, len(segments))
+		for _, seg := range segments {
+			if seg.IsWildcard {
+				if len(processed) == 0 {
+					// Leading wildcard – treat as anonymous array root.
+					processed = append(processed, PathSegment{Key: "*", IsArray: true})
+					continue
+				}
+
+				prev := processed[len(processed)-1]
+				prev.IsArray = true
+				if prev.ArrayKey == "" {
+					prev.ArrayKey = ""
+				}
+				processed[len(processed)-1] = prev
+				continue
+			}
+
+			processed = append(processed, seg)
+		}
+		segments = processed
 	}
 
 	if len(segments) > p.config.MaxDepth {

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/garaekz/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/parser"
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
@@ -300,11 +300,25 @@ func (m *DefaultPolymorphicMatcher) processPolymorphicMatch(
 		return nil
 	}
 
-	// Determine relationship context
-	relationName := m.inferRelationshipName(tree, position, methodName)
+	// Determine relationship context from enclosing method via AST
+	enclosingMethod := m.getEnclosingMethodName(match.Captures[0].Node, tree)
+	relationName := enclosingMethod
+	if relationName == "" {
+		return nil
+	}
+
+	// Extract parent model FQCN from enclosing class via AST and gate on Eloquent inheritance
+	classFQCN := m.getEnclosingClassFQCN(match.Captures[0].Node, tree)
+	if classFQCN == "" {
+		return nil
+	}
+	if !m.classExtendsEloquentModel(match.Captures[0].Node, tree) {
+		return nil
+	}
+	parentModel := classFQCN
 
 	// Create polymorphic match based on method type
-	polymorphicMatch := m.buildPolymorphicMatch(methodName, modelArg, nameArg, typeArg, idArg, relationName, queryDef)
+	polymorphicMatch := m.buildPolymorphicMatch(methodName, modelArg, nameArg, typeArg, idArg, relationName, queryDef, parentModel)
 
 	// Apply depth truncation logic
 	depthTruncated := false
@@ -320,6 +334,9 @@ func (m *DefaultPolymorphicMatcher) processPolymorphicMatch(
 		polymorphicMatch.Discriminator = discriminator
 	}
 
+	// Add context as Model::relationName
+	polymorphicMatch.Method = parentModel + "::" + relationName
+
 	return &MatchResult{
 		Type:       PatternTypePolymorphic,
 		Position:   position,
@@ -334,13 +351,13 @@ func (m *DefaultPolymorphicMatcher) processPolymorphicMatch(
 }
 
 // buildPolymorphicMatch creates a PolymorphicMatch based on the detected method and arguments.
-func (m *DefaultPolymorphicMatcher) buildPolymorphicMatch(methodName, modelArg, nameArg, typeArg, idArg, relationName string, queryDef QueryDefinition) *PolymorphicMatch {
+func (m *DefaultPolymorphicMatcher) buildPolymorphicMatch(methodName, modelArg, nameArg, typeArg, idArg, relationName string, queryDef QueryDefinition, parentModel string) *PolymorphicMatch {
 	polymorphicMatch := &PolymorphicMatch{
 		Relation: relationName,
 		Type:     methodName,
 		Pattern:  queryDef.Name,
 		Method:   methodName,
-		Context:  "",
+		Context:  fmt.Sprintf("%s::%s", parentModel, relationName), // Format: "App\Models\Post::imageable"
 	}
 
 	switch methodName {
@@ -355,23 +372,37 @@ func (m *DefaultPolymorphicMatcher) buildPolymorphicMatch(methodName, modelArg, 
 		if idArg != "" {
 			polymorphicMatch.MorphId = idArg
 		}
-		// Infer default column names if not specified
+		// Infer default column names if not specified (use relationName)
 		if polymorphicMatch.MorphType == "" {
-			polymorphicMatch.MorphType = polymorphicMatch.Relation + "_type"
+			base := polymorphicMatch.Relation
+			if base == "" {
+				base = relationName
+			}
+			if base != "" {
+				polymorphicMatch.MorphType = base + "_type"
+			}
 		}
 		if polymorphicMatch.MorphId == "" {
-			polymorphicMatch.MorphId = polymorphicMatch.Relation + "_id"
+			base := polymorphicMatch.Relation
+			if base == "" {
+				base = relationName
+			}
+			if base != "" {
+				polymorphicMatch.MorphId = base + "_id"
+			}
 		}
 	case "morphOne", "morphMany":
 		// morphOne/morphMany relationships - has polymorphic
 		polymorphicMatch.Model = m.cleanModelReference(modelArg)
 		if nameArg != "" {
 			polymorphicMatch.Relation = nameArg
+		} else {
+			polymorphicMatch.Relation = relationName
 		}
-		// For morphOne/morphMany, we need to infer the inverse morph type/id columns
+		// For morphOne/morphMany, infer the inverse morph type/id columns from relation name
 		baseName := strings.ToLower(polymorphicMatch.Relation)
 		if baseName == "" {
-			baseName = "morphable" // Default Laravel naming
+			baseName = relationName
 		}
 		polymorphicMatch.MorphType = baseName + "_type"
 		polymorphicMatch.MorphId = baseName + "_id"
@@ -632,6 +663,135 @@ func (m *DefaultPolymorphicMatcher) isExplicitPolymorphicUsage(patternName strin
 	}
 }
 
+// extractParentModel extracts the parent model class name from the file path and source context.
+func (m *DefaultPolymorphicMatcher) extractParentModel(tree *parser.SyntaxTree, filePath string, position parser.Point) string {
+	// First, try to extract from namespace and class declaration in the source
+	if modelFromSource := m.extractModelFromSource(tree); modelFromSource != "" {
+		return modelFromSource
+	}
+
+	// Fallback: infer from file path (Laravel convention: app/Models/ModelName.php)
+	if modelFromPath := m.extractModelFromPath(filePath); modelFromPath != "" {
+		return modelFromPath
+	}
+
+	// Last resort: use "UnknownModel"
+	return "UnknownModel"
+}
+
+// getEnclosingMethodName walks up from a node to find the containing method name
+func (m *DefaultPolymorphicMatcher) getEnclosingMethodName(node *sitter.Node, tree *parser.SyntaxTree) string {
+	current := node
+	for current != nil {
+		if current.Type() == "method_declaration" {
+			return m.getMethodNameFromNode(current, tree.Source)
+		}
+		current = current.Parent()
+	}
+	return ""
+}
+
+// getEnclosingClassFQCN resolves the FQCN of the containing class
+func (m *DefaultPolymorphicMatcher) getEnclosingClassFQCN(node *sitter.Node, tree *parser.SyntaxTree) string {
+	current := node
+	for current != nil {
+		if current.Type() == "class_declaration" {
+			className := m.getClassNameFromNode(current, tree.Source)
+			ns := m.getNamespaceFromTree(tree.Source)
+			if ns != "" {
+				return ns + "\\" + className
+			}
+			return className
+		}
+		current = current.Parent()
+	}
+	return ""
+}
+
+// classExtendsEloquentModel checks class_declaration base_clause for Eloquent Model
+func (m *DefaultPolymorphicMatcher) classExtendsEloquentModel(node *sitter.Node, tree *parser.SyntaxTree) bool {
+	current := node
+	for current != nil {
+		if current.Type() == "class_declaration" {
+			// scan children for base_clause
+			for i := uint32(0); i < current.ChildCount(); i++ {
+				ch := current.Child(int(i))
+				if ch != nil && ch.Type() == "base_clause" {
+					txt := strings.ReplaceAll(string(ch.Content(tree.Source)), " ", "")
+					if strings.Contains(txt, "Illuminate\\Database\\Eloquent\\Model") ||
+						strings.HasSuffix(txt, "\\Model") || strings.HasSuffix(txt, "Model") ||
+						txt == "Model" || strings.HasSuffix(txt, ":Model") {
+						return true
+					}
+				}
+			}
+			return false
+		}
+		current = current.Parent()
+	}
+	return false
+}
+
+// extractModelFromSource extracts the full model class name from namespace and class declaration.
+func (m *DefaultPolymorphicMatcher) extractModelFromSource(tree *parser.SyntaxTree) string {
+	sourceLines := strings.Split(string(tree.Source), "\n")
+
+	var namespace string
+	var className string
+
+	for _, line := range sourceLines {
+		line = strings.TrimSpace(line)
+
+		// Extract namespace
+		if strings.HasPrefix(line, "namespace ") && strings.HasSuffix(line, ";") {
+			namespace = strings.TrimSpace(line[10 : len(line)-1]) // Remove "namespace " and ";"
+		}
+
+		// Extract class name
+		if strings.Contains(line, "class ") && strings.Contains(line, "extends Model") {
+			// Look for "class ClassName extends Model"
+			parts := strings.Fields(line)
+			for i, part := range parts {
+				if part == "class" && i+1 < len(parts) {
+					className = parts[i+1]
+					break
+				}
+			}
+			if className != "" {
+				break // Found class, stop looking
+			}
+		}
+	}
+
+	// Combine namespace and class name
+	if namespace != "" && className != "" {
+		return fmt.Sprintf("%s\\%s", namespace, className)
+	} else if className != "" {
+		return className
+	}
+
+	return ""
+}
+
+// extractModelFromPath extracts model name from Laravel convention file path.
+func (m *DefaultPolymorphicMatcher) extractModelFromPath(filePath string) string {
+	// Laravel convention: app/Models/ModelName.php or App/Models/ModelName.php
+	if strings.Contains(filePath, "/Models/") {
+		parts := strings.Split(filePath, "/Models/")
+		if len(parts) >= 2 {
+			modelFile := parts[len(parts)-1] // Get the part after last "/Models/"
+			// Remove .php extension
+			if strings.HasSuffix(modelFile, ".php") {
+				modelName := strings.TrimSuffix(modelFile, ".php")
+				// Assume App\Models namespace by default
+				return fmt.Sprintf("App\\Models\\%s", modelName)
+			}
+		}
+	}
+
+	return ""
+}
+
 // convertToSitterNode converts SyntaxTree back to tree-sitter node and tree for querying.
 func (m *DefaultPolymorphicMatcher) convertToSitterNode(tree *parser.SyntaxTree) (*sitter.Node, *sitter.Tree, error) {
 	// Re-parse the content to get a tree-sitter node
@@ -714,6 +874,89 @@ func (m *DefaultPolymorphicMatcher) deduplicateResults(results []*MatchResult) [
 	}
 
 	return deduplicated
+}
+
+// extractControllerMethodContext walks up the AST to find the controller class and method
+// containing this polymorphic pattern match
+func (m *DefaultPolymorphicMatcher) extractControllerMethodContext(node *sitter.Node, tree *parser.SyntaxTree, filePath string) string {
+	current := node
+
+	// Walk up the AST to find the method declaration
+	for current != nil {
+		if current.Type() == "method_declaration" {
+			// Found method, get its name
+			methodName := m.getMethodNameFromNode(current, tree.Source)
+
+			// Continue walking up to find the class
+			classNode := current
+			for classNode != nil {
+				if classNode.Type() == "class_declaration" {
+					className := m.getClassNameFromNode(classNode, tree.Source)
+					namespace := m.getNamespaceFromTree(tree.Source)
+
+					// Build FQCN
+					var fqcn string
+					if namespace != "" {
+						fqcn = namespace + "\\" + className
+					} else {
+						fqcn = className
+					}
+
+					return fqcn + "::" + methodName
+				}
+				classNode = classNode.Parent()
+			}
+		}
+		current = current.Parent()
+	}
+
+	// If we can't find method context, return empty (will be marked unresolvable)
+	return ""
+}
+
+// getMethodNameFromNode extracts method name from method_declaration node
+func (m *DefaultPolymorphicMatcher) getMethodNameFromNode(methodNode *sitter.Node, source []byte) string {
+	for i := uint32(0); i < methodNode.ChildCount(); i++ {
+		child := methodNode.Child(int(i))
+		if child.Type() == "name" {
+			return string(child.Content(source))
+		}
+	}
+	return ""
+}
+
+// getClassNameFromNode extracts class name from class_declaration node
+func (m *DefaultPolymorphicMatcher) getClassNameFromNode(classNode *sitter.Node, source []byte) string {
+	for i := uint32(0); i < classNode.ChildCount(); i++ {
+		child := classNode.Child(int(i))
+		if child.Type() == "name" {
+			return string(child.Content(source))
+		}
+	}
+	return ""
+}
+
+// getNamespaceFromTree extracts namespace from the file by parsing the source
+func (m *DefaultPolymorphicMatcher) getNamespaceFromTree(source []byte) string {
+	sourceStr := string(source)
+
+	// Look for namespace declaration
+	lines := strings.Split(sourceStr, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "namespace ") {
+			// Extract namespace
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				namespace := parts[1]
+				// Remove semicolon if present
+				namespace = strings.TrimSuffix(namespace, ";")
+				return namespace
+			}
+		}
+	}
+
+	return ""
 }
 
 // GetSupportedPolymorphicPatterns returns commonly used Laravel polymorphic relationship patterns.

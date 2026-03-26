@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/manifest"
 )
 
 // ProjectSize categorizes Laravel projects by their scale and complexity

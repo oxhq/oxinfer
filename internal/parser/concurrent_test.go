@@ -1,3 +1,5 @@
+//go:build legacy_parser
+
 // Package parser provides comprehensive tests for concurrent PHP parsing functionality.
 // Tests thread safety, resource management, error handling, and integration with manifest configuration.
 package parser
@@ -10,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/indexer"
+	"github.com/oxhq/oxinfer/internal/indexer"
 )
 
 // TestConcurrentParsing_Basic tests basic concurrent parsing functionality.

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/garaekz/oxinfer/internal/cli"
+	"github.com/oxhq/oxinfer/internal/cli"
 )
 
 func TestManifestLoader_LoadFromReader(t *testing.T) {

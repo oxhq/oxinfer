@@ -3,7 +3,7 @@ package infer
 import (
 	"testing"
 
-	"github.com/garaekz/oxinfer/internal/matchers"
+	"github.com/oxhq/oxinfer/internal/matchers"
 )
 
 func TestDefaultContentTypeDetector_DetectContentType(t *testing.T) {
@@ -342,8 +342,7 @@ func TestDefaultKeyPathParser_ParseKeyPath(t *testing.T) {
 			name: "wildcard notation",
 			path: "users.*.profile",
 			expected: []PathSegment{
-				{Key: "users", IsArray: false, IsWildcard: false},
-				{Key: "*", IsArray: false, IsWildcard: true},
+				{Key: "users", IsArray: true, ArrayKey: "", IsWildcard: false},
 				{Key: "profile", IsArray: false, IsWildcard: false},
 			},
 			expectError: false,

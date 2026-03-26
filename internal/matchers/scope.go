@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/garaekz/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/parser"
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
@@ -348,6 +348,12 @@ func (m *DefaultScopeMatcher) processMatch(match *sitter.QueryMatch, queryDef Qu
 		return nil, nil // Filter out low confidence matches
 	}
 
+	// Extract controller context for proper association
+	controllerContext := m.extractControllerMethodContext(firstCapture.Node, tree, filePath)
+	if controllerContext != "" {
+		scopeMatch.Context = controllerContext
+	}
+
 	// Extract class context if available
 	className, _ := m.extractClassName(tree, filePath)
 
@@ -396,6 +402,7 @@ func (m *DefaultScopeMatcher) processLocalScopeDefinition(match *sitter.QueryMat
 		args = m.extractScopeArguments(bodyCapture, tree)
 	}
 
+
 	return &ScopeMatch{
 		Name:     scopeName,
 		On:       modelFQCN,
@@ -410,10 +417,10 @@ func (m *DefaultScopeMatcher) processLocalScopeDefinition(match *sitter.QueryMat
 
 // processScopeMethodCall processes direct scope method calls.
 func (m *DefaultScopeMatcher) processScopeMethodCall(match *sitter.QueryMatch, tree *parser.SyntaxTree, context string) *ScopeMatch {
-	captures := m.mapCaptures(match)
+    captures := m.mapCaptures(match)
 
-	var methodName, modelClass string
-	var args []any
+    var methodName, modelClass string
+    var args []any
 
 	if scopeMethod, ok := captures["scope_method"]; ok {
 		methodName = scopeMethod.Content(tree.Source)
@@ -437,29 +444,37 @@ func (m *DefaultScopeMatcher) processScopeMethodCall(match *sitter.QueryMatch, t
 		return nil
 	}
 
-	onClass := modelClass
-	if onClass == "" {
-		var ok bool
-		onClass, ok = m.extractClassName(tree, "")
-		if !ok {
-			// Cannot resolve model, apply strict filtering
-			if !m.scopeRegistry.ExistsInAnyModel(scopeName) {
-				return nil
-			}
-			// Scope exists in some model but we don't know which one
-			// Per recommendations: do not emit unknown-model scopes
-			return nil
-		}
-	}
+    // Strict model resolution: only emit scopes when we can definitively resolve to a model FQCN
+    var resolvedModelFQCN string
 
-	// Model resolved: only accept if it's a registered custom scope for this model
-	if !m.scopeRegistry.HasScope(onClass, scopeName) {
+    // Build namespace and alias map from file AST
+    ns, aliases := m.buildAliasMap(tree)
+
+    // First, try the captured model class
+    if modelClass != "" {
+        // Clean and resolve model class (remove quotes, ::class suffix, etc.)
+        cleanModel := m.cleanModelReference(modelClass)
+        resolved := m.resolveFQCN(cleanModel, ns, aliases)
+        if m.isValidModelFQCN(resolved) {
+            resolvedModelFQCN = resolved
+        }
+    }
+	
+	// If no valid model resolved, skip this scope emission
+	// Never emit scopes with controller names or unresolved models
+	if resolvedModelFQCN == "" {
+		return nil
+	}
+	
+	// Only accept if it's a registered custom scope for this specific model
+	if !m.scopeRegistry.HasScope(resolvedModelFQCN, scopeName) {
 		return nil
 	}
 
+
 	return &ScopeMatch{
 		Name:     scopeName,
-		On:       onClass,
+		On:       resolvedModelFQCN, // Use resolved model FQCN, never controller names
 		Args:     args,
 		IsGlobal: false,
 		IsLocal:  true,
@@ -471,10 +486,10 @@ func (m *DefaultScopeMatcher) processScopeMethodCall(match *sitter.QueryMatch, t
 
 // processScopeWithoutPrefix processes scope calls without 'scope' prefix.
 func (m *DefaultScopeMatcher) processScopeWithoutPrefix(match *sitter.QueryMatch, tree *parser.SyntaxTree, context string) *ScopeMatch {
-	captures := m.mapCaptures(match)
+    captures := m.mapCaptures(match)
 
-	var scopeName, modelClass string
-	var args []any
+    var scopeName, modelClass string
+    var args []any
 
 	if scopeCapture, ok := captures["scope_name"]; ok {
 		scopeName = scopeCapture.Content(tree.Source)
@@ -495,23 +510,36 @@ func (m *DefaultScopeMatcher) processScopeWithoutPrefix(match *sitter.QueryMatch
 		args = m.extractScopeArguments(argsCapture, tree)
 	}
 
-	onClass := modelClass
-	if onClass == "" {
-		var ok bool
-		onClass, ok = m.extractClassName(tree, "")
-		if !ok {
-			return nil
-		}
-	}
+    // Strict model resolution: only emit scopes when we can definitively resolve to a model FQCN
+    var resolvedModelFQCN string
 
-	// Additional validation - skip if we can't determine the model
-	if onClass == "" {
+    // Build namespace and alias map from file AST
+    ns, aliases := m.buildAliasMap(tree)
+
+    // First, try the captured model class
+    if modelClass != "" {
+        // Clean and resolve model class
+        cleanModel := m.cleanModelReference(modelClass)
+        resolved := m.resolveFQCN(cleanModel, ns, aliases)
+        if m.isValidModelFQCN(resolved) {
+            resolvedModelFQCN = resolved
+        }
+    }
+	
+	// If no valid model resolved, skip this scope emission
+	if resolvedModelFQCN == "" {
+		return nil
+	}
+	
+	// Only accept if it's a registered custom scope for this specific model
+	if !m.scopeRegistry.HasScope(resolvedModelFQCN, scopeName) {
 		return nil
 	}
 
+
 	return &ScopeMatch{
 		Name:     scopeName,
-		On:       onClass,
+		On:       resolvedModelFQCN, // Use resolved model FQCN, never controller names
 		Args:     args,
 		IsGlobal: false,
 		IsLocal:  true,
@@ -533,6 +561,7 @@ func (m *DefaultScopeMatcher) processGlobalScopeClass(match *sitter.QueryMatch, 
 	classNameStr := className.Content(tree.Source)
 	scopeName := strings.TrimSuffix(classNameStr, "Scope")
 	scopeName = strings.ToLower(scopeName)
+
 
 	return &ScopeMatch{
 		Name:     scopeName,
@@ -561,6 +590,7 @@ func (m *DefaultScopeMatcher) processGlobalScopeApply(match *sitter.QueryMatch, 
 	}
 	scopeName := strings.TrimSuffix(className, "Scope")
 	scopeName = strings.ToLower(scopeName)
+
 
 	return &ScopeMatch{
 		Name:     scopeName,
@@ -592,6 +622,7 @@ func (m *DefaultScopeMatcher) processScopeRegistration(match *sitter.QueryMatch,
 	}
 
 	onClass, _ := m.extractClassName(tree, "")
+
 	return &ScopeMatch{
 		Name:     scopeName,
 		On:       onClass,
@@ -629,6 +660,7 @@ func (m *DefaultScopeMatcher) processRelationshipScope(match *sitter.QueryMatch,
 	}
 
 	onClass, _ := m.extractClassName(tree, "")
+
 	return &ScopeMatch{
 		Name:     scopeName,
 		On:       onClass,
@@ -666,6 +698,7 @@ func (m *DefaultScopeMatcher) processWhereableScope(match *sitter.QueryMatch, tr
 	}
 
 	onClass, _ := m.extractClassName(tree, "")
+
 	return &ScopeMatch{
 		Name:     scopeName,
 		On:       onClass,
@@ -832,6 +865,103 @@ func (m *DefaultScopeMatcher) mapCaptures(match *sitter.QueryMatch) map[string]*
 	return captures
 }
 
+// buildAliasMap extracts file namespace and use aliases via AST
+func (m *DefaultScopeMatcher) buildAliasMap(tree *parser.SyntaxTree) (string, map[string]string) {
+    ns := ""
+    aliases := make(map[string]string)
+    root, sitterTree, err := m.convertToSitterNode(tree)
+    if err != nil || root == nil {
+        return ns, aliases
+    }
+    defer sitterTree.Close()
+
+    var walk func(n *sitter.Node)
+    walk = func(n *sitter.Node) {
+        if n == nil {
+            return
+        }
+        switch n.Type() {
+        case "namespace_definition":
+            // find namespace_name child
+            for i := uint32(0); i < n.ChildCount(); i++ {
+                ch := n.Child(int(i))
+                if ch != nil && ch.Type() == "namespace_name" {
+                    ns = string(ch.Content(tree.Source))
+                    break
+                }
+            }
+        case "namespace_use_declaration":
+            // iterate clauses
+            for i := uint32(0); i < n.ChildCount(); i++ {
+                cl := n.Child(int(i))
+                if cl == nil {
+                    continue
+                }
+                if cl.Type() == "namespace_use_clause" || cl.Type() == "use_declaration" {
+                    // get qualified_name and optional alias
+                    var qname, alias string
+                    for j := uint32(0); j < cl.ChildCount(); j++ {
+                        c := cl.Child(int(j))
+                        if c == nil {
+                            continue
+                        }
+                        t := c.Type()
+                        if t == "qualified_name" || t == "name" {
+                            qname = string(c.Content(tree.Source))
+                        }
+                        if t == "as" {
+                            // alias token, next name is alias
+                            if j+1 < cl.ChildCount() {
+                                al := cl.Child(int(j + 1))
+                                if al != nil {
+                                    alias = string(al.Content(tree.Source))
+                                }
+                            }
+                        }
+                        if t == "alias" { // some grammars
+                            alias = string(c.Content(tree.Source))
+                        }
+                    }
+                    if qname != "" {
+                        if alias == "" {
+                            // default alias = last segment
+                            parts := strings.Split(qname, "\\")
+                            alias = parts[len(parts)-1]
+                        }
+                        aliases[alias] = qname
+                    }
+                }
+            }
+        }
+        for i := uint32(0); i < n.ChildCount(); i++ {
+            walk(n.Child(int(i)))
+        }
+    }
+    walk(root)
+    return ns, aliases
+}
+
+// resolveFQCN resolves a class reference to FQCN using alias map and namespace
+func (m *DefaultScopeMatcher) resolveFQCN(ref, ns string, aliases map[string]string) string {
+    if ref == "" {
+        return ""
+    }
+    // Already fully qualified
+    if strings.Contains(ref, "\\") {
+        // if ref starts with leading backslash, trim
+        return strings.TrimPrefix(ref, "\\")
+    }
+    // Resolve via alias
+    if fq, ok := aliases[ref]; ok {
+        return fq
+    }
+    // Fallback to file namespace
+    if ns != "" {
+        return ns + "\\" + ref
+    }
+    return ref
+}
+
 // convertToSitterNode converts SyntaxTree back to tree-sitter node and tree for querying.
 // This re-parses the content to get proper tree-sitter structures.
 func (m *DefaultScopeMatcher) convertToSitterNode(tree *parser.SyntaxTree) (*sitter.Node, *sitter.Tree, error) {
@@ -922,6 +1052,146 @@ func (m *DefaultScopeMatcher) deduplicateResults(results []*MatchResult) []*Matc
 	}
 
 	return deduplicated
+}
+
+// extractControllerMethodContext walks up the AST to find the controller class and method
+// containing this scope pattern match
+func (m *DefaultScopeMatcher) extractControllerMethodContext(node *sitter.Node, tree *parser.SyntaxTree, filePath string) string {
+	current := node
+	
+	// Walk up the AST to find the method declaration
+	for current != nil {
+		if current.Type() == "method_declaration" {
+			// Found method, get its name
+			methodName := m.getMethodNameFromNode(current, tree.Source)
+			
+			// Continue walking up to find the class
+			classNode := current
+			for classNode != nil {
+				if classNode.Type() == "class_declaration" {
+					className := m.getClassNameFromNode(classNode, tree.Source)
+					namespace := m.getNamespaceFromTree(tree.Source)
+					
+					// Build FQCN
+					var fqcn string
+					if namespace != "" {
+						fqcn = namespace + "\\" + className
+					} else {
+						fqcn = className
+					}
+					
+					return fqcn + "::" + methodName
+				}
+				classNode = classNode.Parent()
+			}
+		}
+		current = current.Parent()
+	}
+	
+	// If we can't find method context, return empty (will be marked unresolvable)
+	return ""
+}
+
+// getMethodNameFromNode extracts method name from method_declaration node
+func (m *DefaultScopeMatcher) getMethodNameFromNode(methodNode *sitter.Node, source []byte) string {
+	for i := uint32(0); i < methodNode.ChildCount(); i++ {
+		child := methodNode.Child(int(i))
+		if child.Type() == "name" {
+			return string(child.Content(source))
+		}
+	}
+	return ""
+}
+
+// getClassNameFromNode extracts class name from class_declaration node  
+func (m *DefaultScopeMatcher) getClassNameFromNode(classNode *sitter.Node, source []byte) string {
+	for i := uint32(0); i < classNode.ChildCount(); i++ {
+		child := classNode.Child(int(i))
+		if child.Type() == "name" {
+			return string(child.Content(source))
+		}
+	}
+	return ""
+}
+
+// getNamespaceFromTree extracts namespace from the file by parsing the source
+func (m *DefaultScopeMatcher) getNamespaceFromTree(source []byte) string {
+	sourceStr := string(source)
+	
+	// Look for namespace declaration
+	lines := strings.Split(sourceStr, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "namespace ") {
+			// Extract namespace
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				namespace := parts[1]
+				// Remove semicolon if present
+				namespace = strings.TrimSuffix(namespace, ";")
+				return namespace
+			}
+		}
+	}
+	
+	return ""
+}
+
+// cleanModelReference cleans up model class references (removes ::class, quotes, etc.)
+func (m *DefaultScopeMatcher) cleanModelReference(modelRef string) string {
+	modelRef = strings.TrimSpace(modelRef)
+	
+	// Remove ::class suffix
+	modelRef = strings.TrimSuffix(modelRef, "::class")
+	
+	// Remove quotes
+	if len(modelRef) >= 2 {
+		if (modelRef[0] == '"' && modelRef[len(modelRef)-1] == '"') ||
+			(modelRef[0] == '\'' && modelRef[len(modelRef)-1] == '\'') {
+			modelRef = modelRef[1 : len(modelRef)-1]
+		}
+	}
+	
+	return modelRef
+}
+
+// isValidModelFQCN checks if the FQCN looks like a valid Eloquent model
+func (m *DefaultScopeMatcher) isValidModelFQCN(fqcn string) bool {
+	if fqcn == "" {
+		return false
+	}
+	
+	// Must contain namespace separators (backslashes)
+	if !strings.Contains(fqcn, "\\") {
+		return false
+	}
+	
+	// Should be in App\Models namespace (Laravel convention)
+	// or contain "Model" in the path, but let's be permissive for now
+	if strings.HasPrefix(fqcn, "App\\Models\\") {
+		return true
+	}
+	
+	// Allow other model namespaces but exclude obvious non-models
+	excludePatterns := []string{
+		"App\\Http\\Controllers\\",
+		"App\\Http\\Requests\\", 
+		"App\\Http\\Responses\\",
+		"App\\Services\\",
+		"App\\Actions\\",
+		"App\\Console\\",
+		"App\\Repositories\\",
+		"App\\Observers\\",
+		"App\\ValueObjects\\",
+	}
+	
+	for _, pattern := range excludePatterns {
+		if strings.HasPrefix(fqcn, pattern) {
+			return false
+		}
+	}
+	
+	return true
 }
 
 // GetQueries returns the tree-sitter queries used by this matcher.

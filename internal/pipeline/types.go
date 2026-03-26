@@ -4,15 +4,16 @@ package pipeline
 
 import (
 	"context"
+	"runtime"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/emitter"
-	"github.com/garaekz/oxinfer/internal/indexer"
-	"github.com/garaekz/oxinfer/internal/infer"
-	"github.com/garaekz/oxinfer/internal/manifest"
-	"github.com/garaekz/oxinfer/internal/matchers"
-	"github.com/garaekz/oxinfer/internal/parser"
-	"github.com/garaekz/oxinfer/internal/psr4"
+	"github.com/oxhq/oxinfer/internal/emitter"
+	"github.com/oxhq/oxinfer/internal/indexer"
+	"github.com/oxhq/oxinfer/internal/infer"
+	"github.com/oxhq/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/matchers"
+	"github.com/oxhq/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/psr4"
 )
 
 // PipelinePhase represents the current phase of pipeline execution.
@@ -117,6 +118,12 @@ type ParseResults struct {
 
 	// Model scopes
 	ModelScopes map[string][]string // Model FQCN -> scope names
+	
+	// Controllers (consistent with ModelScopes pattern)
+	Controllers map[string][]string // Controller FQCN -> method names
+	
+	// Models (complete model info)
+	Models map[string]parser.ModelInfo // Model FQCN -> ModelInfo
 
 	// Statistics
 	FilesProcessed int
@@ -126,11 +133,13 @@ type ParseResults struct {
 
 // ParsedFile represents a successfully parsed PHP file.
 type ParsedFile struct {
-	FilePath        string
+	FilePath        string // Relative path for display/logging
+	AbsPath         string // Absolute path for file operations
 	RelativePath    string
 	Namespace       string
 	FileStructure   *parser.PHPFileStructure
 	LaravelPatterns *parser.LaravelPatterns
+	SyntaxTree      *parser.SyntaxTree // Store the syntax tree to avoid reparsing
 	ParsedFromCache bool
 	ParseDuration   time.Duration
 }
@@ -306,11 +315,11 @@ type DeltaAssembler interface {
 	AssembleDelta(ctx context.Context, results *PipelineResults) (*emitter.Delta, error)
 
 	// Component integration methods
-	AssembleControllers(parseResults *ParseResults, matchResults *MatchResults, inferenceResults *InferenceResults) ([]emitter.Controller, error)
-	AssembleModels(parseResults *ParseResults, matchResults *MatchResults) ([]emitter.Model, error)
-	AssemblePolymorphic(matchResults *MatchResults) ([]emitter.Polymorphic, error)
-	AssembleBroadcast(matchResults *MatchResults) ([]emitter.Broadcast, error)
-	AssembleMetadata(results *PipelineResults, stats *PipelineStats) (emitter.MetaInfo, error)
+	AssembleControllers(ctx context.Context, parseResults *ParseResults, matchResults *MatchResults, inferenceResults *InferenceResults) ([]emitter.Controller, error)
+	AssembleModels(ctx context.Context, parseResults *ParseResults, matchResults *MatchResults) ([]emitter.Model, error)
+	AssemblePolymorphic(ctx context.Context, matchResults *MatchResults) ([]emitter.Polymorphic, error)
+	AssembleBroadcast(ctx context.Context, matchResults *MatchResults) ([]emitter.Broadcast, error)
+	AssembleMetadata(ctx context.Context, results *PipelineResults, stats *PipelineStats) (emitter.MetaInfo, error)
 }
 
 // ComponentRegistry manages access to all pipeline components.
@@ -388,11 +397,24 @@ func (r *ComponentRegistry) Close() error {
 
 // DefaultPipelineConfig returns sensible defaults for pipeline configuration.
 func DefaultPipelineConfig() *PipelineConfig {
+	// Aggressive worker configuration for maximum Go performance
+	// Use 2x CPU cores for I/O bound tasks (file parsing)
+	optimalWorkers := runtime.NumCPU() * 2
+	if optimalWorkers < 8 {
+		optimalWorkers = 8 // Minimum aggressive parallelism
+	}
+	
+	// Scale parser pool to match worker pool
+	parserPoolSize := optimalWorkers
+	if parserPoolSize > 16 {
+		parserPoolSize = 16 // Cap parser instances due to memory usage
+	}
+	
 	return &PipelineConfig{
 		Targets:    []string{"app", "routes"},
 		Globs:      []string{"**/*.php"},
 		MaxFiles:   10000,
-		MaxWorkers: 4,
+		MaxWorkers: optimalWorkers,
 		CacheConfig: indexer.IndexConfig{
 			CacheEnabled: true,
 			CacheKind:    "sha256+mtime",
@@ -400,7 +422,7 @@ func DefaultPipelineConfig() *PipelineConfig {
 		ParserConfig: parser.ParserConfig{
 			MaxFileSize:           1024 * 1024, // 1MB
 			MaxParseTime:          30 * time.Second,
-			PoolSize:              4,
+			PoolSize:              parserPoolSize,
 			EnableLaravelPatterns: true,
 			EnableDocBlocks:       true,
 			EnableDetailedErrors:  true,

@@ -8,7 +8,8 @@ This document describes the internal architecture, data flow, and module boundar
 ┌─────────────────────────────────────────────────────────────────────┐
 │                            Oxinfer CLI                              │
 ├─────────────────────────────────────────────────────────────────────┤
-│  Input: manifest.json → Output: delta.json (deterministic)         │
+│  Input: manifest.json → delta.json                                  │
+│  Input: AnalysisRequest → AnalysisResponse (deterministic)          │
 └─────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -46,6 +47,11 @@ This document describes the internal architecture, data flow, and module boundar
 manifest.json → Validation → Configuration → Component Registry
 ```
 
+For contract mode:
+```
+AnalysisRequest → Schema Validation → Manifest Validation → Pipeline Configuration
+```
+
 ### 2. Indexing Phase
 ```
 Project Root → File Discovery → Cache Check → Worker Pool → File List
@@ -76,12 +82,17 @@ All Results → Data Aggregation → Cross-referencing → Structured Data
 Structured Data → JSON Generation → Schema Validation → delta.json
 ```
 
+For contract mode, the emission phase wraps the delta in an `AnalysisResponse` envelope and adds:
+- `routeMatches`
+- `diagnostics`
+- response metadata (`oxinferVersion`, diagnostic counts, status)
+
 ## Module Boundaries
 
 ### Core Modules
 
 #### `/cmd/oxinfer` - CLI Entry Point
-- **Responsibility**: Command-line interface, flag parsing, orchestration
+- **Responsibility**: Command-line interface, flag parsing, orchestration, manifest mode and contract mode
 - **Dependencies**: All internal modules
 - **Exports**: Main binary
 

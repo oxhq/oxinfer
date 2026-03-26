@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/emitter"
+	"github.com/oxhq/oxinfer/internal/emitter"
 )
 
 // TestStatsToEmitterIntegration verifies that ProcessingStats integrates properly with emitter.MetaStats

@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/manifest"
 )
 
 // Cache validation modes
@@ -75,6 +75,7 @@ type FileCacheImpl struct {
 	config      *manifest.CacheConfig
 	stats       CacheStats
 	mutex       sync.RWMutex
+	persistMu   sync.Mutex
 	hasher      hash.Hash // Reusable SHA256 hasher
 	maxSize     int
 	head        *lruNode // LRU list head (most recently used)
@@ -84,6 +85,8 @@ type FileCacheImpl struct {
 	cacheDir    string // Directory for on-disk cache persistence
 	projectKey  string // Project key for cache validation
 	persistLoad bool   // Flag to track if persistence has been loaded
+	persistBusy bool
+	persistDirty bool
 }
 
 // NewFileCache creates a new FileCacheImpl with the provided configuration
@@ -257,6 +260,7 @@ func (c *FileCacheImpl) SetCacheEntry(path string, entry *CacheEntry) error {
 		// Update existing entry
 		node.entry = entry
 		c.moveToFront(node)
+		c.schedulePersistence()
 		return nil
 	}
 
@@ -275,18 +279,7 @@ func (c *FileCacheImpl) SetCacheEntry(path string, entry *CacheEntry) error {
 	}
 	c.cache[path] = node
 	c.addToFront(node)
-
-	// Trigger persistence if cache directory is configured
-	if c.cacheDir != "" {
-		// Note: In a production system, you might want to batch persistence operations
-		// or use a background goroutine to avoid blocking the main thread
-		go func() {
-			if err := c.saveToDisk(); err != nil {
-				// Log error but don't fail the cache operation
-				// In production, you might want to log this error
-			}
-		}()
-	}
+	c.schedulePersistence()
 
 	return nil
 }
@@ -307,6 +300,7 @@ func (c *FileCacheImpl) InvalidateCache(path string) error {
 
 	c.removeNode(node)
 	delete(c.cache, path)
+	c.schedulePersistence()
 	return nil
 }
 
@@ -331,6 +325,9 @@ func (c *FileCacheImpl) CleanupCache() error {
 	}
 
 	c.stats.LastCleanup = time.Now()
+	if len(keysToRemove) > 0 {
+		c.schedulePersistence()
+	}
 	return nil
 }
 
@@ -437,6 +434,46 @@ func (c *FileCacheImpl) loadFromDisk() error {
 
 // saveToDisk persists cache entries to disk storage
 func (c *FileCacheImpl) saveToDisk() error {
+	return c.saveSnapshotToDisk(c.snapshotForPersistence())
+}
+
+type persistenceEntry struct {
+	Path  string
+	Entry CacheEntry
+}
+
+type persistenceSnapshot struct {
+	ProjectKey string
+	Entries    []persistenceEntry
+}
+
+func (c *FileCacheImpl) snapshotForPersistence() persistenceSnapshot {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	snapshot := persistenceSnapshot{
+		ProjectKey: c.projectKey,
+		Entries:    make([]persistenceEntry, 0, len(c.cache)),
+	}
+
+	for path, node := range c.cache {
+		if node == nil || node.entry == nil {
+			continue
+		}
+		snapshot.Entries = append(snapshot.Entries, persistenceEntry{
+			Path:  path,
+			Entry: *node.entry,
+		})
+	}
+
+	sort.Slice(snapshot.Entries, func(i, j int) bool {
+		return snapshot.Entries[i].Path < snapshot.Entries[j].Path
+	})
+
+	return snapshot
+}
+
+func (c *FileCacheImpl) saveSnapshotToDisk(snapshot persistenceSnapshot) error {
 	if c.cacheDir == "" {
 		return nil // No cache directory configured
 	}
@@ -454,25 +491,14 @@ func (c *FileCacheImpl) saveToDisk() error {
 
 	// Build index and save individual entries
 	index := CacheIndex{
-		ProjectKey:   c.projectKey,
+		ProjectKey:   snapshot.ProjectKey,
 		CreatedAt:    time.Now(),
 		LastModified: time.Now(),
 		Entries:      make(map[string]string),
 	}
 
-	// Sort paths for deterministic output
-	var paths []string
-	for path := range c.cache {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-
-	for _, path := range paths {
-		node := c.cache[path]
-		if node == nil || node.entry == nil {
-			continue
-		}
-
+	for _, persisted := range snapshot.Entries {
+		path := persisted.Path
 		// Generate filename from hash of path
 		hasher := sha256.New()
 		hasher.Write([]byte(path))
@@ -480,12 +506,12 @@ func (c *FileCacheImpl) saveToDisk() error {
 
 		// Convert to disk format
 		diskEntry := DiskCacheEntry{
-			Path:        node.entry.Path,
-			Hash:        node.entry.Hash,
-			Size:        node.entry.Size,
-			ModTime:     node.entry.ModTime,
-			ProcessedAt: node.entry.ProcessedAt,
-			Valid:       node.entry.Valid,
+			Path:        persisted.Entry.Path,
+			Hash:        persisted.Entry.Hash,
+			Size:        persisted.Entry.Size,
+			ModTime:     persisted.Entry.ModTime,
+			ProcessedAt: persisted.Entry.ProcessedAt,
+			Valid:       persisted.Entry.Valid,
 		}
 
 		entryData, err := json.Marshal(diskEntry, json.Deterministic(true), jsontext.WithIndent("  "))
@@ -512,6 +538,43 @@ func (c *FileCacheImpl) saveToDisk() error {
 	}
 
 	return nil
+}
+
+func (c *FileCacheImpl) schedulePersistence() {
+	if c.cacheDir == "" {
+		return
+	}
+
+	c.persistMu.Lock()
+	c.persistDirty = true
+	if c.persistBusy {
+		c.persistMu.Unlock()
+		return
+	}
+	c.persistBusy = true
+	c.persistMu.Unlock()
+
+	go c.runPersistenceLoop()
+}
+
+func (c *FileCacheImpl) runPersistenceLoop() {
+	for {
+		c.persistMu.Lock()
+		c.persistDirty = false
+		c.persistMu.Unlock()
+
+		if err := c.saveToDisk(); err != nil {
+			// Persistence failures are intentionally non-fatal for cache writes.
+		}
+
+		c.persistMu.Lock()
+		if !c.persistDirty {
+			c.persistBusy = false
+			c.persistMu.Unlock()
+			return
+		}
+		c.persistMu.Unlock()
+	}
 }
 
 // validateProjectKey checks if the cached project key matches the current project

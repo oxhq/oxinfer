@@ -1,3 +1,5 @@
+//go:build legacy_parser
+
 package parser
 
 import (

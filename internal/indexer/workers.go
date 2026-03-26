@@ -186,11 +186,21 @@ func (wpm *workerPoolManager) initializePool(maxWorkers int, processor FileProce
 	wpm.processor = processor
 	wpm.totalWorkers = int32(maxWorkers)
 
-	// Initialize channels with appropriate buffer sizes
-	// Work queue buffer size is 2x maxWorkers to prevent blocking
-	wpm.workQueue = make(chan *workItem, maxWorkers*2)
-	wpm.resultQueue = make(chan *ProcessResult, maxWorkers*2)
-	wpm.errorQueue = make(chan error, maxWorkers)
+	// Initialize channels with aggressive buffer sizes for maximum throughput
+	// Work queue buffer size is 4x maxWorkers to prevent any blocking
+	// This allows the submission goroutine to stay ahead of workers
+	workQueueSize := maxWorkers * 4
+	if workQueueSize < 32 {
+		workQueueSize = 32 // Minimum aggressive buffering
+	}
+	
+	// Result and error queues sized generously to prevent backpressure
+	resultQueueSize := maxWorkers * 3
+	errorQueueSize := maxWorkers * 2
+	
+	wpm.workQueue = make(chan *workItem, workQueueSize)
+	wpm.resultQueue = make(chan *ProcessResult, resultQueueSize)
+	wpm.errorQueue = make(chan error, errorQueueSize)
 
 	// Create worker instances
 	wpm.workers = make([]*worker, maxWorkers)

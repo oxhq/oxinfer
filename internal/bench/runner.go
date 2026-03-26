@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/manifest"
-	"github.com/garaekz/oxinfer/internal/pipeline"
-	"github.com/garaekz/oxinfer/internal/stats"
+	"github.com/oxhq/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/pipeline"
+	"github.com/oxhq/oxinfer/internal/stats"
 )
 
 // BenchmarkRunner orchestrates performance testing across realistic scenarios.
@@ -722,7 +722,7 @@ func (br *BenchmarkRunner) saveBaseline(summary *RunSummary) error {
 	}
 
 	// Serialize to JSON
-	data, err := json.Marshal(baselineData, json.Deterministic(true), json.Indent("", "  "))
+	data, err := json.Marshal(baselineData, json.Deterministic(true))
 	if err != nil {
 		return fmt.Errorf("failed to serialize baseline data: %w", err)
 	}
@@ -769,7 +769,7 @@ func (br *BenchmarkRunner) generateReports(summary *RunSummary) error {
 }
 
 func (br *BenchmarkRunner) generateJSONReport(summary *RunSummary) error {
-	data, err := json.Marshal(summary, json.Deterministic(true), json.Indent("", "  "))
+	data, err := json.Marshal(summary, json.Deterministic(true))
 	if err != nil {
 		return fmt.Errorf("failed to serialize summary: %w", err)
 	}

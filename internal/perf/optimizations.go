@@ -475,7 +475,12 @@ func (worker *PerformantWorker) tryWorkStealing() bool {
 
 // run executes the worker scaler's main loop.
 func (scaler *WorkerScaler) run(ctx context.Context) {
-	ticker := time.NewTicker(100 * time.Millisecond) // Check every 100ms
+	interval := scaler.scaleUpDelay
+	if interval <= 0 || interval > 25*time.Millisecond {
+		interval = 25 * time.Millisecond
+	}
+
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {

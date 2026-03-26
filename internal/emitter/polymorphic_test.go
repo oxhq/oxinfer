@@ -142,11 +142,8 @@ func TestPolymorphicEmitterIntegration(t *testing.T) {
 					t.Fatalf("Failed to unmarshal want JSON: %v", err)
 				}
 
-				// Pretty print for better comparison
-				gotPretty, _ := json.Marshal(gotStruct, json.Deterministic(true), json.Indent("", "  "))
-				wantPretty, _ := json.Marshal(wantStruct, json.Deterministic(true), json.Indent("", "  "))
-				t.Logf("Got (pretty):\n%s", string(gotPretty))
-				t.Logf("Want (pretty):\n%s", string(wantPretty))
+				t.Logf("Got (struct): %#v", gotStruct)
+				t.Logf("Want (struct): %#v", wantStruct)
 			}
 
 			// Test deterministic ordering by marshaling twice

@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/manifest"
 )
 
 // BenchmarkResult captures comprehensive performance metrics for analysis

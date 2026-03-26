@@ -1,3 +1,4 @@
+//go:build !goexperiment.jsonv2
 // Package parser provides concurrent PHP parsing functionality.
 package parser
 

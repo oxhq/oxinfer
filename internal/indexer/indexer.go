@@ -9,7 +9,7 @@ import (
 
 	"crypto/sha256"
 	"encoding/hex"
-	"github.com/garaekz/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/manifest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -230,7 +230,7 @@ func (dfi *DefaultFileIndexer) IndexFiles(ctx context.Context, config IndexConfi
 	}
 
 	// Apply vendor whitelist filtering: denylist vendor/** except whitelisted paths
-	files = dfi.filterVendorFiles(files)
+	files = dfi.filterVendorFiles(files, indexConfig)
 
 	// Update progress with discovered files
 	dfi.updateProgress("enforcing-limits", "")
@@ -288,11 +288,9 @@ func (dfi *DefaultFileIndexer) IndexFiles(ctx context.Context, config IndexConfi
 // filterVendorFiles enforces vendor whitelist rules: all vendor paths are denied unless
 // explicitly whitelisted via IndexConfig.VendorWhitelist. Whitelist entries are treated
 // as relative to BaseDir; if they don't start with "vendor/", that prefix is added.
-func (dfi *DefaultFileIndexer) filterVendorFiles(files []FileInfo) []FileInfo {
-	dfi.mu.RLock()
-	baseDir := dfi.config.BaseDir
-	whitelist := dfi.config.VendorWhitelist
-	dfi.mu.RUnlock()
+func (dfi *DefaultFileIndexer) filterVendorFiles(files []FileInfo, config IndexConfig) []FileInfo {
+	baseDir := config.BaseDir
+	whitelist := config.VendorWhitelist
 
 	if len(whitelist) == 0 {
 		// No whitelist: denylist vendor entirely

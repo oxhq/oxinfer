@@ -5,17 +5,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/indexer"
-	"github.com/garaekz/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/indexer"
+	"github.com/oxhq/oxinfer/internal/parser"
 )
 
 // TestStatsWiring tests that duration statistics are properly calculated and never zero for non-trivial runs.
 func TestStatsWiring(t *testing.T) {
 	tests := []struct {
-		name           string
-		results        *PipelineResults
-		expectedMinMs  int64
-		description    string
+		name          string
+		results       *PipelineResults
+		expectedMinMs int64
+		description   string
 	}{
 		{
 			name: "with_processing_time",
@@ -26,7 +26,7 @@ func TestStatsWiring(t *testing.T) {
 				},
 			},
 			expectedMinMs: 150,
-			description: "Should use ProcessingTime when available",
+			description:   "Should use ProcessingTime when available",
 		},
 		{
 			name: "fallback_from_stages",
@@ -47,7 +47,7 @@ func TestStatsWiring(t *testing.T) {
 				},
 			},
 			expectedMinMs: 180, // 50 + 75 + 25 + 30 = 180ms
-			description: "Should sum all stage durations as fallback",
+			description:   "Should sum all stage durations as fallback",
 		},
 		{
 			name: "minimum_duration_for_files",
@@ -58,7 +58,7 @@ func TestStatsWiring(t *testing.T) {
 				},
 			},
 			expectedMinMs: 100, // At least 1ms per file
-			description: "Should estimate minimum 1ms per file when no timing data",
+			description:   "Should estimate minimum 1ms per file when no timing data",
 		},
 		{
 			name: "from_start_end_times",
@@ -71,7 +71,7 @@ func TestStatsWiring(t *testing.T) {
 				},
 			},
 			expectedMinMs: 75, // Will use files count fallback since times are too close
-			description: "Should calculate from start/end times or use file count fallback",
+			description:   "Should calculate from start/end times or use file count fallback",
 		},
 		{
 			name: "never_zero_for_real_work",
@@ -82,7 +82,7 @@ func TestStatsWiring(t *testing.T) {
 				},
 			},
 			expectedMinMs: 1,
-			description: "Should never be zero when files were processed",
+			description:   "Should never be zero when files were processed",
 		},
 	}
 
@@ -95,7 +95,7 @@ func TestStatsWiring(t *testing.T) {
 
 			// Verify duration is never zero for non-trivial runs
 			if stats.FilesProcessed > 0 && stats.TotalDuration == 0 {
-				t.Errorf("%s: Duration is zero for %d files processed", 
+				t.Errorf("%s: Duration is zero for %d files processed",
 					tt.description, stats.FilesProcessed)
 			}
 
@@ -107,7 +107,7 @@ func TestStatsWiring(t *testing.T) {
 			}
 
 			// Assemble metadata to verify it propagates correctly
-			meta, err := assembler.AssembleMetadata(tt.results, stats)
+			meta, err := assembler.AssembleMetadata(context.Background(), tt.results, stats)
 			if err != nil {
 				t.Fatalf("Failed to assemble metadata: %v", err)
 			}
@@ -158,7 +158,7 @@ func TestStatsAccuracy(t *testing.T) {
 	}
 
 	// Create metadata
-	meta, err := assembler.AssembleMetadata(results, stats)
+	meta, err := assembler.AssembleMetadata(context.Background(), results, stats)
 	if err != nil {
 		t.Fatalf("Failed to assemble metadata: %v", err)
 	}
@@ -180,13 +180,13 @@ func TestEndToEndStatsPropagation(t *testing.T) {
 
 	// Simulate a complete pipeline run with timing
 	pipelineStart := time.Now()
-	
+
 	results := &PipelineResults{
 		StartTime: pipelineStart,
 		IndexResult: &indexer.IndexResult{
 			TotalFiles: 100,
 			DurationMs: 50,
-			Files: make([]indexer.FileInfo, 100),
+			Files:      make([]indexer.FileInfo, 100),
 		},
 		ParseResults: &ParseResults{
 			FilesProcessed: 100,

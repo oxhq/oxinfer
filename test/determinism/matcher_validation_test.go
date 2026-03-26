@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/garaekz/oxinfer/internal/determinism"
-	"github.com/garaekz/oxinfer/internal/emitter"
+	"github.com/oxhq/oxinfer/internal/determinism"
+	"github.com/oxhq/oxinfer/internal/emitter"
 )
 
 // TestEmitterDeterminism_SortingStability validates that the emitter's

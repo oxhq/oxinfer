@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/manifest"
 )
 
 func TestNewFileCache(t *testing.T) {
@@ -934,6 +934,159 @@ func TestCachePersistenceRoundTrip(t *testing.T) {
 		if loaded1.Size != entry1.Size {
 			t.Errorf("Size mismatch: expected %d, got %d", entry1.Size, loaded1.Size)
 		}
+	}
+}
+
+func TestCachePersistenceRoundTripAfterUpdateAndInvalidate(t *testing.T) {
+	cacheDir := t.TempDir()
+	projectKey := "test1234567890ab"
+
+	config := &manifest.CacheConfig{
+		Kind: &[]string{CacheModeSHA256MTime}[0],
+	}
+
+	tempFile1 := createTempFile(t, "test1.php", "content1")
+	tempFile2 := createTempFile(t, "test2.php", "content2")
+	defer os.Remove(tempFile1)
+	defer os.Remove(tempFile2)
+
+	stat1, _ := os.Stat(tempFile1)
+	entry1 := &CacheEntry{
+		Path:        tempFile1,
+		Hash:        calculateSHA256(t, tempFile1),
+		Size:        stat1.Size(),
+		ModTime:     stat1.ModTime(),
+		ProcessedAt: time.Now(),
+		Valid:       true,
+	}
+
+	cache1, err := NewFileCacheWithDir(config, cacheDir, projectKey)
+	if err != nil {
+		t.Fatalf("Failed to create cache: %v", err)
+	}
+
+	if err := cache1.SetCacheEntry(tempFile1, entry1); err != nil {
+		t.Fatalf("Failed to set entry1: %v", err)
+	}
+
+	time.Sleep(10 * time.Millisecond)
+	if err := os.WriteFile(tempFile1, []byte("content1 updated"), 0644); err != nil {
+		t.Fatalf("Failed to update temp file: %v", err)
+	}
+
+	updatedStat1, _ := os.Stat(tempFile1)
+	updatedEntry1 := &CacheEntry{
+		Path:        tempFile1,
+		Hash:        calculateSHA256(t, tempFile1),
+		Size:        updatedStat1.Size(),
+		ModTime:     updatedStat1.ModTime(),
+		ProcessedAt: time.Now(),
+		Valid:       true,
+	}
+
+	if err := cache1.SetCacheEntry(tempFile1, updatedEntry1); err != nil {
+		t.Fatalf("Failed to update entry1: %v", err)
+	}
+
+	stat2, _ := os.Stat(tempFile2)
+	entry2 := &CacheEntry{
+		Path:        tempFile2,
+		Hash:        calculateSHA256(t, tempFile2),
+		Size:        stat2.Size(),
+		ModTime:     stat2.ModTime(),
+		ProcessedAt: time.Now(),
+		Valid:       true,
+	}
+
+	if err := cache1.SetCacheEntry(tempFile2, entry2); err != nil {
+		t.Fatalf("Failed to set entry2: %v", err)
+	}
+
+	if err := cache1.InvalidateCache(tempFile2); err != nil {
+		t.Fatalf("Failed to invalidate entry2: %v", err)
+	}
+
+	if err := cache1.SaveToDiskSync(); err != nil {
+		t.Fatalf("Failed to save cache snapshot: %v", err)
+	}
+
+	cache2, err := NewFileCacheWithDir(config, cacheDir, projectKey)
+	if err != nil {
+		t.Fatalf("Failed to create second cache: %v", err)
+	}
+
+	if len(cache2.cache) != 1 {
+		t.Fatalf("Expected 1 loaded entry after invalidate, got %d", len(cache2.cache))
+	}
+
+	loaded1, err := cache2.GetCacheEntry(tempFile1)
+	if err != nil {
+		t.Fatalf("Failed to get updated entry1: %v", err)
+	}
+	if loaded1.Hash != updatedEntry1.Hash {
+		t.Fatalf("Expected updated hash %s, got %s", updatedEntry1.Hash, loaded1.Hash)
+	}
+	if _, exists := cache2.cache[tempFile2]; exists {
+		t.Fatalf("Did not expect invalidated entry2 to be persisted")
+	}
+}
+
+func TestSaveToDiskSnapshotConcurrentMutation(t *testing.T) {
+	cacheDir := t.TempDir()
+	projectKey := "test1234567890ab"
+
+	config := &manifest.CacheConfig{
+		Kind: &[]string{CacheModeModTime}[0],
+	}
+
+	cache, err := NewFileCacheWithDir(config, cacheDir, projectKey)
+	if err != nil {
+		t.Fatalf("Failed to create cache: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	writerDone := make(chan struct{})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 500; i++ {
+			key := fmt.Sprintf("concurrent_%d.php", i)
+			entry := &CacheEntry{
+				Path:        key,
+				ModTime:     time.Now(),
+				ProcessedAt: time.Now(),
+				Valid:       true,
+			}
+			if err := cache.SetCacheEntry(key, entry); err != nil {
+				t.Errorf("SetCacheEntry failed: %v", err)
+				return
+			}
+		}
+		close(writerDone)
+	}()
+
+	close(start)
+	for i := 0; i < 20; i++ {
+		if err := cache.SaveToDiskSync(); err != nil {
+			t.Fatalf("SaveToDiskSync failed during concurrent writes: %v", err)
+		}
+	}
+	<-writerDone
+	wg.Wait()
+
+	if err := cache.SaveToDiskSync(); err != nil {
+		t.Fatalf("Final SaveToDiskSync failed: %v", err)
+	}
+
+	reloaded, err := NewFileCacheWithDir(config, cacheDir, projectKey)
+	if err != nil {
+		t.Fatalf("Failed to reload cache: %v", err)
+	}
+	if len(reloaded.cache) == 0 {
+		t.Fatalf("Expected persisted entries after concurrent writes")
 	}
 }
 

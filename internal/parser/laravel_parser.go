@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	
+	"github.com/oxhq/oxinfer/internal/logging"
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/php"
 )
@@ -74,32 +76,63 @@ func NewLaravelParser(verbose bool) (*LaravelParser, error) {
 	}, nil
 }
 
-// ParseFile parses a PHP file and extracts what matters.
-func (p *LaravelParser) ParseFile(ctx context.Context, filePath string) error {
+// ParseFile parses a PHP file, extracts Laravel patterns, and returns the syntax tree for reuse.
+func (p *LaravelParser) ParseFile(ctx context.Context, filePath string) (*SyntaxTree, error) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return fmt.Errorf("failed to read file: %w", err)
+		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
 	
 	tree, err := p.parser.ParseCtx(ctx, nil, content)
 	if err != nil {
-		return fmt.Errorf("failed to parse: %w", err)
+		return nil, fmt.Errorf("failed to parse: %w", err)
 	}
-	defer tree.Close()
+	// Don't close the tree here - we'll return it for reuse
 	
 	root := tree.RootNode()
 	
 	// Route to appropriate processor
-	if p.isModel(filePath) {
-		p.extractModel(root, content, filePath)
-	} else if p.isController(filePath) {
-		p.extractController(root, content, filePath)
+	className := p.findClassName(root, content)
+	namespace := p.findNamespace(root, content)
+	extends := p.findExtends(root, content)
+
+	// AST-based gating
+	if p.extendsEloquentModel(extends) {
+		logging.VerboseFromContext(ctx, "parser", "Processing MODEL: %s", filePath)
+		logging.DebugFromContext(ctx, "parser", "processing model file", map[string]interface{}{
+			"file_path": filePath,
+			"file_type": "model",
+		})
+		p.extractModel(ctx, root, content, filePath)
+	} else if p.isControllerByAST(namespace, className, extends) {
+		logging.VerboseFromContext(ctx, "parser", "Processing CONTROLLER: %s", filePath)
+		logging.DebugFromContext(ctx, "parser", "processing controller file", map[string]interface{}{
+			"file_path": filePath,
+			"file_type": "controller",
+		})
+		p.extractController(ctx, root, content, filePath)
+	} else {
+		logging.VerboseFromContext(ctx, "parser", "SKIPPING (not model/controller): %s", filePath)
+		logging.DebugFromContext(ctx, "parser", "skipping file", map[string]interface{}{
+			"file_path": filePath,
+			"reason":    "not model or controller",
+		})
 	}
 	
-	return nil
+	// Wrap in SyntaxTree format and return for reuse
+	return &SyntaxTree{
+		Root: &SyntaxNode{
+			Type:       root.Type(),
+			StartByte:  int(root.StartByte()),
+			EndByte:    int(root.EndByte()),
+			StartPoint: Point{Row: int(root.StartPoint().Row), Column: int(root.StartPoint().Column)},
+			EndPoint:   Point{Row: int(root.EndPoint().Row), Column: int(root.EndPoint().Column)},
+		},
+		Source: content, // Keep as []byte to match interface
+	}, nil
 }
 
-func (p *LaravelParser) extractModel(root *sitter.Node, content []byte, filePath string) {
+func (p *LaravelParser) extractModel(ctx context.Context, root *sitter.Node, content []byte, filePath string) {
 	className := p.findClassName(root, content)
 	if className == "" {
 		return
@@ -151,42 +184,162 @@ func (p *LaravelParser) extractModel(root *sitter.Node, content []byte, filePath
 }
 
 // extractController gets what we need from a controller file.
-func (p *LaravelParser) extractController(root *sitter.Node, content []byte, filePath string) {
+func (p *LaravelParser) extractController(ctx context.Context, root *sitter.Node, content []byte, filePath string) {
 	className := p.findClassName(root, content)
 	if className == "" {
+		logging.VerboseFromContext(ctx, "parser", "Controller %s: NO CLASS NAME FOUND", filePath)
+		logging.DebugFromContext(ctx, "parser", "controller class name not found", map[string]interface{}{
+			"file_path": filePath,
+		})
 		return
 	}
 	
 	namespace := p.findNamespace(root, content)
+	extends := p.findExtends(root, content)
 	fqcn := className
 	if namespace != "" {
 		fqcn = namespace + "\\" + className
 	}
 	
-	// Find public methods (actions)
-	var methods []string
+	logging.VerboseFromContext(ctx, "parser", "Controller %s: class=%s, fqcn=%s", filePath, className, fqcn)
+	logging.DebugFromContext(ctx, "parser", "controller parsed", map[string]interface{}{
+		"file_path":  filePath,
+		"class_name": className,
+		"fqcn":       fqcn,
+		"namespace":  namespace,
+	})
 	
-	p.walkNode(root, content, func(node *sitter.Node) bool {
-		if node.Type() == "method_declaration" {
-			// Check if public
-			for i := uint32(0); i < node.ChildCount(); i++ {
-				child := node.Child(int(i))
-				if child.Type() == "visibility_modifier" {
-					visibility := string(content[child.StartByte():child.EndByte()])
-					if visibility == "public" {
-						methodName := p.getMethodName(node, content)
-						methods = append(methods, methodName)
-						break
-					}
-				}
-			}
-		}
-		return true
+	// Find public methods (actions), falling back to inherited controller actions
+	// for thin concrete controllers that delegate everything to an abstract parent.
+	methods := p.extractPublicControllerMethods(root, content)
+	if len(methods) == 0 && extends != "" {
+		methods = p.resolveInheritedControllerMethods(ctx, filePath, extends, map[string]struct{}{})
+	}
+	
+	logging.VerboseFromContext(ctx, "parser", "Controller %s: found %d methods: %v", filePath, len(methods), methods)
+	logging.DebugFromContext(ctx, "parser", "controller methods found", map[string]interface{}{
+		"file_path":    filePath,
+		"fqcn":         fqcn,
+		"method_count": len(methods),
+		"methods":      methods,
 	})
 	
 	if len(methods) > 0 {
 		p.Controllers[fqcn] = methods
+		logging.VerboseFromContext(ctx, "parser", "Controller %s: STORED in registry as %s", filePath, fqcn)
+		logging.DebugFromContext(ctx, "parser", "controller registered", map[string]interface{}{
+			"file_path": filePath,
+			"fqcn":      fqcn,
+			"stored":    true,
+		})
+	} else {
+		logging.VerboseFromContext(ctx, "parser", "Controller %s: NO METHODS - not stored", filePath)
+		logging.DebugFromContext(ctx, "parser", "controller not registered", map[string]interface{}{
+			"file_path": filePath,
+			"fqcn":      fqcn,
+			"reason":    "no methods found",
+		})
 	}
+}
+
+func (p *LaravelParser) extractPublicControllerMethods(root *sitter.Node, content []byte) []string {
+	var methods []string
+	seen := make(map[string]struct{})
+
+	p.walkNode(root, content, func(node *sitter.Node) bool {
+		if node.Type() != "method_declaration" {
+			return true
+		}
+
+		for i := uint32(0); i < node.ChildCount(); i++ {
+			child := node.Child(int(i))
+			if child == nil || child.Type() != "visibility_modifier" {
+				continue
+			}
+
+			visibility := string(content[child.StartByte():child.EndByte()])
+			if visibility != "public" {
+				break
+			}
+
+			methodName := p.getMethodName(node, content)
+			if methodName == "" || (methodName != "__invoke" && strings.HasPrefix(methodName, "__")) {
+				break
+			}
+			if _, exists := seen[methodName]; exists {
+				break
+			}
+
+			seen[methodName] = struct{}{}
+			methods = append(methods, methodName)
+			break
+		}
+
+		return true
+	})
+
+	return methods
+}
+
+func (p *LaravelParser) resolveInheritedControllerMethods(ctx context.Context, filePath, extends string, visited map[string]struct{}) []string {
+	parentPath := p.resolveSiblingControllerPath(filePath, extends)
+	if parentPath == "" {
+		return nil
+	}
+
+	absParentPath, err := filepath.Abs(parentPath)
+	if err != nil {
+		absParentPath = parentPath
+	}
+	if _, seen := visited[absParentPath]; seen {
+		return nil
+	}
+	visited[absParentPath] = struct{}{}
+
+	content, err := os.ReadFile(absParentPath)
+	if err != nil {
+		return nil
+	}
+
+	tree, err := p.parser.ParseCtx(ctx, nil, content)
+	if err != nil {
+		return nil
+	}
+
+	root := tree.RootNode()
+	methods := p.extractPublicControllerMethods(root, content)
+	if len(methods) > 0 {
+		return methods
+	}
+
+	parentExtends := p.findExtends(root, content)
+	if parentExtends == "" {
+		return nil
+	}
+
+	return p.resolveInheritedControllerMethods(ctx, absParentPath, parentExtends, visited)
+}
+
+func (p *LaravelParser) resolveSiblingControllerPath(filePath, extends string) string {
+	parentClass := strings.TrimSpace(extends)
+	if parentClass == "" {
+		return ""
+	}
+
+	if idx := strings.LastIndex(parentClass, `\`); idx >= 0 {
+		parentClass = parentClass[idx+1:]
+	}
+	if parentClass == "" {
+		return ""
+	}
+
+	candidate := filepath.Join(filepath.Dir(filePath), parentClass+".php")
+	info, err := os.Stat(candidate)
+	if err != nil || info.IsDir() {
+		return ""
+	}
+
+	return candidate
 }
 
 // Helper methods
@@ -246,8 +399,15 @@ func (p *LaravelParser) walkNode(node *sitter.Node, content []byte, visitor func
 }
 
 func (p *LaravelParser) isModel(filePath string) bool {
-	return strings.Contains(filePath, "app/Models/") ||
-		(strings.Contains(filePath, "app/") && !strings.Contains(filePath, "app/Http/"))
+	// Be strict to avoid non-Eloquent contamination. Prefer standard locations only.
+	if strings.Contains(filePath, "app/Models/") {
+		return true
+	}
+	// Also allow vendor/package style explicit Models directories
+	if strings.Contains(filePath, "/Models/") || strings.Contains(filePath, "src/Models/") {
+		return true
+	}
+	return false
 }
 
 func (p *LaravelParser) isController(filePath string) bool {
@@ -268,6 +428,54 @@ func (p *LaravelParser) isRelation(name string) bool {
 }
 
 // GetSyntaxTree parses file and returns tree-sitter syntax tree for matchers.
+
+
+// findExtends finds base class from class_declaration base_clause
+func (p *LaravelParser) findExtends(root *sitter.Node, content []byte) string {
+    var extends string
+    var walk func(n *sitter.Node)
+    walk = func(n *sitter.Node) {
+        if n == nil { return }
+        if n.Type() == "class_declaration" {
+            for i := uint32(0); i < n.ChildCount(); i++ {
+                ch := n.Child(int(i))
+                if ch != nil && ch.Type() == "base_clause" {
+                    for j := uint32(0); j < ch.ChildCount(); j++ {
+                        q := ch.Child(int(j))
+                        if q == nil { continue }
+                        if q.Type() == "qualified_name" || q.Type() == "name" {
+                            extends = string(content[q.StartByte():q.EndByte()])
+                            return
+                        }
+                    }
+                }
+            }
+        }
+        for i := uint32(0); i < n.ChildCount(); i++ { walk(n.Child(int(i))) }
+    }
+    walk(root)
+    return strings.TrimSpace(extends)
+}
+
+func (p *LaravelParser) extendsEloquentModel(extends string) bool {
+    if extends == "" { return false }
+    ext := strings.ReplaceAll(extends, " ", "")
+    if strings.Contains(ext, "Illuminate\\Database\\Eloquent\\Model") {
+        return true
+    }
+    if strings.HasSuffix(ext, "\\Model") || ext == "Model" {
+        return true
+    }
+    return false
+}
+
+func (p *LaravelParser) isControllerByAST(namespace, className, extends string) bool {
+    if className == "" { return false }
+    if strings.HasSuffix(className, "Controller") { return true }
+    if strings.Contains(extends, "Controller") { return true }
+    if namespace != "" && strings.Contains(namespace, "\\Http\\Controllers") { return true }
+    return false
+}
 func (p *LaravelParser) GetSyntaxTree(ctx context.Context, filePath string) (*SyntaxTree, error) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -296,4 +504,14 @@ func (p *LaravelParser) GetSyntaxTree(ctx context.Context, filePath string) (*Sy
 // GetModelScopes returns discovered model scopes for the registry.
 func (p *LaravelParser) GetModelScopes() map[string][]string {
 	return p.ModelScopes
+}
+
+// GetControllers returns discovered controllers for the assembly phase.
+func (p *LaravelParser) GetControllers() map[string][]string {
+	return p.Controllers
+}
+
+// GetModels returns discovered models for the assembly phase.
+func (p *LaravelParser) GetModels() map[string]ModelInfo {
+	return p.Models
 }

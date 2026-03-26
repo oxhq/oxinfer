@@ -46,7 +46,7 @@ func TestPolymorphicPatternsEndToEnd(t *testing.T) {
 	}
 	defer os.Remove(manifestFile.Name())
 
-	manifestBytes, err := json.MarshalIndent(testManifest, "", "  ")
+	manifestBytes, err := json.Marshal(testManifest, json.Deterministic(true))
 	if err != nil {
 		t.Fatalf("Failed to marshal test manifest: %v", err)
 	}
@@ -479,7 +479,7 @@ func TestPolymorphicDeterministicOutput(t *testing.T) {
 	}
 	defer os.Remove(manifestFile.Name())
 
-	manifestBytes, _ := json.MarshalIndent(testManifest, "", "  ")
+	manifestBytes, _ := json.Marshal(testManifest, json.Deterministic(true))
 	manifestFile.Write(manifestBytes)
 	manifestFile.Close()
 
@@ -558,7 +558,7 @@ func comparePolymorphicArrays(result1, result2 map[string]any) bool {
 				delete(itemMap, "timestamp")
 				delete(itemMap, "discoveredAt")
 
-				bytes, _ := json.Marshal(itemMap)
+				bytes, _ := json.Marshal(itemMap, json.Deterministic(true))
 				normalized = append(normalized, string(bytes))
 			}
 		}
@@ -621,7 +621,7 @@ func TestPolymorphicPerformanceBenchmark(t *testing.T) {
 	}
 	defer os.Remove(manifestFile.Name())
 
-	manifestBytes, _ := json.MarshalIndent(testManifest, "", "  ")
+	manifestBytes, _ := json.Marshal(testManifest, json.Deterministic(true))
 	manifestFile.Write(manifestBytes)
 	manifestFile.Close()
 
@@ -759,7 +759,7 @@ class BadModel extends Model
 	}
 	defer os.Remove(manifestFile.Name())
 
-	manifestBytes, _ := json.MarshalIndent(testManifest, "", "  ")
+	manifestBytes, _ := json.Marshal(testManifest, json.Deterministic(true))
 	manifestFile.Write(manifestBytes)
 	manifestFile.Close()
 
@@ -859,7 +859,7 @@ func TestPolymorphicFeatureFlagHandling(t *testing.T) {
 			}
 			defer os.Remove(manifestFile.Name())
 
-			manifestBytes, _ := json.MarshalIndent(testManifest, "", "  ")
+			manifestBytes, _ := json.Marshal(testManifest, json.Deterministic(true))
 			manifestFile.Write(manifestBytes)
 			manifestFile.Close()
 
@@ -925,7 +925,7 @@ func TestPolymorphicGoldenFileComparison(t *testing.T) {
 	}
 	defer os.Remove(manifestFile.Name())
 
-	manifestBytes, _ := json.MarshalIndent(testManifest, "", "  ")
+	manifestBytes, _ := json.Marshal(testManifest, json.Deterministic(true))
 	manifestFile.Write(manifestBytes)
 	manifestFile.Close()
 
@@ -999,7 +999,7 @@ func calculateCanonicalHash(jsonOutput string) string {
 	}
 
 	// Re-marshal and hash
-	canonical, err := json.Marshal(data)
+	canonical, err := json.Marshal(data, json.Deterministic(true))
 	if err != nil {
 		// If re-marshaling fails, fall back to raw hash
 		return fmt.Sprintf("%x", sha256.Sum256([]byte(jsonOutput)))

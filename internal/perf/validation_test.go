@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/bench"
-	"github.com/garaekz/oxinfer/internal/emitter"
-	"github.com/garaekz/oxinfer/internal/indexer"
-	"github.com/garaekz/oxinfer/internal/manifest"
-	"github.com/garaekz/oxinfer/internal/pipeline"
+	"github.com/oxhq/oxinfer/internal/bench"
+	"github.com/oxhq/oxinfer/internal/emitter"
+	"github.com/oxhq/oxinfer/internal/indexer"
+	"github.com/oxhq/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/pipeline"
 )
 
 // TestMVPPerformanceTargets validates that the MVP performance targets can be achieved.

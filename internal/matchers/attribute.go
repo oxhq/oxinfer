@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/garaekz/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/parser"
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
@@ -202,24 +202,27 @@ func (m *DefaultAttributeMatcher) processAttributeMatch(
 	}
 
 	// Process different types of attribute patterns
+	var result *MatchResult
 	switch queryDef.Name {
 	case "modern_attribute_method":
-		return m.processModernAttributeMethod(methodName, returnType, position, queryDef, filePath)
+		result = m.processModernAttributeMethod(methodName, returnType, position, queryDef, filePath)
 	case "attribute_make_call":
-		return m.processAttributeMakeCall(methodName, argsNode, position, queryDef, tree, filePath)
+		result = m.processAttributeMakeCall(methodName, argsNode, position, queryDef, tree, filePath)
 	case "legacy_get_attribute":
-		return m.processLegacyGetAttribute(methodName, position, queryDef, filePath)
+		result = m.processLegacyGetAttribute(methodName, position, queryDef, filePath)
 	case "legacy_set_attribute":
-		return m.processLegacySetAttribute(methodName, position, queryDef, filePath)
+		result = m.processLegacySetAttribute(methodName, position, queryDef, filePath)
 	case "attribute_with_get":
-		return m.processAttributeWithGet(argsNode, position, queryDef, tree, filePath)
+		result = m.processAttributeWithGet(argsNode, position, queryDef, tree, filePath)
 	case "attribute_with_set":
-		return m.processAttributeWithSet(argsNode, position, queryDef, tree, filePath)
+		result = m.processAttributeWithSet(argsNode, position, queryDef, tree, filePath)
 	case "attribute_with_cast":
-		return m.processAttributeWithCast(castArray, position, queryDef, tree, filePath)
+		result = m.processAttributeWithCast(castArray, position, queryDef, tree, filePath)
 	default:
 		return nil
 	}
+
+	return result
 }
 
 // processModernAttributeMethod processes modern attribute methods with return type Attribute.
@@ -239,6 +242,12 @@ func (m *DefaultAttributeMatcher) processModernAttributeMethod(
 		return nil
 	}
 
+	// Extract model context for proper association - need to get a node from the tree
+	// Since we don't have direct access to the match here, we'll need to pass it
+	// For now, use empty and fix during processing
+
+	// Note: model gating is applied in concrete call handlers where AST node is available
+
 	attributeMatch := &AttributeMatch{
 		Name:     attributeName,
 		Type:     returnType,
@@ -246,7 +255,7 @@ func (m *DefaultAttributeMatcher) processModernAttributeMethod(
 		Mutator:  true, // Modern attributes can be both
 		IsModern: true,
 		Pattern:  queryDef.Name,
-		Method:   methodName,
+		Method:   methodName, // Will be fixed to model context during processing
 	}
 
 	return &MatchResult{
@@ -276,7 +285,7 @@ func (m *DefaultAttributeMatcher) processAttributeMakeCall(
 	// When we have a method like: public function fullName(): Attribute { return Attribute::make(...) }
 	// methodName should contain "fullName"
 	attributeName, _ := m.extractAttributeNameFromMethod(methodName)
-	
+
 	// If we couldn't extract from method name, try to extract from the context
 	if attributeName == "" || attributeName == "unknown" {
 		// Try to find the containing method name by looking at parent nodes
@@ -285,15 +294,20 @@ func (m *DefaultAttributeMatcher) processAttributeMakeCall(
 			attributeName = name
 		}
 	}
-	
+
 	// If still unknown, use the method name as-is if it's not empty
 	if (attributeName == "" || attributeName == "unknown") && methodName != "" && methodName != "make" {
 		attributeName = methodName
 	}
-	
+
 	// Final check - skip if we can't determine the attribute name
 	if attributeName == "" || attributeName == "unknown" {
 		return nil // Skip this attribute if we can't determine its name
+	}
+
+	// Gate: must be inside an Eloquent model class
+	if !m.classExtendsEloquentModel(argsNode, tree) {
+		return nil
 	}
 
 	// Extract arguments from Attribute::make() call
@@ -400,8 +414,17 @@ func (m *DefaultAttributeMatcher) processAttributeWithGet(
 	tree *parser.SyntaxTree,
 	filePath string,
 ) *MatchResult {
+	// Try to resolve attribute name from context (enclosing method)
+	name, ok := m.extractAttributeNameFromContext(position, tree)
+	if !ok || name == "" {
+		return nil
+	}
+	// Gate: must be inside an Eloquent model class
+	if !m.classExtendsEloquentModel(argsNode, tree) {
+		return nil
+	}
 	attributeMatch := &AttributeMatch{
-		Name:     "unknown",
+		Name:     name,
 		Accessor: true,
 		Mutator:  false, // Only getter specified
 		IsModern: true,
@@ -430,8 +453,17 @@ func (m *DefaultAttributeMatcher) processAttributeWithSet(
 	tree *parser.SyntaxTree,
 	filePath string,
 ) *MatchResult {
+	// Try to resolve attribute name from context (enclosing method)
+	name, ok := m.extractAttributeNameFromContext(position, tree)
+	if !ok || name == "" {
+		return nil
+	}
+	// Gate: must be inside an Eloquent model class
+	if !m.classExtendsEloquentModel(argsNode, tree) {
+		return nil
+	}
 	attributeMatch := &AttributeMatch{
-		Name:     "unknown",
+		Name:     name,
 		Accessor: false, // Only setter specified
 		Mutator:  true,
 		IsModern: true,
@@ -745,20 +777,20 @@ func (m *DefaultAttributeMatcher) extractAttributeNameFromContext(position parse
 
 	// Get the source code as lines
 	lines := strings.Split(string(tree.Source), "\n")
-	
+
 	// Search backwards from the position to find the method declaration
 	for lineNum := position.Row; lineNum >= 0 && lineNum > position.Row-10; lineNum-- {
 		if lineNum >= len(lines) {
 			continue
 		}
-		
+
 		line := lines[lineNum]
-		
+
 		// Look for method declaration pattern
 		// Example: public function fullName(): Attribute
 		methodPattern := regexp.MustCompile(`(?:public|protected|private)?\s*function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(`)
 		matches := methodPattern.FindStringSubmatch(line)
-		
+
 		if len(matches) > 1 {
 			methodName := matches[1]
 			// Extract attribute name from method name
@@ -768,15 +800,15 @@ func (m *DefaultAttributeMatcher) extractAttributeNameFromContext(position parse
 			}
 		}
 	}
-	
+
 	// Try forward search as well (in case the Attribute::make is before the function name in formatting)
 	for lineNum := position.Row; lineNum < len(lines) && lineNum < position.Row+5; lineNum++ {
 		line := lines[lineNum]
-		
+
 		// Look for method declaration pattern
 		methodPattern := regexp.MustCompile(`(?:public|protected|private)?\s*function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(`)
 		matches := methodPattern.FindStringSubmatch(line)
-		
+
 		if len(matches) > 1 {
 			methodName := matches[1]
 			// Extract attribute name from method name
@@ -786,6 +818,119 @@ func (m *DefaultAttributeMatcher) extractAttributeNameFromContext(position parse
 			}
 		}
 	}
-	
+
 	return "", false
+}
+
+// extractModelMethodContext walks up the AST to find the model class and method
+// containing this attribute pattern match, returning Model::attributeName format
+func (m *DefaultAttributeMatcher) extractModelMethodContext(node *sitter.Node, tree *parser.SyntaxTree, attributeName string) string {
+	current := node
+
+	// Walk up the AST to find the method declaration
+	for current != nil {
+		if current.Type() == "method_declaration" {
+			// Found method, get the class
+			classNode := current
+			for classNode != nil {
+				if classNode.Type() == "class_declaration" {
+					className := m.getClassNameFromNode(classNode, tree.Source)
+					namespace := m.getNamespaceFromTree(tree.Source)
+
+					// Build FQCN
+					var fqcn string
+					if namespace != "" {
+						fqcn = namespace + "\\" + className
+					} else {
+						fqcn = className
+					}
+
+					// Return Model::attributeName format
+					if attributeName != "" {
+						return fqcn + "::" + attributeName
+					} else {
+						// Fallback to method name if no attribute name
+						methodName := m.getMethodNameFromNode(current, tree.Source)
+						return fqcn + "::" + methodName
+					}
+				}
+				classNode = classNode.Parent()
+			}
+		}
+		current = current.Parent()
+	}
+
+	// If we can't find model context, return empty
+	return ""
+}
+
+// classExtendsEloquentModel checks via AST whether enclosing class extends Eloquent Model
+func (m *DefaultAttributeMatcher) classExtendsEloquentModel(node *sitter.Node, tree *parser.SyntaxTree) bool {
+	// find enclosing class_declaration from node context
+	current := node
+	for current != nil {
+		if current.Type() == "class_declaration" {
+			for i := uint32(0); i < current.ChildCount(); i++ {
+				ch := current.Child(int(i))
+				if ch != nil && ch.Type() == "base_clause" {
+					txt := strings.ReplaceAll(string(ch.Content(tree.Source)), " ", "")
+					if strings.Contains(txt, "Illuminate\\Database\\Eloquent\\Model") ||
+						strings.HasSuffix(txt, "\\Model") || txt == "Model" || strings.HasSuffix(txt, ":Model") {
+						return true
+					}
+				}
+			}
+			return false
+		}
+		current = current.Parent()
+	}
+	return false
+}
+
+// matchPlaceholder is a no-op type to satisfy earlier placeholder call (unused)
+type matchPlaceholder struct{}
+
+// getMethodNameFromNode extracts method name from method_declaration node
+func (m *DefaultAttributeMatcher) getMethodNameFromNode(methodNode *sitter.Node, source []byte) string {
+	for i := uint32(0); i < methodNode.ChildCount(); i++ {
+		child := methodNode.Child(int(i))
+		if child.Type() == "name" {
+			return string(child.Content(source))
+		}
+	}
+	return ""
+}
+
+// getClassNameFromNode extracts class name from class_declaration node
+func (m *DefaultAttributeMatcher) getClassNameFromNode(classNode *sitter.Node, source []byte) string {
+	for i := uint32(0); i < classNode.ChildCount(); i++ {
+		child := classNode.Child(int(i))
+		if child.Type() == "name" {
+			return string(child.Content(source))
+		}
+	}
+	return ""
+}
+
+// getNamespaceFromTree extracts namespace from the file by parsing the source
+func (m *DefaultAttributeMatcher) getNamespaceFromTree(source []byte) string {
+	sourceStr := string(source)
+
+	// Look for namespace declaration
+	lines := strings.Split(sourceStr, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "namespace ") {
+			// Extract namespace
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				namespace := parts[1]
+				// Remove semicolon if present
+				namespace = strings.TrimSuffix(namespace, ";")
+				return namespace
+			}
+		}
+	}
+
+	return ""
 }

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/garaekz/oxinfer/internal/cli"
+	"github.com/oxhq/oxinfer/internal/cli"
 )
 
 func TestManifestValidator_ValidatePaths_Project(t *testing.T) {

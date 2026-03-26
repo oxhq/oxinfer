@@ -7,11 +7,10 @@ import (
 	"encoding/json/v2"
 	"testing"
 
-	"github.com/garaekz/oxinfer/internal/emitter"
-	"github.com/garaekz/oxinfer/internal/infer"
-	"github.com/garaekz/oxinfer/internal/matchers"
-	"github.com/garaekz/oxinfer/internal/parser"
-	"github.com/garaekz/oxinfer/internal/pipeline"
+	"github.com/oxhq/oxinfer/internal/emitter"
+	"github.com/oxhq/oxinfer/internal/infer"
+	"github.com/oxhq/oxinfer/internal/matchers"
+	"github.com/oxhq/oxinfer/internal/pipeline"
 )
 
 // TestRequestShapeEndToEndIntegration tests request shape recursion from matchers to final delta.json output.
@@ -62,8 +61,8 @@ func TestRequestShapeEndToEndIntegration(t *testing.T) {
 					Body: map[string]interface{}{
 						"products.*.variants.*.price": "100.00",
 						"products.*.variants.*.stock": "50",
-						"products.*.name":              "Product Name",
-						"metadata.created_by":          "admin",
+						"products.*.name":             "Product Name",
+						"metadata.created_by":         "admin",
 					},
 				},
 			},
@@ -89,46 +88,39 @@ func TestRequestShapeEndToEndIntegration(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Step 1: Create pipeline results with our test patterns
+			controllerFQCN := "App\\Http\\Controllers\\TestController"
+			methodKey := controllerFQCN + "::store"
+
+			httpStatusMatches := []*matchers.HTTPStatusMatch{
+				{
+					Status:   201,
+					Explicit: true,
+					Method:   methodKey,
+				},
+			}
+
+			requestUsageMatches := make([]*matchers.RequestUsageMatch, len(tc.requestPatterns))
+			for i := range tc.requestPatterns {
+				copyPattern := tc.requestPatterns[i]
+				requestUsageMatches[i] = &copyPattern
+			}
+
+			inferencer := infer.NewShapeInferencer(nil, nil, nil, nil)
+			requestShape, _ := inferencer.InferRequestShape(tc.requestPatterns)
+
 			pipelineResults := &pipeline.PipelineResults{
-				ParseResults: &parser.ParseResults{
-					Controllers: []parser.ControllerInfo{
-						{
-							FilePath:  "app/Http/Controllers/TestController.php",
-							Namespace: "App\\Http\\Controllers",
-							ClassName: "TestController",
-							FQCN:      "App\\Http\\Controllers\\TestController",
-							Methods: []parser.MethodInfo{
-								{
-									Name:       "store",
-									ReturnType: "Response",
-									Visibility: "public",
-								},
-							},
-						},
+				ParseResults: &pipeline.ParseResults{
+					Controllers: map[string][]string{
+						controllerFQCN: {"store"},
 					},
 				},
-				MatchResults: &matchers.MatchResults{
-					HTTPStatus: []matchers.HTTPStatusMatch{
-						{
-							FilePath:       "app/Http/Controllers/TestController.php",
-							ControllerName: "TestController",
-							MethodName:     "store",
-							StatusCode:     201,
-							Confidence:     0.95,
-						},
-					},
-					RequestUsage: tc.requestPatterns,
+				MatchResults: &pipeline.MatchResults{
+					HTTPStatusMatches:   httpStatusMatches,
+					RequestUsageMatches: requestUsageMatches,
 				},
-				InferenceResults: &infer.InferenceResults{
-					Controllers: map[string]*infer.ControllerInference{
-						"App\\Http\\Controllers\\TestController::store": {
-							Request: func() *infer.RequestInfo {
-								// Use the shape inferencer to process patterns
-								inferencer := infer.NewShapeInferencer(nil, nil, nil, nil)
-								result, _ := inferencer.InferRequestShape(tc.requestPatterns)
-								return result
-							}(),
-						},
+				InferenceResults: &pipeline.InferenceResults{
+					RequestShapes: map[string]*infer.RequestInfo{
+						methodKey: requestShape,
 					},
 				},
 			}
@@ -146,35 +138,25 @@ func TestRequestShapeEndToEndIntegration(t *testing.T) {
 			}
 
 			controller := delta.Controllers[0]
-			if controller.Class != "App\\Http\\Controllers\\TestController" {
-				t.Errorf("Expected controller class App\\Http\\Controllers\\TestController, got %s", controller.Class)
+			if controller.FQCN != controllerFQCN {
+				t.Errorf("Expected controller FQCN %s, got %s", controllerFQCN, controller.FQCN)
 			}
-
-			// Find the store method
-			var storeMethod *emitter.ControllerMethod
-			for i := range controller.Methods {
-				if controller.Methods[i].Name == "store" {
-					storeMethod = &controller.Methods[i]
-					break
-				}
-			}
-
-			if storeMethod == nil {
-				t.Fatal("Store method not found in controller")
+			if controller.Method != "store" {
+				t.Errorf("Expected method 'store', got %s", controller.Method)
 			}
 
 			// Verify request body structure matches expected
-			if storeMethod.Request == nil {
-				t.Fatal("Request is nil in store method")
+			if controller.Request == nil {
+				t.Fatal("Request is nil in controller")
 			}
 
 			// Compare the body structure
-			if !compareStructures(t, storeMethod.Request.Body, tc.expectedBody) {
+			if !compareStructures(t, controller.Request.Body, tc.expectedBody) {
 				// Marshal both for better error reporting
-				actualJSON, _ := json.MarshalIndent(storeMethod.Request.Body, "", "  ")
-				expectedJSON, _ := json.MarshalIndent(tc.expectedBody, "", "  ")
-				
-				t.Errorf("Body structure mismatch:\nExpected:\n%s\n\nActual:\n%s", 
+				actualJSON, _ := json.Marshal(controller.Request.Body, json.Deterministic(true))
+				expectedJSON, _ := json.Marshal(tc.expectedBody, json.Deterministic(true))
+
+				t.Errorf("Body structure mismatch:\nExpected:\n%s\n\nActual:\n%s",
 					string(expectedJSON), string(actualJSON))
 			}
 		})

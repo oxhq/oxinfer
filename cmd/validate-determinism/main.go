@@ -15,8 +15,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/determinism"
-	"github.com/garaekz/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/determinism"
+	"github.com/oxhq/oxinfer/internal/manifest"
 )
 
 // ValidationConfig holds configuration for the validation tool.
@@ -406,10 +406,13 @@ func outputHuman(results *ValidationResults, verbose bool) {
 }
 
 func outputJSON(results *ValidationResults) {
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(results); err != nil {
-		log.Fatalf("Failed to encode JSON results: %v", err)
+	data, err := json.Marshal(results, json.Deterministic(true))
+	if err != nil {
+		log.Fatalf("Failed to marshal JSON results: %v", err)
+	}
+	_, err = os.Stdout.Write(data)
+	if err != nil {
+		log.Fatalf("Failed to write JSON results: %v", err)
 	}
 }
 
@@ -507,9 +510,12 @@ func writeReportFile(results *ValidationResults, path string) error {
 	}
 	defer file.Close()
 
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(results); err != nil {
+	data, err := json.Marshal(results, json.Deterministic(true))
+	if err != nil {
+		return fmt.Errorf("failed to marshal JSON results: %w", err)
+	}
+	_, err = file.Write(data)
+	if err != nil {
 		return fmt.Errorf("failed to encode report: %w", err)
 	}
 

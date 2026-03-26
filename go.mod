@@ -1,4 +1,4 @@
-module github.com/garaekz/oxinfer
+module github.com/oxhq/oxinfer
 
 go 1.25.0
 

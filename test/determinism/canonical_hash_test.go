@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/determinism"
-	"github.com/garaekz/oxinfer/internal/emitter"
-	"github.com/garaekz/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/determinism"
+	"github.com/oxhq/oxinfer/internal/emitter"
+	"github.com/oxhq/oxinfer/internal/manifest"
 )
 
 // fixtureExists checks if a fixture directory exists

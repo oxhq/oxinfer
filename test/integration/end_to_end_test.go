@@ -62,14 +62,18 @@ func TestEndToEndWithFixtures(t *testing.T) {
 				}
 			}
 
-			// In the initial version, all collections should be empty arrays
 			collections := []string{"controllers", "models", "polymorphic", "broadcast"}
+			nonEmptyCollections := 0
 			for _, collection := range collections {
 				if arr, ok := result[collection].([]any); !ok {
 					t.Errorf("Field %s should be an array", collection)
-				} else if len(arr) != 0 {
-					t.Errorf("Field %s should be empty array in initial version, got length %d", collection, len(arr))
+				} else if len(arr) > 0 {
+					nonEmptyCollections++
 				}
+			}
+
+			if nonEmptyCollections == 0 {
+				t.Log("All output collections are empty for this fixture")
 			}
 
 			// Verify meta structure
@@ -398,8 +402,8 @@ func TestDeterministicOutput(t *testing.T) {
 		}
 
 		// Convert back to JSON for comparison
-		json1, _ := json.Marshal(result1)
-		json2, _ := json.Marshal(result2)
+		json1, _ := json.Marshal(result1, json.Deterministic(true))
+		json2, _ := json.Marshal(result2, json.Deterministic(true))
 
 		if string(json1) != string(json2) {
 			t.Errorf("Output %d differs from output 0 (excluding timestamps)", i)
@@ -438,7 +442,7 @@ func TestT7PatternsIntegration(t *testing.T) {
 	}
 	defer os.Remove(manifestFile.Name())
 
-	manifestBytes, err := json.MarshalIndent(testManifest, "", "  ")
+	manifestBytes, err := json.Marshal(testManifest, json.Deterministic(true))
 	if err != nil {
 		t.Fatalf("Failed to marshal test manifest: %v", err)
 	}

@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
+// PUBLIC CHANNELS (using Broadcast::channel)
 Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
     return (int) $user->id === (int) $id;
 });
@@ -36,7 +37,7 @@ Broadcast::channel('admin.{userId}', function ($user, $userId) {
 });
 
 Broadcast::channel('live-updates', function () {
-    return true; // Public presence channel
+    return true; // Public channel
 });
 
 Broadcast::channel('workspace.{workspaceId}.team.{teamId}', function ($user, $workspaceId, $teamId) {
@@ -46,6 +47,77 @@ Broadcast::channel('workspace.{workspaceId}.team.{teamId}', function ($user, $wo
             $query->where('id', $workspaceId);
         })
         ->exists();
+});
+
+// PRIVATE CHANNELS (using Broadcast::private)
+Broadcast::private('user.{id}', function ($user, $id) {
+    return (int) $user->id === (int) $id;
+});
+
+Broadcast::private('user.{userId}.messages', function ($user, $userId) {
+    return (int) $user->id === (int) $userId;
+});
+
+Broadcast::private('conversation.{conversationId}', function ($user, $conversationId) {
+    return $user->conversations()->where('id', $conversationId)->exists();
+});
+
+Broadcast::private('document.{documentId}', function ($user, $documentId) {
+    $document = \App\Models\Document::find($documentId);
+    return $document && $user->can('view', $document);
+});
+
+// PRESENCE CHANNELS (using Broadcast::presence)
+Broadcast::presence('chat', function ($user) {
+    return [
+        'id' => $user->id,
+        'name' => $user->name,
+        'avatar' => $user->avatar_url,
+    ];
+});
+
+Broadcast::presence('room.{roomId}', function ($user, $roomId) {
+    if ($user->canJoinRoom($roomId)) {
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'status' => $user->status,
+        ];
+    }
+});
+
+Broadcast::presence('live-stream.{streamId}', function ($user, $streamId) {
+    $stream = \App\Models\Stream::find($streamId);
+    if ($stream && $stream->isLive()) {
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'role' => $user->role,
+        ];
+    }
+});
+
+Broadcast::presence('game.{gameId}', function ($user, $gameId) {
+    return [
+        'id' => $user->id,
+        'username' => $user->username,
+        'level' => $user->level,
+        'avatar' => $user->game_avatar,
+    ];
+});
+
+// MIXED PARAMETERS EXAMPLE
+Broadcast::presence('workspace.{workspaceId}.meeting.{meetingId}', function ($user, $workspaceId, $meetingId) {
+    $workspace = $user->workspaces()->find($workspaceId);
+    $meeting = $workspace?->meetings()->find($meetingId);
+    
+    if ($meeting && $meeting->isActive()) {
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'role' => $user->roleInWorkspace($workspaceId),
+        ];
+    }
 });
 
 // Add a simple Route definition to satisfy route validation expectations in tests

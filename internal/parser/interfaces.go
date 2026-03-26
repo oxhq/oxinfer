@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/manifest"
 )
 
 // TreeSitterParser provides low-level tree-sitter PHP parsing functionality.

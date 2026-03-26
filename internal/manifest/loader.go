@@ -8,7 +8,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/garaekz/oxinfer/internal/cli"
+	"github.com/oxhq/oxinfer/internal/cli"
 )
 
 // ManifestLoader interface defines methods for loading manifest files
@@ -56,7 +56,7 @@ func (l *manifestLoader) LoadFromReader(r io.Reader) (*Manifest, error) {
 		return nil, cli.WrapInputError("invalid JSON in manifest", err)
 	}
 
-	applyDefaults(&manifest)
+	ApplyDefaults(&manifest)
 
 	if err := l.validator.ValidatePaths(&manifest); err != nil {
 		return nil, err
@@ -65,9 +65,9 @@ func (l *manifestLoader) LoadFromReader(r io.Reader) (*Manifest, error) {
 	return &manifest, nil
 }
 
-// applyDefaults applies default values to manifest fields that are not set
-// This matches the defaults specified in the JSON schema
-func applyDefaults(m *Manifest) {
+// ApplyDefaults applies default values to manifest fields that are not set.
+// This matches the defaults specified in the JSON schema.
+func ApplyDefaults(m *Manifest) {
 	// Project defaults - composer.json default handled by schema
 	if m.Project.Composer == "" {
 		m.Project.Composer = "composer.json"
@@ -141,4 +141,9 @@ func applyDefaults(m *Manifest) {
 			m.Features.BroadcastChannels = &defaultTrue
 		}
 	}
+}
+
+// applyDefaults preserves compatibility with legacy tests within the package.
+func applyDefaults(m *Manifest) {
+	ApplyDefaults(m)
 }

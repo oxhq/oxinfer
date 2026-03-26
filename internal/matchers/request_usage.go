@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/garaekz/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/parser"
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
@@ -74,8 +74,6 @@ func (m *DefaultRequestUsageMatcher) Match(ctx context.Context, tree *parser.Syn
 	}
 
 	var allResults []*MatchResult
-	confSum := 0.0
-	confCount := 0
 
 	// Track request usage patterns across the file
 	requestUsage := &RequestUsageMatch{
@@ -115,11 +113,6 @@ func (m *DefaultRequestUsageMatcher) Match(ctx context.Context, tree *parser.Syn
 
 			// Process captures based on query type
 			m.processRequestMatch(match, query, queryDef, tree, filePath, requestUsage, &allResults)
-			// Count this matched query for confidence aggregation
-			if len(match.Captures) > 0 {
-				confSum += queryDef.Confidence
-				confCount++
-			}
 		}
 		cursor.Close()
 		// Tree cleanup handled by defer statement
@@ -133,7 +126,7 @@ func (m *DefaultRequestUsageMatcher) Match(ctx context.Context, tree *parser.Syn
 		m.inferContentTypes(requestUsage)
 
 		// Calculate overall confidence using existing results
-		overallConf := m.calculateOverallConfidence(allResults)
+		overallConf := m.calculateOverallConfidence(requestUsage)
 
 		result := &MatchResult{
 			Type:       PatternTypeRequestUsage,
@@ -325,17 +318,26 @@ func (m *DefaultRequestUsageMatcher) inferContentTypes(requestUsage *RequestUsag
 }
 
 // calculateOverallConfidence calculates average confidence across all matches.
-func (m *DefaultRequestUsageMatcher) calculateOverallConfidence(results []*MatchResult) float64 {
-	if len(results) == 0 {
+func (m *DefaultRequestUsageMatcher) calculateOverallConfidence(requestUsage *RequestUsageMatch) float64 {
+	if requestUsage == nil || len(requestUsage.Methods) == 0 {
 		return 0.85 // Default confidence for consolidated request usage
 	}
 
 	totalConfidence := 0.0
-	for _, result := range results {
-		totalConfidence += result.Confidence
+	for _, method := range requestUsage.Methods {
+		switch method {
+		case "json", "file", "hasFile":
+			totalConfidence += 0.91
+		case "validate":
+			totalConfidence += 0.89
+		case "all", "input", "only", "except":
+			totalConfidence += 0.90
+		default:
+			totalConfidence += 0.85
+		}
 	}
 
-	return totalConfidence / float64(len(results))
+	return totalConfidence / float64(len(requestUsage.Methods))
 }
 
 // convertToSitterNode converts SyntaxTree back to tree-sitter node and tree for querying.

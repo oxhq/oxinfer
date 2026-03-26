@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/garaekz/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/manifest"
 )
 
 // Compile-time interface compliance check
@@ -79,7 +79,11 @@ func NewPSR4Resolver(config *ResolverConfig) (*DefaultPSR4Resolver, error) {
 	composerLoader := NewComposerLoader()
 
 	// Resolve base directory relative to composer.json
-	composerBase := filepath.Dir(filepath.Join(config.ProjectRoot, config.ComposerPath))
+	composerPath := config.ComposerPath
+	if !filepath.IsAbs(composerPath) {
+		composerPath = filepath.Join(config.ProjectRoot, composerPath)
+	}
+	composerBase := filepath.Dir(composerPath)
 	pathResolver, err := NewPathResolver(composerBase)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create path resolver: %w", err)
@@ -273,7 +277,10 @@ func (r *DefaultPSR4Resolver) ensureInitialized() error {
 // Must be called with write lock held.
 func (r *DefaultPSR4Resolver) loadComposerData() error {
 	// Construct absolute path to composer.json
-	composerPath := filepath.Join(r.config.ProjectRoot, r.config.ComposerPath)
+	composerPath := r.config.ComposerPath
+	if !filepath.IsAbs(composerPath) {
+		composerPath = filepath.Join(r.config.ProjectRoot, composerPath)
+	}
 
 	// Load composer configuration
 	composerConfig, err := r.composerLoader.LoadComposer(composerPath)

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/stats"
+	"github.com/oxhq/oxinfer/internal/stats"
 )
 
 // PerformanceMetrics aggregates comprehensive performance data for benchmark analysis.
@@ -277,7 +277,7 @@ func (mc *MetricsCollector) ExportMetrics(metrics *PerformanceMetrics) ([]byte, 
 		ExportedAt:         time.Now(),
 	}
 
-	return json.Marshal(export, json.Deterministic(true), json.Indent("", "  "))
+	return json.Marshal(export, json.Deterministic(true))
 }
 
 // Helper methods

@@ -5,9 +5,10 @@ package matchers
 
 import (
 	"context"
+	"runtime"
 
-	"github.com/garaekz/oxinfer/internal/emitter"
-	"github.com/garaekz/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/emitter"
+	"github.com/oxhq/oxinfer/internal/parser"
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
@@ -51,6 +52,7 @@ type HTTPStatusMatch struct {
 	Status   int    `json:"status"`
 	Explicit bool   `json:"explicit"`
 	Pattern  string `json:"pattern"`
+	Method   string `json:"method,omitempty"` // Controller::method context
 }
 
 // RequestUsageMatch represents detected request usage patterns.
@@ -65,6 +67,7 @@ type RequestUsageMatch struct {
 // ResourceMatch represents detected Laravel Resource usage.
 type ResourceMatch struct {
 	Class      string `json:"class"`
+	FQCN       string `json:"fqcn,omitempty"`
 	Collection bool   `json:"collection"`
 	Pattern    string `json:"pattern"`
 	Method     string `json:"method,omitempty"`
@@ -327,6 +330,13 @@ type MatcherConfig struct {
 
 // DefaultMatcherConfig returns sensible defaults for pattern matching.
 func DefaultMatcherConfig() *MatcherConfig {
+	// Aggressive concurrent matcher configuration
+	// Most matchers are independent and can run in parallel
+	maxConcurrentMatchers := runtime.NumCPU()
+	if maxConcurrentMatchers < 8 {
+		maxConcurrentMatchers = 8 // Pattern matching is CPU-bound, use all cores
+	}
+
 	return &MatcherConfig{
 		MaxMatchesPerFile:          100,
 		MinConfidenceThreshold:     0.8,
@@ -339,7 +349,7 @@ func DefaultMatcherConfig() *MatcherConfig {
 		EnableScopeMatching:        true,
 		EnablePolymorphicMatching:  true,
 		EnableBroadcastMatching:    true,
-		MaxConcurrentMatchers:      4,
+		MaxConcurrentMatchers:      maxConcurrentMatchers,
 		MatchTimeoutMs:             5000,
 		MaxRelationshipDepth:       5,
 		StrictExplicitOnly:         false,

@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/garaekz/oxinfer/internal/emitter"
+	"github.com/oxhq/oxinfer/internal/emitter"
 )
 
 // HashResult contains hash information and metadata for validation.

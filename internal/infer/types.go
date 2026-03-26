@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/garaekz/oxinfer/internal/matchers"
+	"github.com/oxhq/oxinfer/internal/matchers"
 )
 
 // PropertyType represents the data type of a request property.

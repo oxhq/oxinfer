@@ -4,8 +4,8 @@ package perf
 
 import (
 	"context"
-	"encoding/json/v2"
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/bench"
-	"github.com/garaekz/oxinfer/internal/manifest"
-	"github.com/garaekz/oxinfer/internal/pipeline"
+	"github.com/oxhq/oxinfer/internal/bench"
+	"github.com/oxhq/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/pipeline"
 )
 
 // PerformanceIntegration coordinates performance optimization across the entire Oxinfer pipeline.
@@ -487,6 +487,51 @@ type ValidationResults struct {
 	Sustained   *TestResult `json:"sustained"`
 }
 
+type validationResultsReport struct {
+	StartTime       time.Time                 `json:"startTime"`
+	EndTime         time.Time                 `json:"endTime"`
+	TotalDurationMs int64                     `json:"totalDurationMs"`
+	Success         bool                      `json:"success"`
+	Targets         *performanceTargetsReport `json:"targets,omitempty"`
+	ColdRun         *testResultReport         `json:"coldRun,omitempty"`
+	Incremental     *testResultReport         `json:"incremental,omitempty"`
+	Memory          *testResultReport         `json:"memory,omitempty"`
+	Sustained       *testResultReport         `json:"sustained,omitempty"`
+}
+
+type performanceTargetsReport struct {
+	ColdRunTargetMs        int64   `json:"coldRunTargetMs"`
+	IncrementalRunTargetMs int64   `json:"incrementalRunTargetMs"`
+	MemoryPeakTargetMB     int64   `json:"memoryPeakTargetMB"`
+	CPUEfficiencyTarget    float64 `json:"cpuEfficiencyTarget"`
+	FilesPerSecondTarget   float64 `json:"filesPerSecondTarget"`
+	PatternsPerSecTarget   float64 `json:"patternsPerSecTarget"`
+	ErrorRateTarget        float64 `json:"errorRateTarget"`
+	CacheHitRateTarget     float64 `json:"cacheHitRateTarget"`
+}
+
+type testResultReport struct {
+	TestName       string                     `json:"testName"`
+	TargetMet      bool                       `json:"targetMet"`
+	ActualValue    float64                    `json:"actualValue"`
+	TargetValue    float64                    `json:"targetValue"`
+	Unit           string                     `json:"unit"`
+	PerformanceGap float64                    `json:"performanceGap"`
+	Metrics        *performanceSnapshotReport `json:"metrics,omitempty"`
+	Error          string                     `json:"error,omitempty"`
+}
+
+type performanceSnapshotReport struct {
+	Timestamp      time.Time `json:"timestamp"`
+	DurationMs     int64     `json:"durationMs"`
+	MemoryUsageMB  int64     `json:"memoryUsageMB"`
+	CPUUtilization float64   `json:"cpuUtilization"`
+	FilesProcessed int       `json:"filesProcessed"`
+	ThroughputFPS  float64   `json:"throughputFPS"`
+	ErrorCount     int       `json:"errorCount"`
+	CacheHitRate   float64   `json:"cacheHitRate"`
+}
+
 // TestResult contains the results of a specific performance test.
 type TestResult struct {
 	TestName       string               `json:"testName"`
@@ -718,7 +763,7 @@ func (pi *PerformanceIntegration) generateValidationReport(results *ValidationRe
 	filePath := filepath.Join(pi.config.ReportDirectory, filename)
 
 	// Marshal results to JSON
-	data, err := json.Marshal(results, json.Deterministic(true), jsontext.WithIndent("  "))
+	data, err := json.Marshal(toValidationResultsReport(results), json.Deterministic(true), jsontext.WithIndent("  "))
 	if err != nil {
 		return fmt.Errorf("failed to marshal results: %w", err)
 	}
@@ -732,6 +777,79 @@ func (pi *PerformanceIntegration) generateValidationReport(results *ValidationRe
 	_ = pruneOldReports(pi.config.ReportDirectory, 1)
 
 	return nil
+}
+
+func toValidationResultsReport(results *ValidationResults) *validationResultsReport {
+	if results == nil {
+		return nil
+	}
+
+	return &validationResultsReport{
+		StartTime:       results.StartTime,
+		EndTime:         results.EndTime,
+		TotalDurationMs: durationMillis(results.TotalDuration),
+		Success:         results.Success,
+		Targets:         toPerformanceTargetsReport(results.Targets),
+		ColdRun:         toTestResultReport(results.ColdRun),
+		Incremental:     toTestResultReport(results.Incremental),
+		Memory:          toTestResultReport(results.Memory),
+		Sustained:       toTestResultReport(results.Sustained),
+	}
+}
+
+func toPerformanceTargetsReport(targets *PerformanceTargets) *performanceTargetsReport {
+	if targets == nil {
+		return nil
+	}
+
+	return &performanceTargetsReport{
+		ColdRunTargetMs:        durationMillis(targets.ColdRun),
+		IncrementalRunTargetMs: durationMillis(targets.IncrementalRun),
+		MemoryPeakTargetMB:     targets.MemoryPeak,
+		CPUEfficiencyTarget:    targets.CPUEfficiency,
+		FilesPerSecondTarget:   targets.FilesPerSecond,
+		PatternsPerSecTarget:   targets.PatternsPerSec,
+		ErrorRateTarget:        targets.ErrorRate,
+		CacheHitRateTarget:     targets.CacheHitRate,
+	}
+}
+
+func toTestResultReport(result *TestResult) *testResultReport {
+	if result == nil {
+		return nil
+	}
+
+	return &testResultReport{
+		TestName:       result.TestName,
+		TargetMet:      result.TargetMet,
+		ActualValue:    result.ActualValue,
+		TargetValue:    result.TargetValue,
+		Unit:           result.Unit,
+		PerformanceGap: result.PerformanceGap,
+		Metrics:        toPerformanceSnapshotReport(result.Metrics),
+		Error:          result.Error,
+	}
+}
+
+func toPerformanceSnapshotReport(snapshot *PerformanceSnapshot) *performanceSnapshotReport {
+	if snapshot == nil {
+		return nil
+	}
+
+	return &performanceSnapshotReport{
+		Timestamp:      snapshot.Timestamp,
+		DurationMs:     durationMillis(snapshot.Duration),
+		MemoryUsageMB:  snapshot.MemoryUsageMB,
+		CPUUtilization: snapshot.CPUUtilization,
+		FilesProcessed: snapshot.FilesProcessed,
+		ThroughputFPS:  snapshot.ThroughputFPS,
+		ErrorCount:     snapshot.ErrorCount,
+		CacheHitRate:   snapshot.CacheHitRate,
+	}
+}
+
+func durationMillis(d time.Duration) int64 {
+	return int64(d / time.Millisecond)
 }
 
 // pruneOldReports deletes older performance report JSONs, keeping the newest 'keep' files.

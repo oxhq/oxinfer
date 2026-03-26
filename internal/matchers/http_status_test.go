@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/garaekz/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/parser"
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/php"
 )
@@ -285,8 +285,8 @@ func TestHTTPStatusMatcher_GoldenFiles(t *testing.T) {
 			actual := convertHTTPStatusResults(results)
 
 			// Compare results (simplified comparison for now)
-			actualJSON, _ := json.Marshal(actual, json.Deterministic(true), json.Indent("", "  "))
-			expectedJSON, _ := json.Marshal(expected, json.Deterministic(true), json.Indent("", "  "))
+			actualJSON, _ := json.Marshal(actual, json.Deterministic(true))
+			expectedJSON, _ := json.Marshal(expected, json.Deterministic(true))
 
 			if !strings.Contains(string(actualJSON), "status") && len(expected) > 0 {
 				t.Errorf("Golden file test failed for %s", tc.name)

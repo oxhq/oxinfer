@@ -13,9 +13,9 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/emitter"
-	"github.com/garaekz/oxinfer/internal/manifest"
-	"github.com/garaekz/oxinfer/internal/pipeline"
+	"github.com/oxhq/oxinfer/internal/emitter"
+	"github.com/oxhq/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/pipeline"
 )
 
 // TripleRunValidator validates deterministic output by running analysis three times.
@@ -430,6 +430,11 @@ func (v *TripleRunValidator) runSingleDirect(ctx context.Context, manifest *mani
 		return nil, fmt.Errorf("pipeline processing failed: %w", err)
 	}
 
+	// Match the CLI's deterministic output contract: volatile execution-time fields
+	// are not part of the emitted delta unless explicitly stamped later.
+	delta.Meta.GeneratedAt = nil
+	delta.Meta.Stats.DurationMs = 0
+
 	return delta, nil
 }
 
@@ -491,7 +496,7 @@ func writeTempManifest(manifest *manifest.Manifest) (string, func(), error) {
 	tmpPath := tmpFile.Name()
 
 	// Marshal manifest to JSON
-	data, err := json.Marshal(manifest, json.Deterministic(true), json.Indent("", "  "))
+	data, err := json.Marshal(manifest, json.Deterministic(true))
 	if err != nil {
 		tmpFile.Close()
 		os.Remove(tmpPath)

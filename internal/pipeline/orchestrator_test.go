@@ -6,9 +6,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/garaekz/oxinfer/internal/manifest"
-	"github.com/garaekz/oxinfer/internal/matchers"
-	"github.com/garaekz/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/manifest"
+	"github.com/oxhq/oxinfer/internal/matchers"
+	"github.com/oxhq/oxinfer/internal/parser"
 )
 
 func TestNewOrchestrator(t *testing.T) {
@@ -475,7 +475,6 @@ func TestComponentRegistry_Close(t *testing.T) {
 
 	// Create mock components that implement Close
 	registry.PSR4Resolver = &mockPSR4Resolver{}
-	registry.PHPParser = &mockPHPParser{}
 	registry.PatternMatcher = &mockPatternMatcher{}
 
 	err := registry.Close()
@@ -561,43 +560,6 @@ func (m *mockPSR4Resolver) Refresh() error {
 	return nil
 }
 
-type mockPHPParser struct{}
-
-func (m *mockPHPParser) ProcessFile(ctx context.Context, file any) (any, error) {
-	return &map[string]any{
-		"filePath":  "test.php",
-		"namespace": "Test",
-	}, nil
-}
-
-func (m *mockPHPParser) ParsePHPFile(ctx context.Context, filePath string) (*parser.PHPParseResult, error) {
-	return &parser.PHPParseResult{}, nil
-}
-
-func (m *mockPHPParser) GetParserStats() parser.ParserStats {
-	return parser.ParserStats{}
-}
-
-func (m *mockPHPParser) SetConfiguration(config parser.ParserConfig) error {
-	return nil
-}
-
-func (m *mockPHPParser) Close() error {
-	return nil
-}
-
-func (m *mockPHPParser) IsInitialized() bool {
-	return true
-}
-
-func (m *mockPHPParser) ParseContent(content []byte) (*parser.SyntaxTree, error) {
-	return &parser.SyntaxTree{}, nil
-}
-
-func (m *mockPHPParser) ParseFile(ctx context.Context, filePath string) (*parser.SyntaxTree, error) {
-	return &parser.SyntaxTree{}, nil
-}
-
 type mockPatternMatcher struct{}
 
 func (m *mockPatternMatcher) AddMatcher(matcher matchers.PatternMatcher) error {
@@ -623,7 +585,6 @@ func (m *mockPatternMatcher) IsInitialized() bool {
 func (m *mockPatternMatcher) Close() error {
 	return nil
 }
-
 
 // Helper functions for tests
 func boolPtr(b bool) *bool {

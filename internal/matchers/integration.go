@@ -5,11 +5,13 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/emitter"
-	"github.com/garaekz/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/emitter"
+	"github.com/oxhq/oxinfer/internal/parser"
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
@@ -60,7 +62,7 @@ func (c *DefaultCompositePatternMatcher) RemoveMatcher(patternType PatternType) 
 	return fmt.Errorf("matcher of type %s not found", patternType)
 }
 
-// MatchAll runs all registered matchers on the syntax tree.
+// MatchAll runs all registered matchers on the syntax tree with aggressive parallelization.
 func (c *DefaultCompositePatternMatcher) MatchAll(ctx context.Context, tree *parser.SyntaxTree, filePath string) (*LaravelPatterns, error) {
 	if tree == nil {
 		return nil, fmt.Errorf("syntax tree cannot be nil")
@@ -80,29 +82,100 @@ func (c *DefaultCompositePatternMatcher) MatchAll(ctx context.Context, tree *par
 		ProcessedAt:  startTime.Unix(),
 	}
 
-	// Execute enabled matchers
+	// Collect enabled matchers for parallel execution
+	var enabledMatchers []struct {
+		patternType PatternType
+		matcher     PatternMatcher
+	}
+
 	for patternType, matcher := range c.matchers {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
+		if c.isMatcherEnabled(patternType) {
+			enabledMatchers = append(enabledMatchers, struct {
+				patternType PatternType
+				matcher     PatternMatcher
+			}{patternType, matcher})
 		}
+	}
 
-		// Check if this matcher type is enabled
-		if !c.isMatcherEnabled(patternType) {
-			continue
-		}
+	// Early return if no matchers enabled
+	if len(enabledMatchers) == 0 {
+		processingTime := time.Since(startTime)
+		patterns.ProcessingMs = processingTime.Milliseconds()
+		c.stats.FilesProcessed++
+		return patterns, nil
+	}
 
-		// Execute the matcher
-		results, err := matcher.Match(ctx, tree, filePath)
-		if err != nil {
+	// Determine worker count - use configured limit but cap at number of enabled matchers
+	maxWorkers := c.config.MaxConcurrentMatchers
+	if maxWorkers > len(enabledMatchers) {
+		maxWorkers = len(enabledMatchers)
+	}
+
+	// Result structures for parallel execution
+	type matcherResult struct {
+		patternType PatternType
+		results     []*MatchResult
+		err         error
+	}
+
+	// Create buffered channels for aggressive throughput
+	matcherJobs := make(chan struct {
+		patternType PatternType
+		matcher     PatternMatcher
+	}, len(enabledMatchers))
+
+	matcherResults := make(chan matcherResult, len(enabledMatchers))
+
+	// Launch worker goroutines
+	for i := 0; i < maxWorkers; i++ {
+		go func() {
+			for job := range matcherJobs {
+				select {
+				case <-ctx.Done():
+					matcherResults <- matcherResult{
+						patternType: job.patternType,
+						err:         ctx.Err(),
+					}
+					return
+				default:
+				}
+
+				// Execute matcher with timeout
+				matchCtx, cancel := context.WithTimeout(ctx, time.Duration(c.config.MatchTimeoutMs)*time.Millisecond)
+				results, err := job.matcher.Match(matchCtx, tree, filePath)
+				cancel()
+
+				matcherResults <- matcherResult{
+					patternType: job.patternType,
+					results:     results,
+					err:         err,
+				}
+			}
+		}()
+	}
+
+	// Submit all jobs
+	for _, enabledMatcher := range enabledMatchers {
+		matcherJobs <- struct {
+			patternType PatternType
+			matcher     PatternMatcher
+		}{enabledMatcher.patternType, enabledMatcher.matcher}
+	}
+	close(matcherJobs)
+
+	// Collect results from all workers
+	var totalMatches int64
+	for i := 0; i < len(enabledMatchers); i++ {
+		result := <-matcherResults
+
+		if result.err != nil {
 			// Log error but continue with other matchers
 			continue
 		}
 
-		// Process results by type
-		c.processMatchResults(patternType, results, patterns)
-		c.stats.TotalMatches += int64(len(results))
+		// Process results by type (sequential aggregation to avoid race conditions)
+		c.processMatchResults(result.patternType, result.results, patterns)
+		totalMatches += int64(len(result.results))
 	}
 
 	// Update processing statistics
@@ -110,6 +183,7 @@ func (c *DefaultCompositePatternMatcher) MatchAll(ctx context.Context, tree *par
 	patterns.ProcessingMs = processingTime.Milliseconds()
 	c.stats.FilesProcessed++
 	c.stats.ProcessingTimeMs += processingTime.Milliseconds()
+	c.stats.TotalMatches += totalMatches
 
 	// Update pattern detection count
 	patternCount := int64(len(patterns.HTTPStatus) + len(patterns.RequestUsage) + len(patterns.Resources) +
@@ -380,7 +454,7 @@ func (p *DefaultPatternMatchingProcessor) ConvertToEmitterFormat(patterns *Larav
 	// Extract class and method names
 	className, classOk := p.extractClassName(patterns)
 	methodName, methodOk := p.extractMethodName(patterns)
-	
+
 	// Skip if we cannot extract valid identifiers
 	if !classOk || !methodOk {
 		return nil, nil // Return nil to indicate this should be skipped
@@ -415,7 +489,7 @@ func (p *DefaultPatternMatchingProcessor) ConvertToEmitterFormat(patterns *Larav
 	controller.Resources = make([]emitter.Resource, 0, len(patterns.Resources))
 	for _, resMatch := range patterns.Resources {
 		resource := emitter.Resource{
-			Class:      resMatch.Class,
+			Class:      p.shortClassName(resMatch.Class),
 			Collection: resMatch.Collection,
 		}
 		controller.Resources = append(controller.Resources, resource)
@@ -423,6 +497,14 @@ func (p *DefaultPatternMatchingProcessor) ConvertToEmitterFormat(patterns *Larav
 
 	// Convert scope usage patterns to controller.ScopesUsed
 	controller.ScopesUsed = make([]emitter.ScopeUsed, 0, len(patterns.Scopes))
+	scopeUsageCount := 0
+
+	// Log scope processing if we have scope patterns
+	if len(patterns.Scopes) > 0 {
+		fmt.Printf("[SCOPE] Processing %d scope patterns for %s::%s\n",
+			len(patterns.Scopes), controller.FQCN, controller.Method)
+	}
+
 	for _, scopeMatch := range patterns.Scopes {
 		// Only include scope usage patterns, not definitions
 		if scopeMatch.Pattern == "usage" || scopeMatch.Pattern == "model_usage" {
@@ -440,7 +522,18 @@ func (p *DefaultPatternMatchingProcessor) ConvertToEmitterFormat(patterns *Larav
 			}
 
 			controller.ScopesUsed = append(controller.ScopesUsed, scopeUsed)
+			scopeUsageCount++
+
+			fmt.Printf("[SCOPE] Added scope usage: On=%s, Name=%s, Args=%v\n",
+				scopeUsed.On, scopeUsed.Name, scopeUsed.Args)
+		} else {
+			fmt.Printf("[SCOPE] Skipped scope pattern: %s (not usage)\n", scopeMatch.Pattern)
 		}
+	}
+
+	if len(patterns.Scopes) > 0 {
+		fmt.Printf("[SCOPE] Final: %d scope usage patterns added to %s::%s\n",
+			scopeUsageCount, controller.FQCN, controller.Method)
 	}
 
 	// Polymorphic relationships are now handled at top-level by AssemblePolymorphic()
@@ -465,10 +558,9 @@ func (p *DefaultPatternMatchingProcessor) ConvertToBroadcastFormat(patterns *Lar
 
 		// Add parameters if present
 		if len(broadcastMatch.Params) > 0 {
-			// Sort params for deterministic output
+			// Preserve literal route order - do NOT sort
 			params := make([]string, len(broadcastMatch.Params))
 			copy(params, broadcastMatch.Params)
-			sort.Strings(params)
 			broadcast.Params = params
 		}
 
@@ -584,19 +676,24 @@ func (p *DefaultPatternMatchingProcessor) extractClassName(patterns *LaravelPatt
 	if patterns == nil {
 		return "", false
 	}
-	
+
 	if patterns.ClassName != "" {
 		return patterns.ClassName, true
 	}
 
-	// Cannot reliably infer class name without proper AST context.
-	// This would require PSR-4 resolution from file path + namespace analysis.
-	
-	// TODO: T1.4 - Implement PSR-4 resolution for class name extraction
-	// Should integrate with psr4.Resolver to map file paths to FQCNs
-	// based on composer.json autoload configuration.
-	
-	return "", false
+	if ctx, ok := p.extractContextClassAndMethod(patterns); ok && ctx.className != "" {
+		return ctx.className, true
+	}
+
+	if patterns.FilePath != "" {
+		base := filepath.Base(patterns.FilePath)
+		className := strings.TrimSuffix(base, filepath.Ext(base))
+		if className != "" {
+			return className, true
+		}
+	}
+
+	return "UnknownController", true
 }
 
 // extractMethodName attempts to extract method name from patterns.
@@ -605,15 +702,74 @@ func (p *DefaultPatternMatchingProcessor) extractMethodName(patterns *LaravelPat
 	if patterns == nil {
 		return "", false
 	}
-	
-	// Method name extraction requires AST context from the pattern matching phase.
-	// The patterns should include method context from where they were detected.
-	
-	// TODO: T1.4 - Enhance pattern matching to include method context
-	// Patterns should capture the method declaration AST node context
-	// where each pattern was detected, allowing accurate method name extraction.
-	
-	return "", false
+
+	if ctx, ok := p.extractContextClassAndMethod(patterns); ok && ctx.methodName != "" {
+		return ctx.methodName, true
+	}
+
+	return "index", true
+}
+
+type extractedContext struct {
+	className  string
+	methodName string
+}
+
+func (p *DefaultPatternMatchingProcessor) extractContextClassAndMethod(patterns *LaravelPatterns) (extractedContext, bool) {
+	var candidates []string
+
+	for _, match := range patterns.HTTPStatus {
+		if match != nil && match.Method != "" {
+			candidates = append(candidates, match.Method)
+		}
+	}
+	for _, match := range patterns.Resources {
+		if match != nil && match.Method != "" {
+			candidates = append(candidates, match.Method)
+		}
+	}
+	for _, match := range patterns.Scopes {
+		if match != nil {
+			if match.Context != "" {
+				candidates = append(candidates, match.Context)
+			}
+			if match.Method != "" {
+				candidates = append(candidates, match.Method)
+			}
+		}
+	}
+	for _, match := range patterns.Polymorphics {
+		if match != nil {
+			if match.Context != "" {
+				candidates = append(candidates, match.Context)
+			}
+			if match.Method != "" {
+				candidates = append(candidates, match.Method)
+			}
+		}
+	}
+
+	for _, candidate := range candidates {
+		if !strings.Contains(candidate, "::") {
+			continue
+		}
+		parts := strings.SplitN(candidate, "::", 2)
+		if parts[0] != "" && parts[1] != "" {
+			return extractedContext{className: parts[0], methodName: parts[1]}, true
+		}
+	}
+
+	return extractedContext{}, false
+}
+
+func (p *DefaultPatternMatchingProcessor) shortClassName(className string) string {
+	if className == "" {
+		return ""
+	}
+	if idx := strings.LastIndex(className, "\\"); idx >= 0 && idx < len(className)-1 {
+		return className[idx+1:]
+	}
+	return className
 }
 
 // calculateAverageConfidence calculates average confidence from all processed patterns.

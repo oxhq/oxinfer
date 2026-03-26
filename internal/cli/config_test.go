@@ -19,7 +19,7 @@ func TestParseFlags(t *testing.T) {
 			name: "default flags",
 			args: []string{},
 			expected: &CLIConfig{
-				ManifestPath: "",
+				ManifestPath: "-",
 				OutputPath:   "",
 				NoColor:      false,
 				Version:      false,
@@ -32,6 +32,20 @@ func TestParseFlags(t *testing.T) {
 			args: []string{"--manifest", "test.json"},
 			expected: &CLIConfig{
 				ManifestPath: "test.json",
+				RequestPath:  "",
+				OutputPath:   "",
+				NoColor:      false,
+				Version:      false,
+				Help:         false,
+			},
+			wantErr: false,
+		},
+		{
+			name: "request file flag",
+			args: []string{"--request", "analysis-request.json"},
+			expected: &CLIConfig{
+				ManifestPath: "",
+				RequestPath:  "analysis-request.json",
 				OutputPath:   "",
 				NoColor:      false,
 				Version:      false,
@@ -43,7 +57,8 @@ func TestParseFlags(t *testing.T) {
 			name: "output file flag",
 			args: []string{"--out", "output.json"},
 			expected: &CLIConfig{
-				ManifestPath: "",
+				ManifestPath: "-",
+				RequestPath:  "",
 				OutputPath:   "output.json",
 				NoColor:      false,
 				Version:      false,
@@ -55,7 +70,8 @@ func TestParseFlags(t *testing.T) {
 			name: "no-color flag",
 			args: []string{"--no-color"},
 			expected: &CLIConfig{
-				ManifestPath: "",
+				ManifestPath: "-",
+				RequestPath:  "",
 				OutputPath:   "",
 				NoColor:      true,
 				Version:      false,
@@ -67,7 +83,8 @@ func TestParseFlags(t *testing.T) {
 			name: "version flag",
 			args: []string{"--version"},
 			expected: &CLIConfig{
-				ManifestPath: "",
+				ManifestPath: "-",
+				RequestPath:  "",
 				OutputPath:   "",
 				NoColor:      false,
 				Version:      true,
@@ -79,7 +96,8 @@ func TestParseFlags(t *testing.T) {
 			name: "help flag",
 			args: []string{"--help"},
 			expected: &CLIConfig{
-				ManifestPath: "",
+				ManifestPath: "-",
+				RequestPath:  "",
 				OutputPath:   "",
 				NoColor:      false,
 				Version:      false,
@@ -91,7 +109,8 @@ func TestParseFlags(t *testing.T) {
 			name: "help flag short form",
 			args: []string{"-h"},
 			expected: &CLIConfig{
-				ManifestPath: "",
+				ManifestPath: "-",
+				RequestPath:  "",
 				OutputPath:   "",
 				NoColor:      false,
 				Version:      false,
@@ -104,6 +123,7 @@ func TestParseFlags(t *testing.T) {
 			args: []string{"--manifest", "test.json", "--out", "output.json", "--no-color", "--version"},
 			expected: &CLIConfig{
 				ManifestPath: "test.json",
+				RequestPath:  "",
 				OutputPath:   "output.json",
 				NoColor:      true,
 				Version:      true,
@@ -121,6 +141,13 @@ func TestParseFlags(t *testing.T) {
 		{
 			name:      "flag without value",
 			args:      []string{"--manifest"},
+			expected:  nil,
+			wantErr:   true,
+			errorType: "input",
+		},
+		{
+			name:      "mutually exclusive input flags",
+			args:      []string{"--manifest", "manifest.json", "--request", "analysis-request.json"},
 			expected:  nil,
 			wantErr:   true,
 			errorType: "input",
@@ -162,6 +189,9 @@ func TestParseFlags(t *testing.T) {
 			}
 			if config.OutputPath != tt.expected.OutputPath {
 				t.Errorf("ParseFlags() OutputPath = %v, want %v", config.OutputPath, tt.expected.OutputPath)
+			}
+			if config.RequestPath != tt.expected.RequestPath {
+				t.Errorf("ParseFlags() RequestPath = %v, want %v", config.RequestPath, tt.expected.RequestPath)
 			}
 			if config.NoColor != tt.expected.NoColor {
 				t.Errorf("ParseFlags() NoColor = %v, want %v", config.NoColor, tt.expected.NoColor)
@@ -429,7 +459,7 @@ func TestCLIConfig_Validate(t *testing.T) {
 		{
 			name: "valid config - default",
 			config: &CLIConfig{
-				ManifestPath: "",
+				ManifestPath: "-",
 				OutputPath:   "",
 				NoColor:      false,
 				Version:      false,

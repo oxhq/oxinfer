@@ -9,7 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/garaekz/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/logging"
+	"github.com/oxhq/oxinfer/internal/parser"
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
@@ -66,25 +67,26 @@ func (m *DefaultBroadcastMatcher) GetType() PatternType {
 }
 
 // isBroadcastFile checks if the file should be processed for broadcast channels.
-// Only processes files in routes/channels.php or routes/channels/ directory
-func (m *DefaultBroadcastMatcher) isBroadcastFile(filePath string) bool {
+// T2 Compliance: Only processes routes/channels.php file, nothing else
+func (m *DefaultBroadcastMatcher) isBroadcastFile(ctx context.Context, filePath string) bool {
 	// Normalize path for consistent comparison
 	normalized := filepath.ToSlash(strings.ToLower(filePath))
-	
-	// Valid patterns for broadcast channel files
-	validPatterns := []string{
-		"routes/channels.php",        // Main channels file
-		"routes/channels/",            // Channels subdirectory
-		"routes/broadcasting.php",    // Alternative naming
-	}
-	
-	for _, pattern := range validPatterns {
-		if strings.Contains(normalized, pattern) {
-			return true
-		}
-	}
-	
-	return false
+
+	// T2 Rule: Restrict broadcast detection to routes/channels.php ONLY
+	// Must end with routes/channels.php to avoid matching subdirectories
+	isBroadcast := strings.HasSuffix(normalized, "routes/channels.php")
+
+	// Verbose output for user debugging
+	logging.VerboseFromContext(ctx, "broadcast", "File %s: isBroadcast=%v (normalized=%s)", filePath, isBroadcast, normalized)
+
+	// Structured logging for development/debugging
+	logging.DebugFromContext(ctx, "broadcast", "broadcast file check", map[string]interface{}{
+		"file_path":    filePath,
+		"normalized":   normalized,
+		"is_broadcast": isBroadcast,
+	})
+
+	return isBroadcast
 }
 
 // isQueryBuilderMethod checks if a method name is a query builder method
@@ -134,7 +136,7 @@ func (m *DefaultBroadcastMatcher) isQueryBuilderMethod(methodName string) bool {
 		"cursor":       true,
 		"lazy":         true,
 	}
-	
+
 	return queryBuilderMethods[methodName]
 }
 
@@ -145,7 +147,7 @@ func (m *DefaultBroadcastMatcher) Match(ctx context.Context, tree *parser.Syntax
 	}
 
 	// CRITICAL: Only process broadcast channel files
-	if !m.isBroadcastFile(filePath) {
+	if !m.isBroadcastFile(ctx, filePath) {
 		return []*MatchResult{}, nil // Return empty results, not an error
 	}
 
@@ -191,7 +193,7 @@ func (m *DefaultBroadcastMatcher) Match(ctx context.Context, tree *parser.Syntax
 						continue // Skip query builder methods
 					}
 				}
-				
+
 				allResults = append(allResults, result)
 
 				// Respect match limits
@@ -220,25 +222,25 @@ func (m *DefaultBroadcastMatcher) sortAndDeduplicate(results []*MatchResult) []*
 		if results[i].Context.FilePath != results[j].Context.FilePath {
 			return results[i].Context.FilePath < results[j].Context.FilePath
 		}
-		
+
 		// Then by position (line, column)
 		if results[i].Position.Row != results[j].Position.Row {
 			return results[i].Position.Row < results[j].Position.Row
 		}
-		
+
 		if results[i].Position.Column != results[j].Position.Column {
 			return results[i].Position.Column < results[j].Position.Column
 		}
-		
+
 		// Finally by content for complete determinism
 		return results[i].Content < results[j].Content
 	})
-	
+
 	// Then deduplicate if enabled
 	if m.config.DeduplicateMatches {
 		return m.deduplicateResults(results)
 	}
-	
+
 	return results
 }
 
@@ -410,16 +412,19 @@ func (m *DefaultBroadcastMatcher) extractChannelParameters(channelName string) [
 		}
 	}
 
-	// Sort for deterministic output
 	sort.Strings(params)
 	return params
 }
 
-// extractStringLiteral extracts string content from quotes.
+// extractStringLiteral extracts string content from quotes and validates it's a literal.
+// T2 Compliance: Only accept string literals, reject variables and expressions
 func (m *DefaultBroadcastMatcher) extractStringLiteral(str string) string {
 	str = strings.TrimSpace(str)
 
-	// Remove single or double quotes
+	if str == "" {
+		return ""
+	}
+
 	if len(str) >= 2 {
 		if (str[0] == '"' && str[len(str)-1] == '"') ||
 			(str[0] == '\'' && str[len(str)-1] == '\'') {
@@ -428,6 +433,35 @@ func (m *DefaultBroadcastMatcher) extractStringLiteral(str string) string {
 	}
 
 	return str
+}
+
+// isValidChannelLiteral checks if the extracted string is a valid channel literal.
+// T2 Compliance: Reject variables, expressions, and other non-literals
+func (m *DefaultBroadcastMatcher) isValidChannelLiteral(literal string) bool {
+	// Reject empty literals
+	if literal == "" {
+		return false
+	}
+
+	// Reject obvious variables (start with $)
+	if strings.HasPrefix(literal, "$") {
+		return false
+	}
+
+	// Reject function calls (contains parentheses)
+	if strings.Contains(literal, "(") || strings.Contains(literal, ")") {
+		return false
+	}
+
+	// Reject concatenation (contains . operator)
+	if strings.Contains(literal, " . ") {
+		return false
+	}
+
+	// Accept valid channel patterns with optional {param} placeholders
+	// Allow alphanumeric, dots, dashes, underscores, and {param} patterns
+	validPattern := regexp.MustCompile(`^[a-zA-Z0-9._-]+(\{[a-zA-Z_][a-zA-Z0-9_]*\}[a-zA-Z0-9._-]*)*$`)
+	return validPattern.MatchString(literal)
 }
 
 // detectPayloadLiterals analyzes the callback to detect literal payload values.
@@ -527,45 +561,69 @@ func (m *DefaultBroadcastMatcher) filterByConfidence(results []*MatchResult) []*
 	return filtered
 }
 
-// deduplicateResults removes duplicate matches by position and channel name.
+// deduplicateResults removes duplicate matches by channel name and applies visibility precedence.
+// T2 Compliance: presence > private > public precedence, deduplicate by channel
 func (m *DefaultBroadcastMatcher) deduplicateResults(results []*MatchResult) []*MatchResult {
 	if !m.config.DeduplicateMatches {
 		return results
 	}
 
-	seen := make(map[string]*MatchResult)
+	// Group by channel name, keeping the highest precedence visibility
+	channelMap := make(map[string]*MatchResult)
 
 	for _, result := range results {
 		if broadcastMatch, ok := result.Data.(*BroadcastMatch); ok {
-			// Create unique key based on position and channel details
-			key := fmt.Sprintf("%s:%d:%d:%s:%s", broadcastMatch.Channel, result.Position.Row, result.Position.Column, broadcastMatch.Method, broadcastMatch.Visibility)
+			channelName := broadcastMatch.Channel
 
-			if existing, exists := seen[key]; exists {
-				// Keep the match with higher confidence
-				if result.Confidence > existing.Confidence {
-					seen[key] = result
+			// Skip empty channels (T2 rule: drop entries with empty channel)
+			if channelName == "" {
+				continue
+			}
+
+			if existing, exists := channelMap[channelName]; exists {
+				existingBroadcast := existing.Data.(*BroadcastMatch)
+
+				// Apply T2 visibility precedence: presence > private > public
+				if m.hasHigherVisibilityPrecedence(broadcastMatch.Visibility, existingBroadcast.Visibility) {
+					channelMap[channelName] = result
 				}
+				// Keep existing if it has higher or equal precedence
 			} else {
-				seen[key] = result
+				channelMap[channelName] = result
 			}
 		}
 	}
 
 	// Convert back to slice with deterministic ordering
-	deduplicated := make([]*MatchResult, 0, len(seen))
+	deduplicated := make([]*MatchResult, 0, len(channelMap))
 
-	// Sort keys for deterministic output
-	keys := make([]string, 0, len(seen))
-	for key := range seen {
-		keys = append(keys, key)
+	// Sort channel names for deterministic output
+	channels := make([]string, 0, len(channelMap))
+	for channel := range channelMap {
+		channels = append(channels, channel)
 	}
-	sort.Strings(keys)
+	sort.Strings(channels)
 
-	for _, key := range keys {
-		deduplicated = append(deduplicated, seen[key])
+	for _, channel := range channels {
+		deduplicated = append(deduplicated, channelMap[channel])
 	}
 
 	return deduplicated
+}
+
+// hasHigherVisibilityPrecedence returns true if newVisibility has higher precedence than existing.
+// T2 Rule: presence > private > public
+func (m *DefaultBroadcastMatcher) hasHigherVisibilityPrecedence(newVisibility, existingVisibility string) bool {
+	precedence := map[string]int{
+		"presence": 3,
+		"private":  2,
+		"public":   1,
+	}
+
+	newPrec := precedence[newVisibility]
+	existingPrec := precedence[existingVisibility]
+
+	return newPrec > existingPrec
 }
 
 // GetSupportedBroadcastPatterns returns commonly used Laravel broadcast channel patterns.

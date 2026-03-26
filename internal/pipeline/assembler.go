@@ -8,15 +8,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/emitter"
-	"github.com/garaekz/oxinfer/internal/infer"
-	"github.com/garaekz/oxinfer/internal/matchers"
+	"github.com/oxhq/oxinfer/internal/emitter"
+	"github.com/oxhq/oxinfer/internal/infer"
+	"github.com/oxhq/oxinfer/internal/logging"
+	"github.com/oxhq/oxinfer/internal/matchers"
 )
 
 // AssemblerStats tracks statistics during assembly process for debugging and optimization.
 type AssemblerStats struct {
-	SkippedControllers   int // Controllers skipped due to unresolvable keys
-	SkippedModels       int // Models skipped due to unresolvable FQCNs  
+	SkippedControllers  int // Controllers skipped due to unresolvable keys
+	SkippedModels       int // Models skipped due to unresolvable FQCNs
 	SkippedPatterns     int // Patterns skipped due to missing context
 	UnresolvableMatches int // Total matches that couldn't be resolved
 }
@@ -44,31 +45,31 @@ func (a *DefaultDeltaAssembler) AssembleDelta(ctx context.Context, results *Pipe
 	stats := a.calculatePipelineStats(results)
 
 	// Assemble controllers
-	controllers, err := a.AssembleControllers(results.ParseResults, results.MatchResults, results.InferenceResults)
+	controllers, err := a.AssembleControllers(ctx, results.ParseResults, results.MatchResults, results.InferenceResults)
 	if err != nil {
 		return nil, fmt.Errorf("failed to assemble controllers: %w", err)
 	}
 
 	// Assemble models
-	models, err := a.AssembleModels(results.ParseResults, results.MatchResults)
+	models, err := a.AssembleModels(ctx, results.ParseResults, results.MatchResults)
 	if err != nil {
 		return nil, fmt.Errorf("failed to assemble models: %w", err)
 	}
 
 	// Assemble polymorphic relationships
-	polymorphic, err := a.AssemblePolymorphic(results.MatchResults)
+	polymorphic, err := a.AssemblePolymorphic(ctx, results.MatchResults)
 	if err != nil {
 		return nil, fmt.Errorf("failed to assemble polymorphic: %w", err)
 	}
 
 	// Assemble broadcast channels
-	broadcast, err := a.AssembleBroadcast(results.MatchResults)
+	broadcast, err := a.AssembleBroadcast(ctx, results.MatchResults)
 	if err != nil {
 		return nil, fmt.Errorf("failed to assemble broadcast: %w", err)
 	}
 
 	// Assemble metadata
-	meta, err := a.AssembleMetadata(results, stats)
+	meta, err := a.AssembleMetadata(ctx, results, stats)
 	if err != nil {
 		return nil, fmt.Errorf("failed to assemble metadata: %w", err)
 	}
@@ -85,13 +86,32 @@ func (a *DefaultDeltaAssembler) AssembleDelta(ctx context.Context, results *Pipe
 }
 
 // AssembleControllers converts parsing, matching, and inference results into controllers.
-func (a *DefaultDeltaAssembler) AssembleControllers(parseResults *ParseResults, matchResults *MatchResults, inferenceResults *InferenceResults) ([]emitter.Controller, error) {
+func (a *DefaultDeltaAssembler) AssembleControllers(ctx context.Context, parseResults *ParseResults, matchResults *MatchResults, inferenceResults *InferenceResults) ([]emitter.Controller, error) {
 	if parseResults == nil || matchResults == nil {
+		logging.VerboseFromContext(ctx, "assembler", "AssembleControllers: parseResults or matchResults is nil")
+		logging.DebugFromContext(ctx, "assembler", "controllers assembly skipped", map[string]interface{}{
+			"reason": "nil inputs",
+		})
 		return []emitter.Controller{}, nil
 	}
 
+	// DEBUG: Log what data we're receiving
+	logging.VerboseFromContext(ctx, "assembler", "DEBUG: AssembleControllers data - Controllers=%d, HTTPStatus=%d, Resources=%d, Scopes=%d, Polymorphic=%d",
+		len(parseResults.Controllers), len(matchResults.HTTPStatusMatches), len(matchResults.ResourceMatches),
+		len(matchResults.ScopeMatches), len(matchResults.PolymorphicMatches))
+
+	logging.VerboseFromContext(ctx, "assembler", "AssembleControllers: starting with %d parsed files", len(parseResults.ParsedFiles))
+	logging.DebugFromContext(ctx, "assembler", "controllers assembly started", map[string]interface{}{
+		"parsed_files": len(parseResults.ParsedFiles),
+	})
+
 	// Group results by controller class and method
-	controllerMethods := a.groupByControllerMethod(parseResults, matchResults, inferenceResults)
+	controllerMethods := a.groupByControllerMethod(ctx, parseResults, matchResults, inferenceResults)
+
+	logging.VerboseFromContext(ctx, "assembler", "AssembleControllers: grouped into %d controller methods", len(controllerMethods))
+	logging.DebugFromContext(ctx, "assembler", "controller methods grouped", map[string]interface{}{
+		"method_count": len(controllerMethods),
+	})
 
 	var controllers []emitter.Controller
 	for _, cm := range controllerMethods {
@@ -122,10 +142,10 @@ func (a *DefaultDeltaAssembler) AssembleControllers(parseResults *ParseResults, 
 			}
 			seen := make(map[resourceKey]struct{})
 			dedupedResources := make([]emitter.Resource, 0, len(cm.Resources))
-			
+
 			for _, resource := range cm.Resources {
 				key := resourceKey{
-					class:      resource.Class,
+					class:      firstNonEmpty(resource.FQCN, resource.Class),
 					collection: resource.Collection,
 				}
 				if _, exists := seen[key]; exists {
@@ -134,19 +154,22 @@ func (a *DefaultDeltaAssembler) AssembleControllers(parseResults *ParseResults, 
 				seen[key] = struct{}{}
 				dedupedResources = append(dedupedResources, emitter.Resource{
 					Class:      resource.Class,
+					FQCN:       resource.FQCN,
 					Collection: resource.Collection,
 				})
 			}
-			
+
 			// Sort by class, then collection=false before collection=true
 			sort.Slice(dedupedResources, func(i, j int) bool {
-				if dedupedResources[i].Class != dedupedResources[j].Class {
-					return dedupedResources[i].Class < dedupedResources[j].Class
+				left := firstNonEmpty(dedupedResources[i].FQCN, dedupedResources[i].Class)
+				right := firstNonEmpty(dedupedResources[j].FQCN, dedupedResources[j].Class)
+				if left != right {
+					return left < right
 				}
 				// collection=false (individual resources) come before collection=true
 				return !dedupedResources[i].Collection && dedupedResources[j].Collection
 			})
-			
+
 			controller.Resources = dedupedResources
 		}
 
@@ -170,6 +193,44 @@ func (a *DefaultDeltaAssembler) AssembleControllers(parseResults *ParseResults, 
 			controller.ScopesUsed = scopes
 		}
 
+		// Add polymorphic relationships to controllers
+		if len(cm.Polymorphic) > 0 {
+			polymorphicRels := make([]emitter.PolymorphicRelation, 0, len(cm.Polymorphic))
+			for _, polyMatch := range cm.Polymorphic {
+				rel := emitter.PolymorphicRelation{
+					Relation:  polyMatch.Relation,
+					Type:      polyMatch.Type,
+					MorphType: polyMatch.MorphType,
+					MorphId:   polyMatch.MorphId,
+				}
+				if polyMatch.Model != "" {
+					rel.Model = &polyMatch.Model
+				}
+				if polyMatch.Discriminator != nil {
+					rel.Discriminator = &emitter.PolymorphicDiscriminator{
+						PropertyName: polyMatch.Discriminator.PropertyName,
+						Mapping:      polyMatch.Discriminator.Mapping,
+						Source:       polyMatch.Discriminator.Source,
+						IsExplicit:   polyMatch.Discriminator.IsExplicit,
+					}
+					if polyMatch.Discriminator.DefaultType != "" {
+						rel.Discriminator.DefaultType = &polyMatch.Discriminator.DefaultType
+					}
+				}
+				if len(polyMatch.RelatedModels) > 0 {
+					rel.RelatedModels = polyMatch.RelatedModels
+				}
+				if polyMatch.DepthTruncated {
+					rel.DepthTruncated = &polyMatch.DepthTruncated
+				}
+				if polyMatch.MaxDepth > 0 {
+					rel.MaxDepth = &polyMatch.MaxDepth
+				}
+				polymorphicRels = append(polymorphicRels, rel)
+			}
+			controller.Polymorphic = polymorphicRels
+		}
+
 		controllers = append(controllers, controller)
 	}
 
@@ -185,13 +246,27 @@ func (a *DefaultDeltaAssembler) AssembleControllers(parseResults *ParseResults, 
 }
 
 // AssembleModels converts parsing and matching results into models.
-func (a *DefaultDeltaAssembler) AssembleModels(parseResults *ParseResults, matchResults *MatchResults) ([]emitter.Model, error) {
+func (a *DefaultDeltaAssembler) AssembleModels(ctx context.Context, parseResults *ParseResults, matchResults *MatchResults) ([]emitter.Model, error) {
 	if parseResults == nil || matchResults == nil {
+		logging.VerboseFromContext(ctx, "assembler", "AssembleModels: parseResults or matchResults is nil")
+		logging.DebugFromContext(ctx, "assembler", "models assembly skipped", map[string]interface{}{
+			"reason": "nil inputs",
+		})
 		return []emitter.Model{}, nil
 	}
 
+	logging.VerboseFromContext(ctx, "assembler", "AssembleModels: starting with ModelScopes=%d", len(parseResults.ModelScopes))
+	logging.DebugFromContext(ctx, "assembler", "models assembly started", map[string]interface{}{
+		"model_scopes": len(parseResults.ModelScopes),
+	})
+
 	// Group results by model class
 	modelData := a.groupByModelClass(parseResults, matchResults)
+
+	logging.VerboseFromContext(ctx, "assembler", "AssembleModels: grouped into %d model data", len(modelData))
+	logging.DebugFromContext(ctx, "assembler", "models grouped", map[string]interface{}{
+		"model_count": len(modelData),
+	})
 
 	var models []emitter.Model
 	for _, md := range modelData {
@@ -268,7 +343,43 @@ func (a *DefaultDeltaAssembler) AssembleModels(parseResults *ParseResults, match
 			model.Attributes = attributes
 		}
 
-		// Polymorphic relationships are handled by AssemblePolymorphic method
+		// Add polymorphic relationships to models
+		if len(md.Polymorphic) > 0 {
+			polymorphicRels := make([]emitter.PolymorphicRelation, 0, len(md.Polymorphic))
+			for _, polyMatch := range md.Polymorphic {
+				rel := emitter.PolymorphicRelation{
+					Relation:  polyMatch.Relation,
+					Type:      polyMatch.Type,
+					MorphType: polyMatch.MorphType,
+					MorphId:   polyMatch.MorphId,
+				}
+				if polyMatch.Model != "" {
+					rel.Model = &polyMatch.Model
+				}
+				if polyMatch.Discriminator != nil {
+					rel.Discriminator = &emitter.PolymorphicDiscriminator{
+						PropertyName: polyMatch.Discriminator.PropertyName,
+						Mapping:      polyMatch.Discriminator.Mapping,
+						Source:       polyMatch.Discriminator.Source,
+						IsExplicit:   polyMatch.Discriminator.IsExplicit,
+					}
+					if polyMatch.Discriminator.DefaultType != "" {
+						rel.Discriminator.DefaultType = &polyMatch.Discriminator.DefaultType
+					}
+				}
+				if len(polyMatch.RelatedModels) > 0 {
+					rel.RelatedModels = polyMatch.RelatedModels
+				}
+				if polyMatch.DepthTruncated {
+					rel.DepthTruncated = &polyMatch.DepthTruncated
+				}
+				if polyMatch.MaxDepth > 0 {
+					rel.MaxDepth = &polyMatch.MaxDepth
+				}
+				polymorphicRels = append(polymorphicRels, rel)
+			}
+			model.Polymorphic = polymorphicRels
+		}
 
 		models = append(models, model)
 	}
@@ -282,17 +393,48 @@ func (a *DefaultDeltaAssembler) AssembleModels(parseResults *ParseResults, match
 }
 
 // AssemblePolymorphic converts matching results into polymorphic relationships.
-func (a *DefaultDeltaAssembler) AssemblePolymorphic(matchResults *MatchResults) ([]emitter.Polymorphic, error) {
+func (a *DefaultDeltaAssembler) AssemblePolymorphic(ctx context.Context, matchResults *MatchResults) ([]emitter.Polymorphic, error) {
 	if matchResults == nil {
+		logging.VerboseFromContext(ctx, "assembler", "No match results for polymorphic assembly")
 		return []emitter.Polymorphic{}, nil
 	}
 
+	// Log polymorphic assembly start
+	logging.VerboseFromContext(ctx, "assembler", "AssemblePolymorphic: processing %d matches", len(matchResults.PolymorphicMatches))
+	logging.DebugFromContext(ctx, "assembler", "starting polymorphic assembly", map[string]interface{}{
+		"total_matches": len(matchResults.PolymorphicMatches),
+		"phase":         "polymorphic_assembly",
+	})
+
 	// Group polymorphic matches by parent
 	polymorphicGroups := make(map[string][]*matchers.PolymorphicMatch)
+	skippedCount := 0
+
 	for _, match := range matchResults.PolymorphicMatches {
 		// Extract parent from relation context (simplified)
 		if parent, ok := a.extractParentFromContext(match); ok {
-			polymorphicGroups[parent] = append(polymorphicGroups[parent], match)
+			if strings.Contains(parent, "\\Models\\") {
+				polymorphicGroups[parent] = append(polymorphicGroups[parent], match)
+			}
+			logging.DebugFromContext(ctx, "assembler", "polymorphic match grouped", map[string]interface{}{
+				"parent":     parent,
+				"relation":   match.Relation,
+				"morph_type": match.MorphType,
+				"morph_id":   match.MorphId,
+			})
+		} else {
+			skippedCount++
+			// TEMP DEBUG: Print detailed match info to see what's missing
+			fmt.Printf("[POLY-DEBUG] Skipped match: Relation=%s, MorphType=%s, MorphId=%s, Context='%s', Pattern=%s\n",
+				match.Relation, match.MorphType, match.MorphId, match.Context, match.Pattern)
+
+			logging.DebugFromContext(ctx, "assembler", "polymorphic match skipped", map[string]interface{}{
+				"relation":   match.Relation,
+				"morph_type": match.MorphType,
+				"context":    match.Context,
+				"pattern":    match.Pattern,
+				"reason":     "cannot_resolve_parent",
+			})
 		}
 		// Skip polymorphic matches that cannot be resolved to valid parents
 	}
@@ -333,11 +475,20 @@ func (a *DefaultDeltaAssembler) AssemblePolymorphic(matchResults *MatchResults) 
 		return polymorphic[i].Parent < polymorphic[j].Parent
 	})
 
+	// Log assembly completion
+	logging.VerboseFromContext(ctx, "assembler", "AssemblePolymorphic: created %d polymorphic relations", len(polymorphic))
+	logging.DebugFromContext(ctx, "assembler", "polymorphic assembly completed", map[string]interface{}{
+		"total_input_matches":    len(matchResults.PolymorphicMatches),
+		"total_output_relations": len(polymorphic),
+		"skipped_matches":        skippedCount,
+		"unique_parents":         len(polymorphicGroups),
+	})
+
 	return polymorphic, nil
 }
 
 // AssembleBroadcast converts matching results into broadcast channels.
-func (a *DefaultDeltaAssembler) AssembleBroadcast(matchResults *MatchResults) ([]emitter.Broadcast, error) {
+func (a *DefaultDeltaAssembler) AssembleBroadcast(ctx context.Context, matchResults *MatchResults) ([]emitter.Broadcast, error) {
 	if matchResults == nil {
 		return []emitter.Broadcast{}, nil
 	}
@@ -345,7 +496,7 @@ func (a *DefaultDeltaAssembler) AssembleBroadcast(matchResults *MatchResults) ([
 	type channelKey struct {
 		channel string
 	}
-	
+
 	bestChannels := make(map[channelKey]*emitter.Broadcast)
 	visibilityPriority := map[string]int{
 		"presence": 3,
@@ -358,14 +509,14 @@ func (a *DefaultDeltaAssembler) AssembleBroadcast(matchResults *MatchResults) ([
 			a.stats.SkippedPatterns++
 			continue
 		}
-		
+
 		if match.File != "" && !strings.HasSuffix(match.File, "routes/channels.php") {
 			a.stats.SkippedPatterns++
 			continue
 		}
 
 		key := channelKey{channel: match.Channel}
-		
+
 		bc := emitter.Broadcast{
 			Channel:    match.Channel,
 			Params:     match.Params,
@@ -383,7 +534,7 @@ func (a *DefaultDeltaAssembler) AssembleBroadcast(matchResults *MatchResults) ([
 		if existing, exists := bestChannels[key]; exists {
 			existingPriority := visibilityPriority[existing.Visibility]
 			newPriority := visibilityPriority[bc.Visibility]
-			
+
 			if newPriority > existingPriority {
 				bestChannels[key] = &bc
 			}
@@ -405,17 +556,17 @@ func (a *DefaultDeltaAssembler) AssembleBroadcast(matchResults *MatchResults) ([
 }
 
 // AssembleMetadata creates metadata for the delta.json.
-func (a *DefaultDeltaAssembler) AssembleMetadata(results *PipelineResults, stats *PipelineStats) (emitter.MetaInfo, error) {
+func (a *DefaultDeltaAssembler) AssembleMetadata(ctx context.Context, results *PipelineResults, stats *PipelineStats) (emitter.MetaInfo, error) {
 	durationMs := int64(stats.TotalDuration.Milliseconds())
-	
+
 	if durationMs == 0 && stats != nil {
-		fallbackDuration := stats.IndexingDuration + stats.ParsingDuration + 
+		fallbackDuration := stats.IndexingDuration + stats.ParsingDuration +
 			stats.MatchingDuration + stats.InferenceDuration + stats.AssemblyDuration
 		if fallbackDuration > 0 {
 			durationMs = int64(fallbackDuration.Milliseconds())
 		}
 	}
-	
+
 	metaStats := emitter.MetaStats{
 		FilesParsed: int64(stats.FilesProcessed),
 		Skipped:     int64(stats.FilesSkipped),
@@ -423,13 +574,13 @@ func (a *DefaultDeltaAssembler) AssembleMetadata(results *PipelineResults, stats
 	}
 
 	// Add assembler stats if they contain meaningful data
-	if a.stats.SkippedControllers > 0 || a.stats.SkippedModels > 0 || 
+	if a.stats.SkippedControllers > 0 || a.stats.SkippedModels > 0 ||
 		a.stats.SkippedPatterns > 0 || a.stats.UnresolvableMatches > 0 {
 		metaStats.AssemblerStats = &emitter.AssemblerStats{
-			SkippedControllers:   a.stats.SkippedControllers,
-			SkippedModels:        a.stats.SkippedModels,
-			SkippedPatterns:      a.stats.SkippedPatterns,
-			UnresolvableMatches:  a.stats.UnresolvableMatches,
+			SkippedControllers:  a.stats.SkippedControllers,
+			SkippedModels:       a.stats.SkippedModels,
+			SkippedPatterns:     a.stats.SkippedPatterns,
+			UnresolvableMatches: a.stats.UnresolvableMatches,
 		}
 	}
 
@@ -455,50 +606,55 @@ type ControllerMethod struct {
 }
 
 // groupByControllerMethod groups results by controller class and method.
-func (a *DefaultDeltaAssembler) groupByControllerMethod(parseResults *ParseResults, matchResults *MatchResults, inferenceResults *InferenceResults) []*ControllerMethod {
+func (a *DefaultDeltaAssembler) groupByControllerMethod(ctx context.Context, parseResults *ParseResults, matchResults *MatchResults, inferenceResults *InferenceResults) []*ControllerMethod {
 	methodMap := make(map[string]*ControllerMethod)
 
 	// Process controllers from parse results
-	for _, parsedFile := range parseResults.ParsedFiles {
-		if parsedFile.LaravelPatterns != nil {
-			for _, controller := range parsedFile.LaravelPatterns.Controllers {
-				for _, action := range controller.Actions {
-					fqcn := controller.Class.FullyQualifiedName
-					method := action.Name
-					key := fqcn + "::" + method
-
-					cm := &ControllerMethod{
-						FQCN:   fqcn,
-						Method: method,
-					}
-					methodMap[key] = cm
-				}
+	for fqcn, methods := range parseResults.Controllers {
+		for _, method := range methods {
+			// Filter out magic/internal methods (but keep __invoke for single-action controllers)
+			if a.shouldFilterControllerMethod(method) {
+				a.stats.UnresolvableMatches++
+				continue
 			}
+
+			key := fqcn + "::" + method
+
+			cm := &ControllerMethod{
+				FQCN:   fqcn,
+				Method: method,
+			}
+			methodMap[key] = cm
 		}
 	}
 
-	// Add HTTP status matches by extracting method from pattern
-	for _, match := range matchResults.HTTPStatusMatches {
-		if key, ok := a.extractMethodKeyFromPattern(match.Pattern); ok {
-			if cm, exists := methodMap[key]; exists {
-				cm.HTTPStatus = match
-			} else {
-				// Create new controller method if it doesn't exist
-				if controller, controllerOk := a.extractControllerFromKey(key); controllerOk {
-					if method, methodOk := a.extractMethodFromKey(key); methodOk {
-						cm := &ControllerMethod{
-							FQCN:       controller,
-							Method:     method,
-							HTTPStatus: match,
-						}
-						methodMap[key] = cm
-					}
-					// Skip if method cannot be resolved from key
-				}
-				// Skip if controller cannot be resolved
-			}
+	// DEBUG: Log a few controller keys to see the format
+	count := 0
+	for key := range methodMap {
+		if count < 3 {
+			logging.VerboseFromContext(ctx, "assembler", "DEBUG: Controller key example: '%s'", key)
+			count++
 		}
-		// Skip matches that cannot be resolved to valid method keys
+	}
+
+	// Add HTTP status matches using proper context
+	for _, match := range matchResults.HTTPStatusMatches {
+		if match.Method != "" {
+			// DEBUG: Log what context we're getting
+			logging.VerboseFromContext(ctx, "assembler", "DEBUG: HTTPStatusMatch.Method='%s'", match.Method)
+
+			// HTTPStatusMatch.Method should contain the Controller::method context
+			if cm, exists := methodMap[match.Method]; exists {
+				cm.HTTPStatus = match
+				logging.VerboseFromContext(ctx, "assembler", "DEBUG: Successfully matched HTTPStatusMatch to %s", match.Method)
+			} else {
+				a.stats.UnresolvableMatches++
+				logging.VerboseFromContext(ctx, "assembler", "DEBUG: Failed to match HTTPStatusMatch.Method='%s' to any controller", match.Method)
+			}
+		} else {
+			a.stats.UnresolvableMatches++
+			logging.VerboseFromContext(ctx, "assembler", "DEBUG: HTTPStatusMatch has empty Method field")
+		}
 	}
 
 	// Add request info from inference with sorted keys for determinism
@@ -517,32 +673,70 @@ func (a *DefaultDeltaAssembler) groupByControllerMethod(parseResults *ParseResul
 		}
 	}
 
-	// Add other pattern matches with proper key extraction
+	// Add resource matches using proper context
 	for _, match := range matchResults.ResourceMatches {
-		if key, ok := a.extractMethodKeyFromPattern(match.Pattern); ok {
-			if cm, exists := methodMap[key]; exists {
+		if match.Method != "" {
+			// DEBUG: Log what context we're getting
+			logging.VerboseFromContext(ctx, "assembler", "DEBUG: ResourceMatch.Method='%s'", match.Method)
+
+			// ResourceMatch.Method should contain the Controller::method context
+			if cm, exists := methodMap[match.Method]; exists {
 				cm.Resources = append(cm.Resources, match)
+				logging.VerboseFromContext(ctx, "assembler", "DEBUG: Successfully matched ResourceMatch to %s", match.Method)
+			} else {
+				a.stats.UnresolvableMatches++
+				logging.VerboseFromContext(ctx, "assembler", "DEBUG: Failed to match ResourceMatch.Method='%s' to any controller", match.Method)
 			}
+		} else {
+			a.stats.UnresolvableMatches++
+			logging.VerboseFromContext(ctx, "assembler", "DEBUG: ResourceMatch has empty Method field")
 		}
-		// Skip resource matches that cannot be resolved to valid method keys
 	}
 
+	// Add scope matches using proper context with data quality filtering
 	for _, match := range matchResults.ScopeMatches {
-		if key, ok := a.extractMethodKeyFromScopeMatch(match.Context, match.Pattern); ok {
-			if cm, exists := methodMap[key]; exists {
-				cm.Scopes = append(cm.Scopes, match)
-			}
+		// Filter out bad scope data: only emit scopes with proper model FQCNs
+		if match.On == "" || !strings.Contains(match.On, "\\") {
+			// Skip scopes where 'on' is not a namespaced model FQCN
+			a.stats.UnresolvableMatches++
+			logging.VerboseFromContext(ctx, "assembler", "DEBUG: Skipping ScopeMatch with invalid 'on' field: '%s'", match.On)
+			continue
 		}
-		// Skip scope matches that cannot be resolved to valid method keys
+
+		// Filter out empty/unknown scope names
+		if match.Name == "" || match.Name == "unknown" {
+			a.stats.UnresolvableMatches++
+			logging.VerboseFromContext(ctx, "assembler", "DEBUG: Skipping ScopeMatch with invalid name: '%s'", match.Name)
+			continue
+		}
+
+		if match.Context != "" {
+			// ScopeMatch.Context should contain Controller::method context
+			if cm, exists := methodMap[match.Context]; exists {
+				cm.Scopes = append(cm.Scopes, match)
+				logging.VerboseFromContext(ctx, "assembler", "DEBUG: Successfully matched ScopeMatch (on=%s, name=%s) to %s", match.On, match.Name, match.Context)
+			} else {
+				a.stats.UnresolvableMatches++
+				logging.VerboseFromContext(ctx, "assembler", "DEBUG: Failed to match ScopeMatch.Context='%s' to any controller", match.Context)
+			}
+		} else {
+			a.stats.UnresolvableMatches++
+			logging.VerboseFromContext(ctx, "assembler", "DEBUG: ScopeMatch has empty Context field")
+		}
 	}
 
+	// Add polymorphic matches using proper context
 	for _, match := range matchResults.PolymorphicMatches {
-		if key, ok := a.extractMethodKeyFromPolymorphicMatch(match.Context, match.Pattern); ok {
-			if cm, exists := methodMap[key]; exists {
+		if match.Context != "" {
+			// PolymorphicMatch.Context should contain Controller::method context
+			if cm, exists := methodMap[match.Context]; exists {
 				cm.Polymorphic = append(cm.Polymorphic, match)
+			} else {
+				a.stats.UnresolvableMatches++
 			}
+		} else {
+			a.stats.UnresolvableMatches++
 		}
-		// Skip polymorphic matches that cannot be resolved to valid method keys
 	}
 
 	// Convert map to slice
@@ -574,17 +768,12 @@ type ModelData struct {
 func (a *DefaultDeltaAssembler) groupByModelClass(parseResults *ParseResults, matchResults *MatchResults) []*ModelData {
 	modelMap := make(map[string]*ModelData)
 
-	// Process models from parse results
-	for _, parsedFile := range parseResults.ParsedFiles {
-		if parsedFile.LaravelPatterns != nil {
-			for _, model := range parsedFile.LaravelPatterns.Models {
-				fqcn := model.Class.FullyQualifiedName
-				md := &ModelData{
-					FQCN: fqcn,
-				}
-				modelMap[fqcn] = md
-			}
+	// Process models from parse results (already filtered by parser's isLaravelModel)
+	for fqcn := range parseResults.Models {
+		md := &ModelData{
+			FQCN: fqcn,
 		}
+		modelMap[fqcn] = md
 	}
 
 	// Add pivot matches with proper model extraction
@@ -691,12 +880,20 @@ func (a *DefaultDeltaAssembler) convertRequestInfo(requestInfo *infer.RequestInf
 		return nil
 	}
 
-	return &emitter.RequestInfo{
+	fields := append([]emitter.RequestField{}, a.convertOrderedObjectToFields("body", &requestInfo.Body, "")...)
+	fields = append(fields, a.convertOrderedObjectToFields("query", &requestInfo.Query, "")...)
+	fields = append(fields, a.convertOrderedObjectToFields("files", &requestInfo.Files, "")...)
+
+	request := &emitter.RequestInfo{
 		ContentTypes: requestInfo.ContentTypes,
 		Body:         a.convertOrderedObjectToEmitter(&requestInfo.Body),
 		Query:        a.convertOrderedObjectToEmitter(&requestInfo.Query),
 		Files:        a.convertOrderedObjectToEmitter(&requestInfo.Files),
 	}
+	if len(fields) > 0 {
+		request.Fields = fields
+	}
+	return request
 }
 
 // convertOrderedObjectToEmitter converts infer.OrderedObject to emitter.OrderedObject.
@@ -745,11 +942,12 @@ func (a *DefaultDeltaAssembler) convertPropertyToEmitter(prop *infer.PropertyInf
 	case infer.PropertyTypeArray:
 		// Handle array items
 		if prop.Items != nil {
-			// For arrays, we need to represent the item structure
-			// Laravel patterns like users.*.email become {"*": {"email": {}}}
-			return a.convertPropertyToEmitter(prop.Items)
+			// For arrays, represent item structure under the wildcard key "*"
+			result["*"] = a.convertPropertyToEmitter(prop.Items)
+			return result
 		}
-		return emitter.OrderedObject{}
+		result["*"] = emitter.OrderedObject{}
+		return result
 
 	case infer.PropertyTypeString, infer.PropertyTypeNumber, infer.PropertyTypeFile:
 		// For primitive types, return an empty object as terminal
@@ -762,6 +960,140 @@ func (a *DefaultDeltaAssembler) convertPropertyToEmitter(prop *infer.PropertyInf
 	}
 }
 
+func (a *DefaultDeltaAssembler) convertOrderedObjectToFields(location string, obj *infer.OrderedObject, prefix string) []emitter.RequestField {
+	if obj == nil || obj.IsEmpty() {
+		return nil
+	}
+
+	fields := make([]emitter.RequestField, 0, len(obj.Order))
+	for _, key := range obj.Order {
+		prop, exists := obj.Properties[key]
+		if !exists || prop == nil {
+			continue
+		}
+
+		path := joinRequestFieldPath(prefix, key)
+		if path == "" {
+			continue
+		}
+
+		required := obj.IsRequired(key)
+		fields = append(fields, a.newRequestField(location, path, prop, requestBoolPtr(required), requestBoolPtr(!required)))
+		fields = append(fields, a.convertNestedRequestFields(location, path, prop)...)
+	}
+
+	return fields
+}
+
+func (a *DefaultDeltaAssembler) convertNestedRequestFields(location, path string, prop *infer.PropertyInfo) []emitter.RequestField {
+	if prop == nil {
+		return nil
+	}
+
+	switch prop.Type {
+	case infer.PropertyTypeObject:
+		if prop.Properties == nil || prop.Properties.IsEmpty() {
+			return nil
+		}
+		return a.convertOrderedObjectToFields(location, prop.Properties, path)
+	case infer.PropertyTypeArray:
+		if prop.Items == nil {
+			return nil
+		}
+
+		itemPath := joinRequestFieldPath(path, "*")
+		fields := make([]emitter.RequestField, 0, 1)
+		if prop.Items.Type == infer.PropertyTypeObject || prop.Items.Type == infer.PropertyTypeArray {
+			fields = append(fields, a.newRequestField(location, itemPath, prop.Items, nil, nil))
+		}
+		fields = append(fields, a.convertNestedRequestFields(location, itemPath, prop.Items)...)
+		return fields
+	default:
+		return nil
+	}
+}
+
+func (a *DefaultDeltaAssembler) newRequestField(location, path string, prop *infer.PropertyInfo, required, optional *bool) emitter.RequestField {
+	field := emitter.RequestField{
+		Location: location,
+		Path:     path,
+		Required: required,
+		Optional: optional,
+		Source:   "request-usage",
+		Via:      "infer",
+	}
+
+	switch prop.Type {
+	case infer.PropertyTypeObject:
+		field.Kind = "object"
+		field.Type = "object"
+	case infer.PropertyTypeArray:
+		isArray := true
+		field.Kind = "collection"
+		field.Type = "array"
+		field.IsArray = requestBoolPtr(isArray)
+		field.Collection = requestBoolPtr(isArray)
+		field.ItemType = inferItemType(prop.Items)
+	case infer.PropertyTypeFile:
+		field.Kind = "file"
+		field.Type = "file"
+		field.ScalarType = "string"
+		field.Format = firstNonEmpty(prop.Format, "binary")
+	default:
+		field.Kind = "scalar"
+		field.Type = string(prop.Type)
+		field.ScalarType = string(prop.Type)
+		field.Format = prop.Format
+	}
+
+	return field
+}
+
+func inferItemType(prop *infer.PropertyInfo) string {
+	if prop == nil {
+		return ""
+	}
+	switch prop.Type {
+	case infer.PropertyTypeObject:
+		return "object"
+	case infer.PropertyTypeArray:
+		return "array"
+	case infer.PropertyTypeFile:
+		return "file"
+	default:
+		return string(prop.Type)
+	}
+}
+
+func joinRequestFieldPath(prefix, key string) string {
+	key = strings.TrimSpace(key)
+	switch key {
+	case "", "_item", "*":
+		if prefix == "" {
+			return ""
+		}
+		return prefix + "[]"
+	}
+
+	if prefix == "" {
+		return key
+	}
+	return prefix + "." + key
+}
+
+func requestBoolPtr(v bool) *bool {
+	return &v
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 // extractParentFromContext extracts parent class from polymorphic match context.
 // Returns empty string and false if cannot resolve to a valid parent.
 func (a *DefaultDeltaAssembler) extractParentFromContext(match *matchers.PolymorphicMatch) (string, bool) {
@@ -769,7 +1101,7 @@ func (a *DefaultDeltaAssembler) extractParentFromContext(match *matchers.Polymor
 		a.stats.SkippedModels++
 		return "", false
 	}
-	
+
 	if match.Context != "" {
 		// Extract parent from context string (simplified)
 		parts := strings.Split(match.Context, "::")
@@ -777,12 +1109,11 @@ func (a *DefaultDeltaAssembler) extractParentFromContext(match *matchers.Polymor
 			return parts[0], true
 		}
 	}
-	
+
 	// Could not resolve parent from context
 	a.stats.SkippedModels++
 	return "", false
 }
-
 
 // extractControllerFromKey extracts controller FQCN from method key.
 // Returns empty string and false if the key cannot be resolved to a valid controller.
@@ -790,12 +1121,12 @@ func (a *DefaultDeltaAssembler) extractControllerFromKey(key string) (string, bo
 	if key == "" {
 		return "", false
 	}
-	
+
 	parts := strings.Split(key, "::")
 	if len(parts) > 0 && parts[0] != "" {
 		return parts[0], true
 	}
-	
+
 	a.stats.SkippedControllers++
 	return "", false
 }
@@ -807,12 +1138,12 @@ func (a *DefaultDeltaAssembler) extractMethodFromKey(key string) (string, bool) 
 		a.stats.SkippedControllers++
 		return "", false
 	}
-	
+
 	parts := strings.Split(key, "::")
 	if len(parts) > 1 && parts[1] != "" {
 		return parts[1], true
 	}
-	
+
 	// Could not resolve method from key
 	a.stats.SkippedControllers++
 	return "", false
@@ -825,12 +1156,12 @@ func (a *DefaultDeltaAssembler) extractMethodKeyFromPattern(pattern string) (str
 		a.stats.SkippedPatterns++
 		return "", false
 	}
-	
+
 	// TODO: Implement proper pattern to method key extraction
 	// For now, we cannot resolve method keys from patterns without additional context
 	// This needs to be fixed to properly extract Controller::method from the pattern
 	// The pattern should include context about which controller/method it came from
-	
+
 	a.stats.UnresolvableMatches++
 	return "", false
 }
@@ -841,7 +1172,7 @@ func (a *DefaultDeltaAssembler) extractMethodKeyFromScopeMatch(context, pattern 
 	if context != "" && strings.Contains(context, "::") {
 		return context, true
 	}
-	
+
 	// Try to extract from pattern, but this will likely fail
 	return a.extractMethodKeyFromPattern(pattern)
 }
@@ -855,18 +1186,70 @@ func (a *DefaultDeltaAssembler) extractMethodKeyFromPolymorphicMatch(context, pa
 	return a.extractMethodKeyFromPattern(pattern)
 }
 
+// shouldFilterControllerMethod checks if a controller method should be filtered out.
+// Filters magic/internal methods but keeps __invoke for single-action controllers.
+func (a *DefaultDeltaAssembler) shouldFilterControllerMethod(method string) bool {
+	// Filter out magic methods except __invoke (which is legitimate for single-action controllers)
+	if strings.HasPrefix(method, "__") {
+		return method != "__invoke"
+	}
+
+	// Filter out other internal methods
+	internalMethods := []string{
+		"boot",
+		"booting",
+		"booted",
+		"initializeTraits",
+		"callAction",
+		"getMiddleware",
+	}
+
+	for _, internal := range internalMethods {
+		if method == internal {
+			return true
+		}
+	}
+
+	return false
+}
+
 // extractModelFromPatternAndMethod extracts a model FQCN from pattern and method.
 // Returns empty string and false if cannot resolve to a valid model FQCN.
 func (a *DefaultDeltaAssembler) extractModelFromPatternAndMethod(pattern, method string) (string, bool) {
 	// Try to extract from method first if it contains class info
 	if method != "" && strings.Contains(method, "\\") {
-		return method, true
+		var modelFQCN string
+
+		// Handle pseudo-FQCNs with ::method - extract just the model FQCN
+		if strings.Contains(method, "::") {
+			parts := strings.Split(method, "::")
+			if len(parts) >= 2 {
+				modelFQCN = parts[0]
+			}
+		} else {
+			// Direct FQCN without ::method
+			modelFQCN = method
+		}
+
+		// Simple validation: must be a valid FQCN format
+		if modelFQCN != "" && strings.Contains(modelFQCN, "\\") {
+			return modelFQCN, true
+		}
 	}
-	
+
 	// Cannot resolve model from pattern alone without additional context
-	// Real implementation would need access to parsed models from parse results
-	
 	a.stats.SkippedModels++
+	return "", false
+}
+
+// extractMethodKeyFromRequestUsagePattern extracts a method key from request usage match.
+// Returns empty string and false if cannot resolve to a valid method key.
+func (a *DefaultDeltaAssembler) extractMethodKeyFromRequestUsagePattern(match *matchers.RequestUsageMatch) (string, bool) {
+	// RequestUsageMatch doesn't have context or pattern fields like other matches
+	// This needs to be coordinated with how request usage is detected and stored
+	// For now, we cannot extract method keys from RequestUsageMatch without additional context
+
+	a.stats.UnresolvableMatches++
 	return "", false
 }
 
@@ -875,15 +1258,22 @@ func (a *DefaultDeltaAssembler) extractModelFromPatternAndMethod(pattern, method
 func (a *DefaultDeltaAssembler) extractModelFromPolymorphicMatch(context, pattern string) (string, bool) {
 	// Try to extract from context first
 	if context != "" {
-		// Look for model class name in context
-		if strings.Contains(context, "\\Models\\") {
-			return context, true
-		}
+		var modelFQCN string
+
+		// Handle pseudo-FQCNs with ::method - extract just the model FQCN
 		if strings.Contains(context, "::") {
 			parts := strings.Split(context, "::")
 			if len(parts) > 0 && parts[0] != "" {
-				return parts[0], true
+				modelFQCN = parts[0]
 			}
+		} else {
+			// Direct FQCN without ::method
+			modelFQCN = context
+		}
+
+		// Simple validation: must be a valid FQCN format
+		if modelFQCN != "" && strings.Contains(modelFQCN, "\\") {
+			return modelFQCN, true
 		}
 	}
 
@@ -921,52 +1311,58 @@ func (a *DefaultDeltaAssembler) calculatePipelineStats(results *PipelineResults)
 	if results.ProcessingTime == 0 {
 		// Compute fallback as sum of available stage durations for non-trivial runs
 		var fallbackDuration time.Duration
-		
+
 		// Add indexing phase duration
 		if results.IndexResult != nil && results.IndexResult.DurationMs > 0 {
 			fallbackDuration += time.Duration(results.IndexResult.DurationMs) * time.Millisecond
 		}
-		
+
 		// Add parsing phase duration
 		if results.ParseResults != nil && results.ParseResults.ParseDuration > 0 {
 			fallbackDuration += results.ParseResults.ParseDuration
 		}
-		
+
 		// Add matching phase duration
 		if results.MatchResults != nil && results.MatchResults.MatchingDuration > 0 {
 			fallbackDuration += results.MatchResults.MatchingDuration
 		}
-		
+
 		// Add inference phase duration
 		if results.InferenceResults != nil {
 			fallbackDuration += results.InferenceResults.InferenceDuration
 		}
-		
+
 		// If still no duration and we have files processed, estimate minimum time
 		if fallbackDuration == 0 && stats.FilesProcessed > 0 {
 			// Estimate at least 1ms per file as a minimum
 			fallbackDuration = time.Duration(stats.FilesProcessed) * time.Millisecond
 		}
-		
+
 		// If no stage durations available, compute from start/end times
 		if fallbackDuration == 0 && !results.EndTime.IsZero() && !results.StartTime.IsZero() {
 			fallbackDuration = results.EndTime.Sub(results.StartTime)
 		}
-		
+
 		// Ensure minimum duration for non-trivial runs
 		if fallbackDuration == 0 && stats.FilesProcessed > 0 {
 			fallbackDuration = time.Millisecond // Minimum 1ms for any real work
 		}
-		
+
 		stats.TotalDuration = fallbackDuration
 	} else {
 		stats.TotalDuration = results.ProcessingTime
 	}
-	
+
 	// Ensure durationMs is never 0 for non-trivial runs
 	if stats.TotalDuration == 0 && stats.FilesProcessed > 0 {
 		stats.TotalDuration = time.Millisecond
 	}
 
 	return stats
+}
+
+// ConvertOrderedObjectToEmitter is a public wrapper for testing T7 recursion.
+// This method exposes the internal conversion logic for validation purposes.
+func (a *DefaultDeltaAssembler) ConvertOrderedObjectToEmitter(obj *infer.OrderedObject) emitter.OrderedObject {
+	return a.convertOrderedObjectToEmitter(obj)
 }

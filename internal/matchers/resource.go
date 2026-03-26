@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/garaekz/oxinfer/internal/parser"
+	"github.com/oxhq/oxinfer/internal/parser"
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
@@ -173,6 +173,7 @@ func (m *DefaultResourceMatcher) processResourceMatch(
 	var className string
 	var methodName string
 	var position parser.Point
+	var classNode *sitter.Node
 
 	// Extract captures
 	for _, capture := range match.Captures {
@@ -180,7 +181,7 @@ func (m *DefaultResourceMatcher) processResourceMatch(
 
 		switch captureName {
 		case "class":
-			classNode := capture.Node
+			classNode = capture.Node
 			className = string(classNode.Content(tree.Source))
 			position = parser.Point{Row: int(classNode.StartPoint().Row), Column: int(classNode.StartPoint().Column)}
 		case "method":
@@ -194,45 +195,51 @@ func (m *DefaultResourceMatcher) processResourceMatch(
 		return nil
 	}
 
+	resolvedClassName := m.resolveClassName(className, tree)
+
 	// Clean class name
 	className = m.cleanResourceClassName(className)
 
 	// Determine if class looks like a Resource or is an alias to a Resource
-	looksResource := m.isResourceClass(className)
+	looksResource := m.isResourceClass(className, resolvedClassName)
 	if !looksResource {
 		// Try alias resolution based on use statements
 		aliasMap := parseUseAliases(string(tree.Source))
-		if fqcn, ok := aliasMap[className]; ok && strings.HasSuffix(fqcn, "Resource") {
+		if fqcn, ok := aliasMap[className]; ok && m.isResourceClass(className, fqcn) {
 			looksResource = true
+			resolvedClassName = fqcn
 		}
 	}
 	if !looksResource {
 		return nil
 	}
 
-	// Determine if this is a collection or single resource
-	isCollection := m.determineCollectionType(queryDef.Name, methodName)
+	patternName := m.classifyPattern(classNode, methodName, queryDef.Name)
 
-	// Resolve full class name using imports
-	resolvedClassName := m.resolveClassName(className, tree)
+	// Determine if this is a collection or single resource
+	isCollection := m.determineCollectionType(patternName, methodName)
+
+	// Extract controller context from the AST
+	controllerMethod := m.extractControllerMethodContext(match.Captures[0].Node, tree, filePath)
 
 	// Create resource match
 	resourceMatch := &ResourceMatch{
-		Class:      resolvedClassName,
+		Class:      className,
+		FQCN:       strings.TrimPrefix(resolvedClassName, `\`),
 		Collection: isCollection,
-		Pattern:    queryDef.Name,
-		Method:     methodName,
+		Pattern:    patternName,
+		Method:     controllerMethod, // Use controller context instead of resource method
 	}
 
 	return &MatchResult{
 		Type:       PatternTypeResource,
 		Position:   position,
-		Content:    fmt.Sprintf("%s%s", resolvedClassName, m.getMethodSuffix(methodName)),
-		Confidence: queryDef.Confidence,
+		Content:    fmt.Sprintf("%s%s", className, m.getMethodSuffix(methodName)),
+		Confidence: m.matchConfidence(patternName),
 		Data:       resourceMatch,
 		Context: &MatchContext{
 			FilePath: filePath,
-			Explicit: m.isExplicitResourceUsage(queryDef.Name),
+			Explicit: m.isExplicitResourceUsage(patternName),
 		},
 	}
 }
@@ -252,14 +259,29 @@ func (m *DefaultResourceMatcher) cleanResourceClassName(className string) string
 }
 
 // isResourceClass validates that a class name appears to be a Laravel Resource.
-func (m *DefaultResourceMatcher) isResourceClass(className string) bool {
+func (m *DefaultResourceMatcher) isResourceClass(className, resolvedClassName string) bool {
 	// Must end with "Resource"
-	if !strings.HasSuffix(className, "Resource") {
-		return false
+	if strings.HasSuffix(className, "Resource") || strings.HasSuffix(resolvedClassName, "Resource") {
+		goto validate
 	}
 
+	// Explicit ResourceCollection classes are also response resources when they
+	// live under a Laravel resources namespace.
+	if (strings.HasSuffix(className, "Collection") || strings.HasSuffix(resolvedClassName, "Collection")) &&
+		strings.Contains(resolvedClassName, `\Resources\`) {
+		goto validate
+	}
+
+	return false
+
+validate:
+
 	// Must be at least "XResource" (minimum length check)
-	if len(className) < 9 { // "XResource" = 9 chars
+	shortResolved := resolvedClassName
+	if idx := strings.LastIndex(shortResolved, `\`); idx != -1 {
+		shortResolved = shortResolved[idx+1:]
+	}
+	if len(className) < 9 && len(shortResolved) < 9 {
 		return false
 	}
 
@@ -283,6 +305,41 @@ func (m *DefaultResourceMatcher) determineCollectionType(patternName, methodName
 	default:
 		return false // Default to single resource
 	}
+}
+
+func (m *DefaultResourceMatcher) classifyPattern(classNode *sitter.Node, methodName, fallback string) string {
+	inReturn := false
+	inAssignment := false
+
+	for current := classNode; current != nil; current = current.Parent() {
+		switch current.Type() {
+		case "return_statement":
+			inReturn = true
+		case "assignment_expression":
+			inAssignment = true
+		}
+	}
+
+	switch methodName {
+	case "collection":
+		if inReturn {
+			return "return_resource_collection"
+		}
+		return "resource_collection_static"
+	case "make":
+		return "resource_make_static"
+	}
+
+	if inAssignment {
+		return "variable_resource_assignment"
+	}
+	if inReturn {
+		return "return_new_resource"
+	}
+	if fallback != "" {
+		return fallback
+	}
+	return "new_resource_instantiation"
 }
 
 // isExplicitResourceUsage determines if resource usage is explicit.
@@ -320,6 +377,19 @@ func (m *DefaultResourceMatcher) resolveClassName(className string, tree *parser
 		return fqcn
 	}
 	return className
+}
+
+func (m *DefaultResourceMatcher) matchConfidence(patternName string) float64 {
+	switch patternName {
+	case "resource_collection_static", "return_resource_collection":
+		return 1.0
+	case "new_resource_instantiation", "return_new_resource":
+		return 0.98
+	case "resource_make_static", "variable_resource_assignment":
+		return 0.95
+	default:
+		return 0.95
+	}
 }
 
 // convertToSitterNode converts SyntaxTree back to tree-sitter node and tree for querying.
@@ -374,28 +444,19 @@ func (m *DefaultResourceMatcher) deduplicateResults(results []*MatchResult) []*M
 	selected := make(map[string]*MatchResult)
 
 	rank := func(rm *ResourceMatch) int {
-		if rm.Method == "collection" {
-			if rm.Pattern == "return_resource_collection" {
-				return 100
-			}
-			if rm.Pattern == "resource_collection_static" {
-				return 90
-			}
-		}
-		if rm.Method == "make" {
-			if rm.Pattern == "resource_make_static" {
-				return 100
-			}
-		}
 		switch rm.Pattern {
+		case "resource_make_static":
+			return 100
+		case "return_resource_collection":
+			return 95
+		case "resource_collection_static":
+			return 90
 		case "return_new_resource":
 			return 80
 		case "new_resource_instantiation":
 			return 70
 		case "variable_resource_assignment":
 			return 60
-		case "resource_collection_static", "return_resource_collection":
-			return 50
 		default:
 			return 10
 		}
@@ -514,4 +575,87 @@ func ValidateResourceClassName(className string) bool {
 	}
 
 	return true
+}
+
+// extractControllerMethodContext walks up the AST to find the controller class and method
+// containing this resource pattern match
+func (m *DefaultResourceMatcher) extractControllerMethodContext(node *sitter.Node, tree *parser.SyntaxTree, filePath string) string {
+	current := node
+
+	// Walk up the AST to find the method declaration
+	for current != nil {
+		if current.Type() == "method_declaration" {
+			// Found method, get its name
+			methodName := m.getMethodNameFromNode(current, tree.Source)
+
+			// Continue walking up to find the class
+			classNode := current
+			for classNode != nil {
+				if classNode.Type() == "class_declaration" {
+					className := m.getClassNameFromNode(classNode, tree.Source)
+					namespace := m.getNamespaceFromTree(tree.Source)
+
+					// Build FQCN
+					var fqcn string
+					if namespace != "" {
+						fqcn = namespace + "\\" + className
+					} else {
+						fqcn = className
+					}
+
+					return fqcn + "::" + methodName
+				}
+				classNode = classNode.Parent()
+			}
+		}
+		current = current.Parent()
+	}
+
+	// If we can't find method context, return empty (will be marked unresolvable)
+	return ""
+}
+
+// getMethodNameFromNode extracts method name from method_declaration node
+func (m *DefaultResourceMatcher) getMethodNameFromNode(methodNode *sitter.Node, source []byte) string {
+	for i := uint32(0); i < methodNode.ChildCount(); i++ {
+		child := methodNode.Child(int(i))
+		if child.Type() == "name" {
+			return string(child.Content(source))
+		}
+	}
+	return ""
+}
+
+// getClassNameFromNode extracts class name from class_declaration node
+func (m *DefaultResourceMatcher) getClassNameFromNode(classNode *sitter.Node, source []byte) string {
+	for i := uint32(0); i < classNode.ChildCount(); i++ {
+		child := classNode.Child(int(i))
+		if child.Type() == "name" {
+			return string(child.Content(source))
+		}
+	}
+	return ""
+}
+
+// getNamespaceFromTree extracts namespace from the file by parsing the source
+func (m *DefaultResourceMatcher) getNamespaceFromTree(source []byte) string {
+	sourceStr := string(source)
+
+	// Look for namespace declaration
+	lines := strings.Split(sourceStr, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "namespace ") {
+			// Extract namespace
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				namespace := parts[1]
+				// Remove semicolon if present
+				namespace = strings.TrimSuffix(namespace, ";")
+				return namespace
+			}
+		}
+	}
+
+	return ""
 }

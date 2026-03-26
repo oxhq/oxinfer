@@ -1,3 +1,5 @@
+//go:build goexperiment.jsonv2
+
 // Package stats provides thread-safe statistics collection for the Oxinfer pipeline.
 // It implements atomic operations for concurrent access and deterministic output for consistent results.
 package stats

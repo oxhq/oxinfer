@@ -2,6 +2,8 @@
 
 A Go CLI tool that uses tree-sitter PHP to analyze Laravel/PHP repositories without executing PHP. It scans `app/` and `routes/` directories, detects key Laravel patterns, and emits deterministic JSON for OpenAPI generation.
 
+`oxinfer` is frozen for `v0.1.0` with the machine contract `oxcribe.oxinfer.v2` treated as the active stable integration surface for `oxcribe`.
+
 ## Features
 
 - **Static Analysis**: Analyzes PHP code without execution using tree-sitter
@@ -9,12 +11,18 @@ A Go CLI tool that uses tree-sitter PHP to analyze Laravel/PHP repositories with
 - **Deterministic Output**: Same repository always produces identical JSON (byte-for-byte)
 - **Concurrent Processing**: Configurable worker pools with memory-efficient caching
 - **Contract-First**: Input/output validated against JSON schemas
+- **Machine Contract v2**: `--request` mode accepts `AnalysisRequest` JSON and emits `AnalysisResponse` JSON for `oxcribe`
 
 ## Installation
 
 ```bash
-go build -o oxinfer cmd/oxinfer
+GOEXPERIMENT=jsonv2 go build -o oxinfer ./cmd/oxinfer
 ```
+
+`oxinfer` currently requires Go's experimental `encoding/json/v2`.
+That means direct `go build` and `go test` invocations must be run with `GOEXPERIMENT=jsonv2`, or the build tags in this repository will exclude the CLI and schema-contract packages.
+
+If you prefer repository shortcuts, `make build` and `make test` already set `GOEXPERIMENT=jsonv2` for you.
 
 ## Usage
 
@@ -25,13 +33,30 @@ go build -o oxinfer cmd/oxinfer
 oxinfer --manifest manifest.json
 
 # Read manifest from stdin
-cat manifest.json | oxinfer
+cat manifest.json | oxinfer --manifest -
+
+# Run the strict machine contract
+cat analysis-request.json | oxinfer --request -
 
 # Output to specific file
 oxinfer --manifest manifest.json --out delta.json
 
 # Print help
 oxinfer --help
+```
+
+### Build & Test
+
+```bash
+# Build the CLI directly
+GOEXPERIMENT=jsonv2 go build -o oxinfer ./cmd/oxinfer
+
+# Run the full test suite directly
+GOEXPERIMENT=jsonv2 go test ./...
+
+# Or use the Makefile shortcuts
+make build
+make test
 ```
 
 ### Manifest File Format
@@ -74,6 +99,7 @@ oxinfer --help
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--manifest <file>` | Path to manifest file (or `-` for stdin) | - |
+| `--request <file>` | Path to `AnalysisRequest` JSON (or `-` for stdin) | unset |
 | `--out <file>` | Output file path (or `-` for stdout) | stdout |
 | `--cache-dir <dir>` | Override cache directory | `<project>/.oxinfer/cache/v1` |
 | `--log-level <level>` | Log level: error\|warn\|info\|debug | warn |
@@ -82,6 +108,18 @@ oxinfer --help
 | `--print-hash` | Print canonical SHA256 to stderr | false |
 | `--stamp` | Include timestamp in output | false |
 | `--version` | Show version information | false |
+
+## Machine Contract
+
+The `--request` mode is the strict interface used by `oxcribe`.
+It keeps the existing static pipeline, but wraps the output in a contract that includes runtime route facts, route-to-controller joins, and structured diagnostics.
+
+The active contract reference lives in [docs/analysis-contract-v2.md](docs/analysis-contract-v2.md).
+The previous `v1` document is kept only as archived reference.
+The release freeze and tagging policy live in [docs/release.md](docs/release.md).
+
+For the upcoming smart examples layer, `oxinfer` should remain responsible only for additive semantic metadata.
+That design note lives in [docs/smart-examples-metadata.md](docs/smart-examples-metadata.md).
 
 ## Limits & Performance
 
@@ -136,6 +174,16 @@ Oxinfer produces structured JSON with detected Laravel patterns:
 }
 ```
 
+In `--request` mode, the output shape changes to `AnalysisResponse` and includes:
+- `contractVersion: "oxcribe.oxinfer.v2"`
+- `requestId`
+- `runtimeFingerprint`
+- `status: ok | partial`
+- `meta` with version, partial flag, stats, and diagnostic counts
+- `delta` with the static analysis graph
+- `routeMatches` for each runtime route
+- `diagnostics` with stable machine-readable codes
+
 ## Pattern Detection
 
 ### Supported Patterns
@@ -158,6 +206,8 @@ Oxinfer produces structured JSON with detected Laravel patterns:
 ## Troubleshooting
 
 ### Common Issues
+
+**Build constraints exclude all Go files**: Run `go build` and `go test` with `GOEXPERIMENT=jsonv2`
 
 **Cache corruption**: Use `rm -rf <project>/.oxinfer/cache` to reset
 

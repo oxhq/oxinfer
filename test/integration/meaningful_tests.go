@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/garaekz/oxinfer/internal/emitter"
+	"github.com/oxhq/oxinfer/internal/emitter"
 )
 
 // TestMatcherIntegration_HTTPStatusValidation tests that HTTP status matchers

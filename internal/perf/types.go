@@ -3,7 +3,7 @@ package perf
 import (
 	"time"
 
-	"github.com/garaekz/oxinfer/internal/bench"
+	"github.com/oxhq/oxinfer/internal/bench"
 )
 
 // AnalysisResults contains the complete results of performance analysis.

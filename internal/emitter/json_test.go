@@ -49,6 +49,10 @@ func TestJSONEmitter_EmitStub(t *testing.T) {
 		t.Error("stub should have empty models array")
 	}
 
+	if delta.Resources == nil || len(delta.Resources) != 0 {
+		t.Error("stub should have empty resources array")
+	}
+
 	if delta.Polymorphic == nil || len(delta.Polymorphic) != 0 {
 		t.Error("stub should have empty polymorphic array")
 	}
@@ -85,6 +89,7 @@ func TestJSONEmitter_MarshalDeterministic(t *testing.T) {
 				},
 				Controllers: []Controller{},
 				Models:      []Model{},
+				Resources:   []ResourceDef{},
 				Polymorphic: []Polymorphic{},
 				Broadcast:   []Broadcast{},
 			},
@@ -126,6 +131,31 @@ func TestJSONEmitter_MarshalDeterministic(t *testing.T) {
 						Request: &RequestInfo{
 							ContentTypes: []string{"multipart/form-data", "application/json"}, // Test content type sorting
 						},
+						Responses: []Response{
+							{
+								Kind:        "json_object",
+								Status:      responseIntPtr(202),
+								ContentType: "application/json",
+								BodySchema: &ResourceSchemaNode{
+									Type: "object",
+									Properties: map[string]ResourceSchemaNode{
+										"zeta":  {Type: "string"},
+										"alpha": {Type: "string"},
+									},
+									Required: []string{"zeta", "alpha"},
+								},
+								Source: "response()->json",
+								Via:    "response()->json",
+							},
+							{
+								Kind:        "no_content",
+								Status:      responseIntPtr(204),
+								Explicit:    responseBoolPtr(true),
+								ContentType: "",
+								Source:      "response()->noContent",
+								Via:         "response()->noContent",
+							},
+						},
 						Resources: []Resource{
 							{Class: "ZResource", Collection: true},
 							{Class: "AResource", Collection: false}, // Should be sorted first
@@ -154,6 +184,31 @@ func TestJSONEmitter_MarshalDeterministic(t *testing.T) {
 					},
 					{
 						FQCN: "AModel", // Should be sorted first
+					},
+				},
+				Resources: []ResourceDef{
+					{
+						FQCN:  "ZResource",
+						Class: "ZResource",
+						Schema: ResourceSchemaNode{
+							Type: "object",
+							Properties: map[string]ResourceSchemaNode{
+								"zeta":  {Type: "string"},
+								"alpha": {Type: "string"},
+							},
+							Required: []string{"zeta", "alpha"},
+						},
+					},
+					{
+						FQCN:  "AResource",
+						Class: "AResource",
+						Schema: ResourceSchemaNode{
+							Type: "object",
+							Properties: map[string]ResourceSchemaNode{
+								"id": {Type: "integer"},
+							},
+							Required: []string{"id"},
+						},
 					},
 				},
 				Broadcast: []Broadcast{
@@ -219,6 +274,16 @@ func TestJSONEmitter_MarshalDeterministic(t *testing.T) {
 				if firstModel["fqcn"] != "AModel" {
 					t.Errorf("first model should be AModel, got %v", firstModel["fqcn"])
 				}
+
+				resourceDefs, ok := result["resources"].([]any)
+				if !ok || len(resourceDefs) != 2 {
+					t.Error("expected 2 resources")
+					return
+				}
+				firstResource := resourceDefs[0].(map[string]any)
+				if firstResource["fqcn"] != "AResource" {
+					t.Errorf("first resource should be AResource, got %v", firstResource["fqcn"])
+				}
 			},
 		},
 	}
@@ -265,6 +330,25 @@ func TestJSONEmitter_DeterministicOutput(t *testing.T) {
 				Method: "update",
 				Request: &RequestInfo{
 					ContentTypes: []string{"multipart/form-data", "application/json"},
+				},
+				Responses: []Response{
+					{
+						Kind:        "json_array",
+						Status:      responseIntPtr(202),
+						ContentType: "application/json",
+						BodySchema: &ResourceSchemaNode{
+							Type: "array",
+							Items: &ResourceSchemaNode{
+								Type: "object",
+								Properties: map[string]ResourceSchemaNode{
+									"id": {Type: "integer"},
+								},
+								Required: []string{"id"},
+							},
+						},
+						Source: "response()",
+						Via:    "response()",
+					},
 				},
 				Resources: []Resource{
 					{Class: "UserResource", Collection: false},
@@ -529,6 +613,16 @@ func TestJSONEmitter_SortingBehavior(t *testing.T) {
 			}
 		}
 	}
+
+	if responses, ok := second["responses"].([]any); ok && len(responses) == 1 {
+		resp := responses[0].(map[string]any)
+		if resp["kind"] != "json_array" {
+			t.Errorf("response kind = %v, want json_array", resp["kind"])
+		}
+		if resp["status"].(float64) != 202 {
+			t.Errorf("response status = %v, want 202", resp["status"])
+		}
+	}
 }
 
 func TestJSONEmitter_EmptyCollections(t *testing.T) {
@@ -568,4 +662,71 @@ func TestJSONEmitter_EmptyCollections(t *testing.T) {
 	if err := json.Unmarshal(data, &result); err != nil {
 		t.Errorf("failed to parse JSON with nil slice: %v", err)
 	}
+}
+
+func TestJSONEmitter_ResponseHeadersDeterministicOrder(t *testing.T) {
+	emitter := NewJSONEmitter()
+
+	delta := &Delta{
+		Meta: MetaInfo{
+			Partial: false,
+			Stats:   MetaStats{FilesParsed: 1, Skipped: 0, DurationMs: 0},
+		},
+		Controllers: []Controller{
+			{
+				FQCN:   "App\\Http\\Controllers\\ReportController",
+				Method: "download",
+				Responses: []Response{
+					{
+						Kind:        "download",
+						Status:      responseIntPtr(200),
+						ContentType: "application/octet-stream",
+						Headers: map[string]string{
+							"Content-Disposition": `attachment; filename="z.zip"`,
+						},
+						Source: "response()->download",
+						Via:    "response()->download",
+					},
+					{
+						Kind:        "download",
+						Status:      responseIntPtr(200),
+						ContentType: "application/octet-stream",
+						Headers: map[string]string{
+							"X-Trace":            "1",
+							"Content-Disposition": `attachment; filename="a.zip"`,
+						},
+						Source: "response()->download",
+						Via:    "response()->download",
+					},
+				},
+			},
+		},
+		Models:      []Model{},
+		Resources:   []ResourceDef{},
+		Polymorphic: []Polymorphic{},
+		Broadcast:   []Broadcast{},
+	}
+
+	data, err := emitter.MarshalDeterministic(delta)
+	if err != nil {
+		t.Fatalf("MarshalDeterministic() error = %v", err)
+	}
+
+	jsonStr := string(data)
+	first := strings.Index(jsonStr, `filename=\"a.zip\"`)
+	second := strings.Index(jsonStr, `filename=\"z.zip\"`)
+	if first == -1 || second == -1 {
+		t.Fatalf("response headers missing from JSON: %s", jsonStr)
+	}
+	if first >= second {
+		t.Fatalf("responses not ordered deterministically by headers: %s", jsonStr)
+	}
+}
+
+func responseIntPtr(v int) *int {
+	return &v
+}
+
+func responseBoolPtr(v bool) *bool {
+	return &v
 }
