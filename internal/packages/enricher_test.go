@@ -839,14 +839,21 @@ func expectModelAttribute(t *testing.T, attributes []emitter.Attribute, name, vi
 func spatieFixtureRoot(t *testing.T) string {
 	t.Helper()
 
-	root, err := filepath.Abs(filepath.Join("..", "..", "..", "..", "packages", "garaekz", "oxcribe", "tests", "Fixtures", "SpatieLaravelApp"))
-	if err != nil {
-		t.Fatalf("filepath.Abs(spatie fixture) error = %v", err)
+	candidates := []string{
+		filepath.Join("..", "..", "..", "..", "packages", "oxhq", "oxcribe", "tests", "Fixtures", "SpatieLaravelApp"),
+		filepath.Join("..", "..", "..", "..", "packages", "garaekz", "oxcribe", "tests", "Fixtures", "SpatieLaravelApp"),
 	}
 
-	if _, err := os.Stat(root); err != nil {
-		t.Fatalf("spatie fixture root %q unavailable: %v", root, err)
+	for _, candidate := range candidates {
+		root, err := filepath.Abs(candidate)
+		if err != nil {
+			t.Fatalf("filepath.Abs(spatie fixture) error = %v", err)
+		}
+		if _, err := os.Stat(root); err == nil {
+			return root
+		}
 	}
 
-	return root
+	t.Skip("Spatie fixture app is unavailable outside the monorepo workspace")
+	return ""
 }

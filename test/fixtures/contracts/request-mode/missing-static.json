@@ -4,7 +4,7 @@
   "runtimeFingerprint": "fp-golden-missing",
   "manifest": {
     "project": {
-      "root": "/Users/garaekz/Documents/projects/go/oxinfer/test/fixtures/integration/minimal-laravel",
+      "root": "__FIXTURE_ROOT__",
       "composer": "composer.json"
     },
     "scan": {
@@ -19,7 +19,7 @@
   },
   "runtime": {
     "app": {
-      "basePath": "/Users/garaekz/Documents/projects/go/oxinfer/test/fixtures/integration/minimal-laravel",
+      "basePath": "__FIXTURE_ROOT__",
       "laravelVersion": "10.0.0",
       "phpVersion": "8.3.0",
       "appEnv": "testing"

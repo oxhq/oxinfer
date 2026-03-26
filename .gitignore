@@ -52,10 +52,6 @@ Thumbs.db
 *.temp
 *.log
 
-# Test artifacts and fixtures (if large)
-/test/fixtures/projects/*
-!/test/fixtures/projects/.keep
-
 # Output files from CLI
 delta.json
 output.json
@@ -67,7 +63,6 @@ temp_test_outputs/
 # Demo files (created for testing)
 demo-manifest.json
 invalid-manifest.json
-composer.json
 /app/
 /routes/
 

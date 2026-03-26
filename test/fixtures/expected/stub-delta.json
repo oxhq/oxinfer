@@ -3,7 +3,7 @@
     "version": "0.1.0",
     "timestamp": "2025-09-01T00:00:00Z",
     "project": {
-      "root": "/Users/garaekz/Documents/projects/go/oxinfer/test/fixtures/projects/test-laravel",
+      "root": "../../test/fixtures/projects/test-laravel",
       "name": "",
       "version": ""
     }

@@ -5,8 +5,8 @@ package indexer
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json/v2"
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"hash"
@@ -71,21 +71,22 @@ type lruNode struct {
 
 // FileCacheImpl implements the FileCacher interface with configurable validation modes
 type FileCacheImpl struct {
-	cache       map[string]*lruNode // Cache storage mapped to LRU nodes
-	config      *manifest.CacheConfig
-	stats       CacheStats
-	mutex       sync.RWMutex
-	persistMu   sync.Mutex
-	hasher      hash.Hash // Reusable SHA256 hasher
-	maxSize     int
-	head        *lruNode // LRU list head (most recently used)
-	tail        *lruNode // LRU list tail (least recently used)
-	hitCount    int64
-	missCount   int64
-	cacheDir    string // Directory for on-disk cache persistence
-	projectKey  string // Project key for cache validation
-	persistLoad bool   // Flag to track if persistence has been loaded
-	persistBusy bool
+	cache        map[string]*lruNode // Cache storage mapped to LRU nodes
+	config       *manifest.CacheConfig
+	stats        CacheStats
+	mutex        sync.RWMutex
+	persistMu    sync.Mutex
+	writeMu      sync.Mutex
+	hasher       hash.Hash // Reusable SHA256 hasher
+	maxSize      int
+	head         *lruNode // LRU list head (most recently used)
+	tail         *lruNode // LRU list tail (least recently used)
+	hitCount     int64
+	missCount    int64
+	cacheDir     string // Directory for on-disk cache persistence
+	projectKey   string // Project key for cache validation
+	persistLoad  bool   // Flag to track if persistence has been loaded
+	persistBusy  bool
 	persistDirty bool
 }
 
@@ -451,6 +452,12 @@ func (c *FileCacheImpl) snapshotForPersistence() persistenceSnapshot {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
+	return c.snapshotForPersistenceLocked()
+}
+
+func (c *FileCacheImpl) snapshotForPersistenceLocked() persistenceSnapshot {
+	// Caller must hold c.mutex for reading or writing.
+
 	snapshot := persistenceSnapshot{
 		ProjectKey: c.projectKey,
 		Entries:    make([]persistenceEntry, 0, len(c.cache)),
@@ -477,6 +484,9 @@ func (c *FileCacheImpl) saveSnapshotToDisk(snapshot persistenceSnapshot) error {
 	if c.cacheDir == "" {
 		return nil // No cache directory configured
 	}
+
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
 
 	// Ensure cache directory structure exists
 	if err := c.initializeCacheDir(); err != nil {
@@ -520,7 +530,7 @@ func (c *FileCacheImpl) saveSnapshotToDisk(snapshot persistenceSnapshot) error {
 		}
 
 		entryPath := filepath.Join(filesDir, filename)
-		if err := os.WriteFile(entryPath, entryData, 0644); err != nil {
+		if err := writeFileAtomically(entryPath, entryData, 0644); err != nil {
 			continue // Skip entries that can't be written
 		}
 
@@ -533,7 +543,7 @@ func (c *FileCacheImpl) saveSnapshotToDisk(snapshot persistenceSnapshot) error {
 	}
 
 	indexPath := filepath.Join(c.cacheDir, "index.json")
-	if err := os.WriteFile(indexPath, indexData, 0644); err != nil {
+	if err := writeFileAtomically(indexPath, indexData, 0644); err != nil {
 		return NewCacheError("saveToDisk", indexPath, fmt.Errorf("write index: %w", err))
 	}
 
@@ -545,36 +555,10 @@ func (c *FileCacheImpl) schedulePersistence() {
 		return
 	}
 
-	c.persistMu.Lock()
-	c.persistDirty = true
-	if c.persistBusy {
-		c.persistMu.Unlock()
-		return
-	}
-	c.persistBusy = true
-	c.persistMu.Unlock()
-
-	go c.runPersistenceLoop()
-}
-
-func (c *FileCacheImpl) runPersistenceLoop() {
-	for {
-		c.persistMu.Lock()
-		c.persistDirty = false
-		c.persistMu.Unlock()
-
-		if err := c.saveToDisk(); err != nil {
-			// Persistence failures are intentionally non-fatal for cache writes.
-		}
-
-		c.persistMu.Lock()
-		if !c.persistDirty {
-			c.persistBusy = false
-			c.persistMu.Unlock()
-			return
-		}
-		c.persistMu.Unlock()
-	}
+	// schedulePersistence is called from mutation paths while c.mutex is already held.
+	// Persist synchronously from the current in-memory snapshot so tests and callers do
+	// not race against background writes or partial on-disk state.
+	_ = c.saveSnapshotToDisk(c.snapshotForPersistenceLocked())
 }
 
 // validateProjectKey checks if the cached project key matches the current project
@@ -605,11 +589,37 @@ func (c *FileCacheImpl) initializeCacheDir() error {
 
 	// Write project key
 	keyPath := filepath.Join(c.cacheDir, "project.key")
-	if err := os.WriteFile(keyPath, []byte(c.projectKey), 0644); err != nil {
+	if err := writeFileAtomically(keyPath, []byte(c.projectKey), 0644); err != nil {
 		return NewCacheError("initializeCacheDir", keyPath, fmt.Errorf("write project key: %w", err))
 	}
 
 	return nil
+}
+
+func writeFileAtomically(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() {
+		_ = os.Remove(tmpPath)
+	}()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(perm); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+
+	return os.Rename(tmpPath, path)
 }
 
 // SaveToDiskSync saves cache to disk synchronously (for testing)

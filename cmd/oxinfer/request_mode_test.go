@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json/v2"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,7 +29,7 @@ func TestRunRequestModeGoldenPairs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			requestBytes := readTestFile(t, tt.requestPath)
+			requestBytes := rewriteRequestFixtureRoots(t, readTestFile(t, tt.requestPath))
 			expectedBytes := readTestFile(t, tt.goldenPath)
 
 			requestFile := writeTempFile(t, "analysis-request-*.json", requestBytes)
@@ -47,6 +48,35 @@ func TestRunRequestModeGoldenPairs(t *testing.T) {
 			}
 		})
 	}
+}
+
+func rewriteRequestFixtureRoots(t *testing.T, raw []byte) []byte {
+	t.Helper()
+
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+
+	fixtureRoot, err := filepath.Abs(filepath.Join("..", "..", "test", "fixtures", "integration", "minimal-laravel"))
+	if err != nil {
+		t.Fatalf("filepath.Abs() error = %v", err)
+	}
+
+	manifestObj := payload["manifest"].(map[string]any)
+	projectObj := manifestObj["project"].(map[string]any)
+	projectObj["root"] = fixtureRoot
+
+	runtimeObj := payload["runtime"].(map[string]any)
+	appObj := runtimeObj["app"].(map[string]any)
+	appObj["basePath"] = fixtureRoot
+
+	rewritten, err := json.Marshal(payload, json.Deterministic(true))
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+
+	return rewritten
 }
 
 func TestRunRequestModeRejectsInvalidSchema(t *testing.T) {

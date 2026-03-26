@@ -214,12 +214,14 @@ func validateManifestJSON(t *testing.T, manifestPath string, expectedFeatures []
 			}
 		}
 
-		// Validate root path points to fixture directory
+		// Validate root path is portable
 		if root, ok := project["root"].(string); ok {
-			if !strings.Contains(root, "integration") {
-				t.Errorf("manifest.json root should point to integration fixture, got: %s", root)
+			if strings.TrimSpace(root) == "" {
+				t.Error("manifest.json root should not be empty")
+			} else if filepath.IsAbs(root) && !strings.Contains(root, "integration") {
+				t.Errorf("manifest.json root should be relative or point to an integration fixture, got: %s", root)
 			} else {
-				t.Log("✓ manifest.json root points to integration fixture")
+				t.Logf("✓ manifest.json root is portable: %s", root)
 			}
 		}
 	}

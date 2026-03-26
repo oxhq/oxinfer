@@ -1,6 +1,6 @@
 {
   "project": {
-    "root": "/Users/garaekz/Documents/loaded/creator-catalog",
+    "root": "/path/to/project",
     "composer": "composer.json"
   },
   "scan": {
