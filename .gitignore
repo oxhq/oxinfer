@@ -75,6 +75,9 @@ composer.json
 .*/
 !.gitignore
 !.go-version
+!.github/
+!.github/workflows/
+!.github/workflows/ci.yml
 
 # Allow tracking .oxinfer/README.md but ignore other .oxinfer contents
 !.oxinfer/
