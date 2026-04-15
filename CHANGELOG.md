@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.1 - 2026-04-14
+
+Maintenance release.
+
+- publish a first-class GitHub release workflow that emits all platform binaries plus `checksums.txt`
+- document the release asset contract expected by `oxcribe:install-binary`
+
 ## v0.1.0 - 2026-03-25
 
 Initial public freeze of `oxinfer`.

@@ -290,7 +290,7 @@ func TestEndToEndFlagCombinations(t *testing.T) {
 			args:         []string{"--version"},
 			wantExitCode: 0,
 			checkStdout: func(t *testing.T, output string) {
-				if !strings.Contains(output, "oxinfer version 0.1.0") {
+				if !strings.Contains(output, "oxinfer version 0.1.1") {
 					t.Errorf("Version output should contain version info, got: %s", output)
 				}
 			},
@@ -640,7 +640,7 @@ func TestBuildAndBasicExecution(t *testing.T) {
 		t.Fatalf("Binary execution failed: %v", err)
 	}
 
-	if !strings.Contains(string(output), "0.1.0") {
+	if !strings.Contains(string(output), "0.1.1") {
 		t.Errorf("Version output unexpected: %s", string(output))
 	}
 }

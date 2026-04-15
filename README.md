@@ -2,7 +2,7 @@
 
 A Go CLI tool that uses tree-sitter PHP to analyze Laravel/PHP repositories without executing PHP. It scans `app/` and `routes/` directories, detects key Laravel patterns, and emits deterministic JSON for OpenAPI generation.
 
-`oxinfer` is frozen for `v0.1.0` with the machine contract `oxcribe.oxinfer.v2` treated as the active stable integration surface for `oxcribe`.
+`oxinfer` is released at `v0.1.1` with the machine contract `oxcribe.oxinfer.v2` treated as the active stable integration surface for `oxcribe`.
 
 ## Features
 
@@ -165,7 +165,7 @@ Oxinfer produces structured JSON with detected Laravel patterns:
       "skipped": 0,
       "durationMs": 150
     },
-    "version": "0.1.0"
+    "version": "0.1.1"
   },
   "controllers": [...],
   "models": [...],

@@ -23,7 +23,7 @@ func TestRun(t *testing.T) {
 			name:           "version flag",
 			args:           []string{"--version"},
 			expectedExit:   cli.ExitOK,
-			expectedStdout: "oxinfer version 0.1.0",
+			expectedStdout: "oxinfer version 0.1.1",
 			expectedStderr: false,
 		},
 		{
@@ -260,7 +260,7 @@ func TestVersion(t *testing.T) {
 	if version == "" {
 		t.Error("version constant should not be empty")
 	}
-	if version != "0.1.0" {
-		t.Errorf("version = %q, want %q", version, "0.1.0")
+	if version != "0.1.1" {
+		t.Errorf("version = %q, want %q", version, "0.1.1")
 	}
 }

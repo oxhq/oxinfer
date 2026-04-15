@@ -22,7 +22,7 @@ import (
 	oxresponse "github.com/oxhq/oxinfer/internal/response"
 )
 
-const version = "0.1.0"
+const version = "0.1.1"
 
 // Type aliases for imported implementations
 type Manifest = manifest.Manifest
