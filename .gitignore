@@ -1,36 +1,22 @@
-# Binaries for programs and plugins
+# Build output
+/bin/
+/dist/
+/target/
+/oxinfer
 *.exe
-*.exe~
 *.dll
 *.so
 *.dylib
-
-# Test binary, built with `go test -c`
 *.test
-
-# Output of the go coverage tool
 *.out
 *.prof
 *.pprof
 coverage.html
 cover.out
-
-# Profiling files
 cpu.prof
 mem.prof
 
-# Build output
-/bin/
-/dist/
-/oxinfer
-/bench
-/validate-determinism
-/validate-mvp
-
-# Go mod cache
-/vendor/
-
-# IDE specific files
+# IDE files
 .vscode/
 .idea/
 CLAUDE.md
@@ -38,7 +24,7 @@ CLAUDE.md
 *.swo
 *~
 
-# OS specific files
+# OS files
 .DS_Store
 .DS_Store?
 ._*
@@ -47,38 +33,33 @@ CLAUDE.md
 ehthumbs.db
 Thumbs.db
 
-# Temporary files
+# Temp files
 *.tmp
 *.temp
 *.log
 
-# Output files from CLI
+# CLI output
 delta.json
 output.json
 *.delta.json
-
-# Test output directory
 temp_test_outputs/
 
-# Demo files (created for testing)
+# Local scratch fixtures
 demo-manifest.json
 invalid-manifest.json
 /app/
 /routes/
 
-# Keep these dot files/folders
+# Keep selected dotfiles and workflows
 .*/
 !.gitignore
-!.go-version
 !.github/
 !.github/workflows/
 !.github/workflows/ci.yml
 
-# Allow tracking .oxinfer/README.md but ignore other .oxinfer contents
+# Analyzer artifacts
 !.oxinfer/
 !.oxinfer/README.md
 .oxinfer/*
 !.oxinfer/README.md
-
-# Nested generated analyzer artifacts
 **/.oxinfer/

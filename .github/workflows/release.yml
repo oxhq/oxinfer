@@ -7,49 +7,78 @@ on:
   workflow_dispatch:
 
 jobs:
-  release:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            asset_os: linux
+            asset_arch: amd64
+            ext: ""
+          - os: macos-13
+            target: x86_64-apple-darwin
+            asset_os: darwin
+            asset_arch: amd64
+            ext: ""
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            asset_os: darwin
+            asset_arch: arm64
+            ext: ""
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            asset_os: windows
+            asset_arch: amd64
+            ext: ".exe"
+
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --release --target "${{ matrix.target }}"
+          mkdir -p dist
+          tag="${GITHUB_REF_NAME}"
+          asset="oxinfer_${tag}_${{ matrix.asset_os }}_${{ matrix.asset_arch }}${{ matrix.ext }}"
+          cp "target/${{ matrix.target }}/release/oxinfer${{ matrix.ext }}" "dist/${asset}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: oxinfer-${{ matrix.asset_os }}-${{ matrix.asset_arch }}
+          path: dist/*
+
+  publish:
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-go@v6
+      - uses: actions/download-artifact@v4
         with:
-          go-version: '1.26.1'
+          path: dist
+          merge-multiple: true
 
-      - name: Build release binaries
-        env:
-          GOEXPERIMENT: jsonv2
+      - name: Build checksums
+        shell: bash
         run: |
           set -euo pipefail
-          mkdir -p dist
-          tag="${GITHUB_REF_NAME}"
-          : > dist/checksums.txt
-
-          for goos in linux darwin windows; do
-            for goarch in amd64 arm64; do
-              ext=""
-              if [ "$goos" = "windows" ]; then
-                ext=".exe"
-              fi
-
-              asset="oxinfer_${tag}_${goos}_${goarch}${ext}"
-
-              GOOS="$goos" GOARCH="$goarch" go build \
-                -trimpath \
-                -ldflags="-s -w" \
-                -o "dist/${asset}" \
-                ./cmd/oxinfer
-
-              (cd dist && sha256sum "${asset}" >> checksums.txt)
-            done
-          done
-
-          test -s dist/checksums.txt
-          test "$(find dist -maxdepth 1 -type f | wc -l | tr -d ' ')" = "7"
-          ls -lh dist
+          (cd dist && sha256sum * > checksums.txt)
 
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
