@@ -1,18 +1,20 @@
+#![allow(dead_code)]
+
 use oxinfer::contracts::{
     AnalysisResponse, ContractController, build_analysis_response, load_analysis_request_from_slice,
 };
 use oxinfer::pipeline::analyze_project;
 use serde_json::{Value, json};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+fn repo_path(path: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join(path)
+}
 
 pub fn oxcribe_fixture_root(name: &str) -> String {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("oxcribe")
-        .join("tests")
-        .join("Fixtures")
-        .join(name)
+    repo_path(&format!("test/fixtures/oxcribe/{name}"))
         .canonicalize()
+        .or_else(|_| repo_path(&format!("../oxcribe/tests/Fixtures/{name}")).canonicalize())
         .expect("oxcribe fixture should exist")
         .to_string_lossy()
         .to_string()

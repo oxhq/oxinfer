@@ -1,20 +1,12 @@
-use std::path::PathBuf;
-
 use oxinfer::contracts::{build_analysis_response, load_analysis_request_from_slice};
 use oxinfer::pipeline::analyze_project;
 use serde_json::json;
 
+#[path = "support/oxcribe_fixture_request.rs"]
+mod oxcribe_fixture_request;
+
 fn spatie_fixture_root() -> String {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("oxcribe")
-        .join("tests")
-        .join("Fixtures")
-        .join("SpatieLaravelApp")
-        .canonicalize()
-        .expect("spatie fixture root should exist")
-        .to_string_lossy()
-        .to_string()
+    oxcribe_fixture_request::oxcribe_fixture_root("SpatieLaravelApp")
 }
 
 fn controller<'a>(

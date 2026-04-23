@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.3 - 2026-04-23
+
+Corrective preview release for the `v0.1.2` request-mode test harness.
+
+- vendor the request-mode Laravel fixture apps into the repo so CI no longer depends on a sibling `oxcribe` checkout
+- resolve request-mode fixture roots from the repo-local fixture bundle first, with local sibling checkout as a fallback for development
+- add a regression test that locks the fixture-root contract to the bundled repo path
+
 ## v0.1.2 - 2026-04-23
 
 Preview release focused on request-mode fidelity, cache-backed CLI hardening, and release automation.

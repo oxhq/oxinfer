@@ -1,19 +1,12 @@
-use std::path::{Path, PathBuf};
-
 use oxinfer::contracts::{build_analysis_response, load_analysis_request_from_slice};
 use oxinfer::pipeline::analyze_project;
 use serde_json::json;
 
-fn repo_path(path: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join(path)
-}
+#[path = "support/oxcribe_fixture_request.rs"]
+mod oxcribe_fixture_request;
 
 fn policy_fixture_root() -> String {
-    repo_path("../oxcribe/tests/Fixtures/PolicyLaravelApp")
-        .canonicalize()
-        .expect("policy fixture root should exist")
-        .to_string_lossy()
-        .to_string()
+    oxcribe_fixture_request::oxcribe_fixture_root("PolicyLaravelApp")
 }
 
 #[test]
