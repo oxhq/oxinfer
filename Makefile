@@ -2,44 +2,49 @@ SHELL := /bin/bash
 
 .PHONY: help build test fmt vet run clean
 
+CARGO ?= cargo
+
 ## help: Show this help
 help:
-	@echo "Useful commands:";
-	@awk 'BEGIN {FS=":.*##"} /^[a-zA-Z0-9_\-]+:.*##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST) | sort
+	@echo "Canonical tasks live in .cargo/config.toml and run everywhere via cargo aliases:"
+	@echo "  cargo ox-build"
+	@echo "  cargo ox-test"
+	@echo "  cargo ox-fmt"
+	@echo "  cargo ox-vet"
+	@echo "  cargo ox-clean"
+	@echo "  cargo ox-run --manifest fixtures/minimal.manifest.json"
+	@echo ""
+	@echo "Unix convenience wrapper:"
+	@awk 'BEGIN {FS=":.*##"} /^[a-zA-Z0-9_\-]+:.*##/ {printf "  make %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST) | sort
 
-## build: Build the release CLI and copy it to ./oxinfer
+## build: Run cargo ox-build
 build:
-	@echo "Building oxinfer..."
-	cargo build --locked --release
-	cp target/release/oxinfer ./oxinfer
+	$(CARGO) ox-build
 
-## test: Run the Rust test suite
+## test: Run cargo ox-test
 test:
-	@echo "Running tests..."
-	cargo test --locked
+	$(CARGO) ox-test
 
-## fmt: Format Rust files
+## fmt: Run cargo ox-fmt
 fmt:
-	cargo fmt --all
+	$(CARGO) ox-fmt
 
-## vet: Run cargo check across all targets
+## vet: Run cargo ox-vet
 vet:
-	cargo check --all-targets --locked
+	$(CARGO) ox-vet
 
-## run: Run oxinfer with a manifest (usage: make run MANIFEST=path/to/manifest.json [OUT=delta.json])
+## run: Run cargo ox-run with a manifest (usage: make run MANIFEST=path/to/manifest.json [OUT=delta.json])
 run:
 	@if [ -z "$(MANIFEST)" ]; then \
 		echo "Usage: make run MANIFEST=path/to/manifest.json [OUT=delta.json]"; \
 		exit 1; \
 	fi
 	@if [ -n "$(OUT)" ]; then \
-		cargo run -- --manifest $(MANIFEST) --out $(OUT); \
+		$(CARGO) ox-run --manifest $(MANIFEST) --out $(OUT); \
 	else \
-		cargo run -- --manifest $(MANIFEST); \
+		$(CARGO) ox-run --manifest $(MANIFEST); \
 	fi
 
-## clean: Remove build artifacts and generated files
+## clean: Run cargo ox-clean
 clean:
-	rm -rf target
-	rm -f oxinfer
-	rm -rf temp_test_outputs
+	$(CARGO) ox-clean

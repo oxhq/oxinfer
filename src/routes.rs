@@ -1,8 +1,9 @@
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use regex::Regex;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct RouteBinding {
     pub controller_fqcn: String,
     pub method_name: String,
@@ -16,19 +17,18 @@ pub fn extract_route_bindings(source: &str) -> Vec<RouteBinding> {
     bindings.extend(extract_resource_routes(source, &imports));
     bindings.extend(extract_direct_routes(source, &imports));
 
-    bindings.sort_by(|a, b| {
-        (&a.controller_fqcn, &a.method_name, &a.http_methods).cmp(&(
-            &b.controller_fqcn,
-            &b.method_name,
-            &b.http_methods,
-        ))
-    });
-    bindings.dedup_by(|a, b| {
-        a.controller_fqcn == b.controller_fqcn
-            && a.method_name == b.method_name
-            && a.http_methods == b.http_methods
-    });
-    bindings
+    let mut deduped = Vec::with_capacity(bindings.len());
+    for binding in bindings {
+        if deduped.iter().any(|existing: &RouteBinding| {
+            existing.controller_fqcn == binding.controller_fqcn
+                && existing.method_name == binding.method_name
+                && existing.http_methods == binding.http_methods
+        }) {
+            continue;
+        }
+        deduped.push(binding);
+    }
+    deduped
 }
 
 fn collect_imports(source: &str) -> BTreeMap<String, String> {

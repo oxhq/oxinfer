@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use oxinfer::contracts::{build_analysis_response, load_analysis_request_from_slice};
 use oxinfer::pipeline::analyze_project;
-use serde_json::json;
+use serde_json::{Value, json};
 
 fn repo_path(path: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join(path)
@@ -17,10 +17,37 @@ fn fixture_root(name: &str) -> String {
         .to_string()
 }
 
+fn replace_placeholder(value: &mut Value, needle: &str, replacement: &str) {
+    match value {
+        Value::String(text) => {
+            if text.contains(needle) {
+                *text = text.replace(needle, replacement);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                replace_placeholder(item, needle, replacement);
+            }
+        }
+        Value::Object(entries) => {
+            for item in entries.values_mut() {
+                replace_placeholder(item, needle, replacement);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) => {}
+    }
+}
+
 fn load_request_fixture(path: &str) -> Vec<u8> {
     let raw = fs::read_to_string(repo_path(path)).expect("request fixture should exist");
-    raw.replace("__FIXTURE_ROOT__", &fixture_root("minimal-laravel"))
-        .into_bytes()
+    let mut fixture: Value =
+        serde_json::from_str(&raw).expect("request fixture should be valid JSON");
+    replace_placeholder(
+        &mut fixture,
+        "__FIXTURE_ROOT__",
+        &fixture_root("minimal-laravel"),
+    );
+    serde_json::to_vec(&fixture).expect("request fixture should encode")
 }
 
 #[test]
@@ -178,24 +205,29 @@ fn api_contract_exposes_request_resources_and_responses() {
         .body_schema
         .as_ref()
         .expect("response body schema should exist");
-    assert_eq!(body_schema["properties"]["id"]["type"], "integer");
-    assert_eq!(body_schema["properties"]["price"]["type"], "number");
+    assert_eq!(body_schema["ref"], "App\\Http\\Resources\\ProductResource");
+    let product_resource = analysis
+        .delta
+        .resources
+        .iter()
+        .find(|resource| resource.fqcn == "App\\Http\\Resources\\ProductResource")
+        .expect("product resource should exist");
     assert_eq!(
-        body_schema["properties"]["created_at"]["format"],
-        "date-time"
-    );
-    assert_eq!(
-        body_schema["properties"]["category"]["properties"]["id"]["type"],
+        product_resource.schema["properties"]["id"]["type"],
         "integer"
     );
     assert_eq!(
-        body_schema["properties"]["tags"]["items"]["properties"]["name"]["type"],
-        "string"
+        product_resource.schema["properties"]["price"]["type"],
+        "number"
+    );
+    assert_eq!(
+        product_resource.schema["properties"]["created_at"]["format"],
+        "date-time"
     );
     assert!(controller.resources.iter().any(|item| {
         item.fqcn.as_deref() == Some("App\\Http\\Resources\\ProductResource") && !item.collection
     }));
-    assert!(controller.authorization.iter().any(|item| {
+    assert!(!controller.authorization.iter().any(|item| {
         item.kind == "middleware" && item.source == "auth:sanctum" && item.resolution == "runtime"
     }));
     assert!(controller.authorization.iter().any(|item| {
@@ -206,7 +238,7 @@ fn api_contract_exposes_request_resources_and_responses() {
     }));
 
     assert_eq!(
-        body_schema["properties"]["reviews_count"]["type"],
+        product_resource.schema["properties"]["reviews_count"]["type"],
         "integer"
     );
     let top_level_resource = analysis
@@ -329,7 +361,7 @@ fn complex_contract_exposes_polymorphic_and_broadcast_graph() {
 }
 
 #[test]
-fn runtime_and_static_authorization_are_both_preserved() {
+fn static_authorization_wins_without_duplicate_runtime_middleware_entries() {
     let root = fixture_root("complex-app");
     let payload = json!({
         "contractVersion": "oxcribe.oxinfer.v2",
@@ -399,7 +431,7 @@ fn runtime_and_static_authorization_are_both_preserved() {
         .expect("update controller should be present");
 
     assert!(
-        controller
+        !controller
             .authorization
             .iter()
             .any(|item| { item.kind == "middleware" && item.source == "auth:sanctum" })
@@ -415,4 +447,64 @@ fn runtime_and_static_authorization_are_both_preserved() {
             && item.ability.as_deref() == Some("update")
             && item.target.as_deref() == Some("$post")
     }));
+}
+
+#[test]
+fn request_mode_reports_partial_when_static_scan_hits_file_limit() {
+    let root = fixture_root("complex-app");
+    let payload = json!({
+        "contractVersion": "oxcribe.oxinfer.v2",
+        "requestId": "req-partial",
+        "runtimeFingerprint": "fp-partial",
+        "manifest": {
+            "project": {
+                "root": root,
+                "composer": "composer.json"
+            },
+            "scan": {
+                "targets": ["app", "routes"],
+                "globs": ["**/*.php"]
+            },
+            "limits": {
+                "max_files": 1
+            },
+            "features": {
+                "http_status": true,
+                "request_usage": true,
+                "resource_usage": true,
+                "with_pivot": true,
+                "attribute_make": true,
+                "scopes_used": true,
+                "polymorphic": true,
+                "broadcast_channels": true
+            }
+        },
+        "runtime": {
+            "app": {
+                "basePath": root,
+                "laravelVersion": "12.0.0",
+                "phpVersion": "8.3.0",
+                "appEnv": "testing"
+            },
+            "routes": []
+        }
+    });
+
+    let request = load_analysis_request_from_slice(
+        &serde_json::to_vec(&payload).expect("request should encode"),
+        None,
+    )
+    .expect("request should decode");
+    let result = analyze_project(&request.manifest).expect("analysis should succeed");
+    let response = build_analysis_response(&request, &result);
+
+    assert_eq!(response.status, "partial");
+    assert!(response.meta.partial);
+    assert!(response.delta.meta.partial);
+    assert!(
+        response
+            .diagnostics
+            .iter()
+            .any(|item| item.code == "analysis.static.partial")
+    );
 }

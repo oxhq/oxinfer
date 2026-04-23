@@ -24,6 +24,7 @@ pub fn analyze_file(
     walk_node(
         unit.tree.root_node(),
         &unit.source,
+        relative_path,
         &namespace,
         &imports,
         &mut facts,
@@ -45,32 +46,48 @@ pub fn analyze_file(
     facts
         .polymorphic
         .sort_by(|a, b| (&a.name, &a.model, &a.relation).cmp(&(&b.name, &b.model, &b.relation)));
-    facts.broadcast.sort_by(|a, b| a.channel.cmp(&b.channel));
-
     Ok(facts)
 }
 
 fn walk_node(
     node: Node,
     source: &[u8],
+    relative_path: &str,
     namespace: &str,
     imports: &BTreeMap<String, String>,
     facts: &mut FileFacts,
     features: &FeatureFlags,
 ) {
     if node.kind() == "class_declaration" {
-        process_class(node, source, namespace, imports, facts, features);
+        process_class(
+            node,
+            source,
+            relative_path,
+            namespace,
+            imports,
+            facts,
+            features,
+        );
     }
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        walk_node(child, source, namespace, imports, facts, features);
+        walk_node(
+            child,
+            source,
+            relative_path,
+            namespace,
+            imports,
+            facts,
+            features,
+        );
     }
 }
 
 fn process_class(
     class_node: Node,
     source: &[u8],
+    relative_path: &str,
     namespace: &str,
     imports: &BTreeMap<String, String>,
     facts: &mut FileFacts,
@@ -82,7 +99,7 @@ fn process_class(
     let fqcn = qualify_name(namespace, &class_name);
     let methods = extract_class_methods(class_node, source);
 
-    if is_controller(&class_text) {
+    if is_controller(&class_text, relative_path, namespace) {
         for method in methods
             .iter()
             .filter(|method| method.is_public || method.name == "__invoke")
@@ -98,7 +115,7 @@ fn process_class(
         }
     }
 
-    if is_model(&class_text) {
+    if is_model(&class_text, relative_path, namespace) {
         let scopes = if features.scopes_used {
             detect_model_scopes(&class_text)
         } else {
@@ -113,7 +130,9 @@ fn process_class(
 
         if features.polymorphic {
             for relationship in &relationships {
-                if relationship.relation_type == "morphTo" {
+                if relationship.relation_type == "morphTo"
+                    || relationship.relation_type == "morphedByMany"
+                {
                     continue;
                 }
                 let Some(morph_name) = &relationship.morph_name else {
@@ -256,12 +275,20 @@ fn extract_namespace(source: &str) -> String {
         .unwrap_or_default()
 }
 
-fn is_controller(class_text: &str) -> bool {
+fn is_controller(class_text: &str, relative_path: &str, namespace: &str) -> bool {
+    let normalized_path = relative_path.replace('\\', "/");
+
     class_text.contains("extends Controller")
+        || normalized_path.starts_with("app/Http/Controllers/")
+        || namespace.ends_with("\\Http\\Controllers")
 }
 
-fn is_model(class_text: &str) -> bool {
+fn is_model(class_text: &str, relative_path: &str, namespace: &str) -> bool {
+    let normalized_path = relative_path.replace('\\', "/");
+
     class_text.contains("extends Model")
+        || normalized_path.starts_with("app/Models/")
+        || namespace.ends_with("\\Models")
 }
 
 fn detect_http_status(method_text: &str) -> Option<u16> {
@@ -311,9 +338,12 @@ fn detect_request_usage(
 
     for captures in validate_re.captures_iter(method_text) {
         if let Some(group) = captures.get(1) {
-            let mut rules = parse_php_array_keys(group.as_str());
-            rules.sort();
-            rules.dedup();
+            let rules = dedup_preserving_order(
+                parse_php_array_keys(group.as_str())
+                    .into_iter()
+                    .filter(|item| !item.contains('.'))
+                    .collect(),
+            );
             usage.push(RequestUsageFact {
                 method: "validate".to_string(),
                 rules,
@@ -326,9 +356,7 @@ fn detect_request_usage(
 
     for captures in only_re.captures_iter(method_text) {
         if let Some(group) = captures.get(1) {
-            let mut fields = parse_php_string_list(group.as_str());
-            fields.sort();
-            fields.dedup();
+            let fields = dedup_preserving_order(parse_php_string_list(group.as_str()));
             usage.push(RequestUsageFact {
                 method: "only".to_string(),
                 rules: Vec::new(),
@@ -346,8 +374,7 @@ fn detect_request_usage(
         }
     }
     if !file_fields.is_empty() {
-        file_fields.sort();
-        file_fields.dedup();
+        file_fields = dedup_preserving_order(file_fields);
         usage.push(RequestUsageFact {
             method: "file".to_string(),
             rules: Vec::new(),
@@ -382,6 +409,8 @@ fn detect_resources(
     let collection_re =
         Regex::new(r#"([A-Z][A-Za-z0-9_\\]*(?:Resource|Collection))::collection\("#)
             .expect("resource collection regex");
+    let make_re = Regex::new(r#"([A-Z][A-Za-z0-9_\\]*(?:Resource|Collection))::make\("#)
+        .expect("resource make regex");
     let new_re = Regex::new(r#"new\s+([A-Z][A-Za-z0-9_\\]*(?:Resource|Collection))\("#)
         .expect("new resource regex");
 
@@ -405,6 +434,19 @@ fn detect_resources(
         if let Some(class_name) = captures.get(1) {
             let class_name = resolve_class_name(class_name.as_str(), namespace, imports);
             let key = (class_name.clone(), Some("collection".to_string()));
+            if seen.insert(key.clone()) {
+                items.push(ResourceUsageFact {
+                    class_name,
+                    method: key.1,
+                });
+            }
+        }
+    }
+
+    for captures in make_re.captures_iter(method_text) {
+        if let Some(class_name) = captures.get(1) {
+            let class_name = resolve_class_name(class_name.as_str(), namespace, imports);
+            let key = (class_name.clone(), Some("make".to_string()));
             if seen.insert(key.clone()) {
                 items.push(ResourceUsageFact {
                     class_name,
@@ -578,8 +620,7 @@ fn detect_model_relationship(
             pivot_columns.extend(parse_php_string_list(group.as_str()));
         }
     }
-    pivot_columns.sort();
-    pivot_columns.dedup();
+    pivot_columns = dedup_preserving_order(pivot_columns);
 
     Some(ModelRelationshipFact {
         name: method.name.clone(),
@@ -596,37 +637,56 @@ fn detect_model_relationship(
 }
 
 fn detect_broadcasts(source: &str) -> Vec<BroadcastFact> {
-    let channel_re = Regex::new(
-        r#"Broadcast::(channel|private|presence)\(\s*['"]([^'"]+)['"]\s*,\s*function\s*\(([^)]*)\)"#,
-    )
-    .expect("broadcast regex");
     let mut channels = Vec::new();
     let mut seen = BTreeSet::new();
+    let mut cursor = 0;
+    let marker = "Broadcast::channel(";
 
-    for captures in channel_re.captures_iter(source) {
-        let Some(kind) = captures.get(1) else {
+    while let Some(relative) = source[cursor..].find(marker) {
+        let call_start = cursor + relative;
+        let mut next = call_start + marker.len();
+        let Some((channel_name, channel_end)) = extract_php_string_literal(source, next) else {
+            cursor = next;
             continue;
         };
-        let Some(channel) = captures.get(2) else {
-            continue;
-        };
-        let Some(params) = captures.get(3) else {
-            continue;
-        };
+        next = channel_end;
 
-        let channel_name = channel.as_str().to_string();
+        let Some(function_relative) = source[next..].find("function") else {
+            cursor = next;
+            continue;
+        };
+        let function_start = next + function_relative;
+        let Some(params_open_relative) = source[function_start..].find('(') else {
+            cursor = function_start + "function".len();
+            continue;
+        };
+        let params_open = function_start + params_open_relative;
+        let Some(params_close) = find_matching_delimiter(source, params_open, '(', ')') else {
+            cursor = params_open + 1;
+            continue;
+        };
+        let callback_params = extract_callback_params(&source[params_open + 1..params_close]);
+
+        let Some(body_open_relative) = source[params_close..].find('{') else {
+            cursor = params_close + 1;
+            continue;
+        };
+        let body_open = params_close + body_open_relative;
+        let Some(body_close) = find_matching_delimiter(source, body_open, '{', '}') else {
+            cursor = body_open + 1;
+            continue;
+        };
+        let body = &source[body_open + 1..body_close];
+
+        cursor = body_close + 1;
         if !seen.insert(channel_name.clone()) {
             continue;
         }
 
         channels.push(BroadcastFact {
             channel: channel_name.clone(),
-            channel_type: Some(match kind.as_str() {
-                "private" => "private".to_string(),
-                "presence" => "presence".to_string(),
-                _ => "public".to_string(),
-            }),
-            parameters: extract_broadcast_parameters(&channel_name, params.as_str()),
+            channel_type: Some(infer_broadcast_visibility(&callback_params).to_string()),
+            parameters: extract_broadcast_parameters(&channel_name, body),
         });
     }
 
@@ -635,16 +695,9 @@ fn detect_broadcasts(source: &str) -> Vec<BroadcastFact> {
 
 fn extract_broadcast_parameters(
     channel: &str,
-    callback_params: &str,
+    _callback_body: &str,
 ) -> Vec<BroadcastParameterFact> {
     let param_name_re = Regex::new(r#"\{([^}]+)\}"#).expect("channel parameter regex");
-    let callback_name_re =
-        Regex::new(r#"\$([A-Za-z_][A-Za-z0-9_]*)"#).expect("callback name regex");
-    let callback_params = callback_name_re
-        .captures_iter(callback_params)
-        .filter_map(|captures| captures.get(1).map(|item| item.as_str().to_string()))
-        .collect::<Vec<_>>();
-
     let mut items = Vec::new();
     let mut seen = BTreeSet::new();
     for captures in param_name_re.captures_iter(channel) {
@@ -656,14 +709,10 @@ fn extract_broadcast_parameters(
             continue;
         }
 
-        let parameter_type = if name == "id"
-            || callback_params
-                .iter()
-                .any(|item| item == &name && name.ends_with("Id"))
-        {
-            None
+        let parameter_type = if name == "id" {
+            Some("int".to_string())
         } else {
-            None
+            Some("string".to_string())
         };
 
         items.push(BroadcastParameterFact {
@@ -673,6 +722,102 @@ fn extract_broadcast_parameters(
     }
 
     items
+}
+
+fn infer_broadcast_visibility(callback_params: &[String]) -> &'static str {
+    let non_user_params = callback_params
+        .iter()
+        .filter(|name| name.as_str() != "user")
+        .count();
+
+    if non_user_params == 0 {
+        if callback_params.iter().any(|name| name == "user") {
+            "public"
+        } else {
+            "presence"
+        }
+    } else {
+        "private"
+    }
+}
+
+fn extract_callback_params(params: &str) -> Vec<String> {
+    let callback_name_re =
+        Regex::new(r#"\$([A-Za-z_][A-Za-z0-9_]*)"#).expect("callback name regex");
+    callback_name_re
+        .captures_iter(params)
+        .filter_map(|captures| captures.get(1).map(|item| item.as_str().to_string()))
+        .collect()
+}
+
+fn extract_php_string_literal(source: &str, start: usize) -> Option<(String, usize)> {
+    let bytes = source.as_bytes();
+    let mut cursor = start;
+    while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+        cursor += 1;
+    }
+    let quote = *bytes.get(cursor)?;
+    if quote != b'\'' && quote != b'"' {
+        return None;
+    }
+    cursor += 1;
+    let literal_start = cursor;
+
+    while cursor < bytes.len() {
+        if bytes[cursor] == quote && bytes.get(cursor.wrapping_sub(1)) != Some(&b'\\') {
+            return Some((source[literal_start..cursor].to_string(), cursor + 1));
+        }
+        cursor += 1;
+    }
+
+    None
+}
+
+fn find_matching_delimiter(
+    source: &str,
+    open_index: usize,
+    open: char,
+    close: char,
+) -> Option<usize> {
+    let mut depth = 0usize;
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+
+    for (offset, ch) in source[open_index..].char_indices() {
+        if let Some(active_quote) = quote {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            if ch == '\\' {
+                escaped = true;
+                continue;
+            }
+            if ch == active_quote {
+                quote = None;
+            }
+            continue;
+        }
+
+        if ch == '\'' || ch == '"' {
+            quote = Some(ch);
+            continue;
+        }
+
+        if ch == open {
+            depth += 1;
+            continue;
+        }
+
+        if ch == close {
+            depth -= 1;
+            if depth == 0 {
+                return Some(open_index + offset);
+            }
+        }
+    }
+
+    None
 }
 
 fn extract_named_child_text(node: Node, source: &[u8], kind: &str) -> Option<String> {
@@ -715,6 +860,17 @@ fn parse_php_array_keys(input: &str) -> Vec<String> {
         }
     }
     items
+}
+
+fn dedup_preserving_order(items: Vec<String>) -> Vec<String> {
+    let mut seen = BTreeSet::new();
+    let mut deduped = Vec::with_capacity(items.len());
+    for item in items {
+        if seen.insert(item.clone()) {
+            deduped.push(item);
+        }
+    }
+    deduped
 }
 
 fn qualify_name(namespace: &str, class_name: &str) -> String {

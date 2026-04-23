@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 
-class InvokeUserController extends Controller
+final class InvokeUserController
 {
     public function __invoke(): JsonResponse
     {

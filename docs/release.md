@@ -1,6 +1,6 @@
 # Release
 
-`oxinfer` is released at `v0.1.1` with these public surfaces treated as stable:
+`oxinfer` is released at `v0.1.2` with these public surfaces treated as stable:
 
 - CLI `oxinfer --manifest ...`
 - CLI `oxinfer --request ...`
@@ -13,7 +13,7 @@ Pre-release checklist:
 2. `cargo build --locked --release`
 3. Confirm `README.md`, `docs/analysis-contract-v2.md`, and `CHANGELOG.md` match the current public surface
 4. Confirm the release workflow matrix still matches the intended supported targets
-5. Tag `v0.1.1`
+5. Tag `v0.1.2`
 6. Publish the GitHub release from that tag
 
 Release asset contract:

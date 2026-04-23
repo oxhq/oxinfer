@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.1.2 - 2026-04-23
+
+Preview release focused on request-mode fidelity, cache-backed CLI hardening, and release automation.
+
+- split request-mode contract assembly into focused authorization, inertia, error-response, and query-builder modules
+- improve route and model matching for standard Laravel controllers and custom base-model subclasses
+- infer richer framework responses, resource envelopes, URI formats, and Spatie-heavy request and response metadata
+- add cache-aware CLI smoke coverage plus cross-platform CI and release smoke for shipped binaries
+- document the current Rust-first build, task, and release flow
+- keep the published machine contract at `oxcribe.oxinfer.v2`
+
 ## v0.1.1 - 2026-04-14
 
 Maintenance release.

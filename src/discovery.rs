@@ -5,10 +5,16 @@ use walkdir::WalkDir;
 
 use crate::manifest::Manifest;
 
-pub fn discover_php_files(manifest: &Manifest) -> Result<Vec<PathBuf>> {
+pub struct DiscoveryResult {
+    pub files: Vec<PathBuf>,
+    pub partial: bool,
+}
+
+pub fn discover_php_files(manifest: &Manifest) -> Result<DiscoveryResult> {
     let max_depth = manifest.limits.max_depth.unwrap_or(usize::MAX);
     let max_files = manifest.limits.max_files.unwrap_or(usize::MAX);
     let mut files = Vec::new();
+    let mut partial = false;
 
     for target in &manifest.scan.targets {
         let base = manifest.project.root.join(target);
@@ -43,6 +49,7 @@ pub fn discover_php_files(manifest: &Manifest) -> Result<Vec<PathBuf>> {
 
             files.push(path);
             if files.len() >= max_files {
+                partial = true;
                 break;
             }
         }
@@ -53,7 +60,7 @@ pub fn discover_php_files(manifest: &Manifest) -> Result<Vec<PathBuf>> {
     }
 
     files.sort();
-    Ok(files)
+    Ok(DiscoveryResult { files, partial })
 }
 
 fn is_php_file(path: &Path) -> bool {

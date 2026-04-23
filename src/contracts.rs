@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::OXINFER_VERSION;
+use crate::contract_authorization::build_static_authorization;
+use crate::contract_error_responses::infer_framework_error_responses;
+use crate::contract_inertia::infer_inertia_response;
+use crate::contract_query_builder::extend_query_builder_request;
 use crate::manifest::Manifest;
 use crate::model::{ControllerMethod, ModelFacts, ModelRelationshipFact, ResourceUsageFact};
 use crate::pipeline::PipelineResult;
@@ -501,6 +505,20 @@ struct ParsedRuleField {
 }
 
 #[derive(Debug, Clone, Default)]
+struct SpatieDataFieldSpec {
+    kind: Option<String>,
+    type_name: Option<String>,
+    scalar_type: Option<String>,
+    item_type: Option<String>,
+    wrappers: Vec<String>,
+    required: Option<bool>,
+    optional: Option<bool>,
+    nullable: Option<bool>,
+    is_array: Option<bool>,
+    collection: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default)]
 struct ModelSchemaHint {
     fillable: BTreeSet<String>,
     hidden: BTreeSet<String>,
@@ -520,7 +538,7 @@ struct ControllerSourceState {
 }
 
 impl ShapeTree {
-    fn insert_path(&mut self, path: &str) {
+    pub(crate) fn insert_path(&mut self, path: &str) {
         if path.is_empty() || path == "*" {
             return;
         }
@@ -531,7 +549,7 @@ impl ShapeTree {
         }
     }
 
-    fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 }
@@ -774,6 +792,7 @@ fn collect_static_controllers(
                 .map(Vec::as_slice)
                 .unwrap_or(&[]);
             let http = build_http_info(controller, route_methods.get(&action_key), action_routes);
+            let authorization = build_authorization(controller, action_routes, source_index);
             controllers.insert(
                 action_key,
                 ContractController {
@@ -784,11 +803,12 @@ fn collect_static_controllers(
                     responses: build_contract_responses(
                         controller,
                         http.as_ref(),
+                        &authorization,
                         source_index,
                         &model_index,
                     ),
-                    authorization: build_authorization(controller, action_routes, source_index),
-                    resources: build_controller_resources(controller),
+                    authorization,
+                    resources: build_controller_resources(controller, source_index),
                     scopes_used: build_controller_scopes(controller, &scope_owners),
                     polymorphic: build_controller_polymorphic(
                         controller,
@@ -845,6 +865,17 @@ fn build_contract_request(
     let mut files = ShapeTree::default();
 
     for field in parse_inline_validate_fields(&controller.body_text) {
+        register_request_field(
+            field,
+            &mut field_map,
+            &mut content_types,
+            &mut body,
+            &mut query,
+            &mut files,
+        );
+    }
+
+    for field in parse_spatie_data_request_fields(controller, source_index) {
         register_request_field(
             field,
             &mut field_map,
@@ -946,6 +977,27 @@ fn build_contract_request(
         }
     }
 
+    for field in parse_spatie_media_request_fields(&controller.body_text) {
+        register_request_field(
+            field,
+            &mut field_map,
+            &mut content_types,
+            &mut body,
+            &mut query,
+            &mut files,
+        );
+    }
+
+    extend_query_builder_request(
+        controller,
+        source_index,
+        &mut content_types,
+        &mut field_map,
+        &mut body,
+        &mut query,
+        &mut files,
+    );
+
     let mut fields = field_map.into_values().collect::<Vec<_>>();
     if content_types.is_empty() && fields.is_empty() {
         return None;
@@ -963,6 +1015,7 @@ fn build_contract_request(
 fn build_contract_responses(
     controller: &ControllerMethod,
     http: Option<&ContractHttpInfo>,
+    authorization: &[ContractAuthorization],
     source_index: &SourceIndex,
     model_index: &BTreeMap<String, ModelFacts>,
 ) -> Vec<ContractResponse> {
@@ -978,6 +1031,9 @@ fn build_contract_responses(
     if responses.is_empty() {
         responses.extend(infer_fallback_response(http));
     }
+
+    extend_authorization_failure_responses(&mut responses, authorization);
+    extend_validation_failure_responses(&mut responses, controller, source_index);
 
     let mut seen = BTreeSet::new();
     responses.retain(|response| {
@@ -1026,22 +1082,28 @@ fn infer_responses_from_body(
         return responses;
     }
 
-    if let Some(component) = extract_inertia_component(text) {
+    if let Some(response) = infer_inertia_response(controller, http, source_index, model_index) {
+        responses.push(response);
+    }
+
+    if let Some(target) = extract_inertia_location_target(text) {
+        let mut headers = BTreeMap::new();
+        headers.insert("X-Inertia-Location".to_string(), target.clone());
         responses.push(ContractResponse {
-            kind: "inertia".to_string(),
-            status: status.or(Some(200)),
-            explicit: explicit.or(Some(false)),
-            content_type: Some("text/html".to_string()),
-            headers: BTreeMap::new(),
-            body_schema: Some(json!({ "type": "object" })),
-            redirect: None,
-            download: None,
-            inertia: Some(ContractInertia {
-                component,
-                props_schema: Some(json!({ "type": "object" })),
+            kind: "redirect".to_string(),
+            status: Some(409),
+            explicit: Some(true),
+            content_type: None,
+            headers,
+            body_schema: None,
+            redirect: Some(ContractRedirect {
+                target_kind: "inertia_location".to_string(),
+                target: Some(target),
             }),
-            source: Some("Inertia::render".to_string()),
-            via: Some("Inertia::render".to_string()),
+            download: None,
+            inertia: None,
+            source: Some("Inertia::location".to_string()),
+            via: Some("Inertia::location".to_string()),
         });
     }
 
@@ -1149,7 +1211,94 @@ fn infer_responses_from_body(
         });
     }
 
+    responses.extend(infer_framework_error_responses(controller, http));
+
     responses
+}
+
+fn extend_authorization_failure_responses(
+    responses: &mut Vec<ContractResponse>,
+    authorization: &[ContractAuthorization],
+) {
+    if responses
+        .iter()
+        .any(|response| response.status == Some(403))
+    {
+        return;
+    }
+
+    let Some(source) = authorization
+        .iter()
+        .find(|item| item.enforces_failure_response && item.kind != "middleware")
+        .map(|item| item.source.clone())
+    else {
+        return;
+    };
+
+    responses.push(ContractResponse {
+        kind: "json_object".to_string(),
+        status: Some(403),
+        explicit: Some(false),
+        content_type: Some("application/json".to_string()),
+        headers: BTreeMap::new(),
+        body_schema: Some(json!({ "type": "object" })),
+        redirect: None,
+        download: None,
+        inertia: None,
+        source: Some(source),
+        via: Some("authorization".to_string()),
+    });
+}
+
+fn extend_validation_failure_responses(
+    responses: &mut Vec<ContractResponse>,
+    controller: &ControllerMethod,
+    source_index: &SourceIndex,
+) {
+    if responses
+        .iter()
+        .any(|response| response.status == Some(422))
+    {
+        return;
+    }
+
+    let source = controller.request_usage.iter().find_map(|item| {
+        if item.method == "validate" {
+            return Some("validate".to_string());
+        }
+        if item.method == "validated" || item.class_name.is_some() {
+            return Some("FormRequest".to_string());
+        }
+        None
+    });
+
+    let source = source.or_else(|| {
+        let class = source_index.get(&controller.fqcn);
+        let state = collect_controller_source_state(controller, class);
+        state.parameters.values().find_map(|parameter_type| {
+            let class = source_index.get(parameter_type)?;
+            class.method_body("rules")?;
+            Some("FormRequest".to_string())
+        })
+    });
+
+    let Some(source) = source else {
+        return;
+    };
+
+    responses.push(ContractResponse {
+        kind: "json_object".to_string(),
+        status: Some(422),
+        explicit: Some(false),
+        content_type: Some("application/json".to_string()),
+        headers: BTreeMap::new(),
+        body_schema: Some(json!({ "type": "object" })),
+        redirect: None,
+        download: None,
+        inertia: None,
+        source: Some(source),
+        via: Some("validation".to_string()),
+    });
 }
 
 fn infer_responses_from_resources(
@@ -1161,8 +1310,7 @@ fn infer_responses_from_resources(
     let default_status = http.map(|item| item.status).unwrap_or(200);
     let explicit = http.map(|item| item.explicit).unwrap_or(false);
 
-    controller
-        .resource_usage
+    collect_controller_resource_usage(controller, source_index)
         .iter()
         .map(|resource| {
             let collection = is_collection_resource(resource);
@@ -1171,14 +1319,26 @@ fn infer_responses_from_resources(
                 Some("response") => "JsonResource::response",
                 _ => "JsonResource",
             };
-            let body_schema =
-                build_response_schema(&resource.class_name, collection, source_index, model_index);
+            let additional_schema = extract_additional_resource_schema(
+                &controller.body_text,
+                source_index,
+                model_index,
+            );
+            let mut body_schema = if additional_schema.is_some() {
+                build_resource_schema(
+                    &resource.class_name,
+                    source_index,
+                    model_index,
+                    &mut BTreeSet::new(),
+                )
+            } else {
+                build_response_schema(&resource.class_name, collection, source_index, model_index)
+            };
+            if let Some(additional_schema) = additional_schema {
+                body_schema = merge_object_schema(body_schema, additional_schema);
+            }
             ContractResponse {
-                kind: if collection {
-                    "json_array".to_string()
-                } else {
-                    "json_object".to_string()
-                },
+                kind: "json_object".to_string(),
                 status: Some(default_status),
                 explicit: Some(explicit),
                 content_type: Some("application/json".to_string()),
@@ -1192,6 +1352,50 @@ fn infer_responses_from_resources(
             }
         })
         .collect()
+}
+
+fn extract_additional_resource_schema(
+    method_text: &str,
+    source_index: &SourceIndex,
+    model_index: &BTreeMap<String, ModelFacts>,
+) -> Option<Value> {
+    let needle = "->additional(";
+    let start = method_text.find(needle)? + needle.len() - 1;
+    let (arguments, _, _) = extract_balanced_region(&method_text[start..], '(', ')')?;
+    let first_argument = split_top_level(&arguments, ',').into_iter().next()?;
+    let value = first_argument.trim();
+    let (array_body, _, _) = extract_balanced_region(value, '[', ']')?;
+    Some(parse_php_array_schema(
+        &array_body,
+        source_index,
+        model_index,
+        None,
+        None,
+        &mut BTreeSet::new(),
+    ))
+}
+
+fn merge_object_schema(base: Value, extra: Value) -> Value {
+    let mut base = base;
+    let Value::Object(extra_object) = extra else {
+        return base;
+    };
+    let Some(extra_properties) = extra_object.get("properties").and_then(Value::as_object) else {
+        return base;
+    };
+    let Some(base_object) = base.as_object_mut() else {
+        return base;
+    };
+    let properties = base_object
+        .entry("properties".to_string())
+        .or_insert_with(|| json!({}));
+    let Some(properties_object) = properties.as_object_mut() else {
+        return base;
+    };
+    for (key, value) in extra_properties {
+        properties_object.insert(key.clone(), value.clone());
+    }
+    base
 }
 
 fn infer_fallback_response(http: Option<&ContractHttpInfo>) -> Vec<ContractResponse> {
@@ -1234,68 +1438,14 @@ fn build_authorization(
     runtime_routes: &[RuntimeRoute],
     source_index: &SourceIndex,
 ) -> Vec<ContractAuthorization> {
-    let authorize_re =
-        Regex::new(r#"(?:\$this->authorize|Gate::authorize)\(\s*['"]([^'"]+)['"]\s*,\s*([^\),]+)"#)
-            .expect("authorize regex");
-
-    let mut items = Vec::new();
-    let mut seen = BTreeSet::new();
-    for captures in authorize_re.captures_iter(&controller.body_text) {
-        let Some(ability) = captures.get(1) else {
-            continue;
-        };
-        let target = captures.get(2).map(|item| item.as_str().trim().to_string());
-        let source = captures
-            .get(0)
-            .map(|item| item.as_str())
-            .unwrap_or("$this->authorize");
-        let key = format!("{}|{:?}|{}", ability.as_str(), target, source);
-        if !seen.insert(key) {
-            continue;
-        }
-
-        items.push(ContractAuthorization {
-            kind: "policy".to_string(),
-            ability: Some(ability.as_str().to_string()),
-            target_kind: target.as_ref().map(|_| "expression".to_string()),
-            target,
-            parameter: None,
-            source: if source.contains("Gate::authorize") {
-                "Gate::authorize".to_string()
-            } else {
-                "$this->authorize".to_string()
-            },
-            resolution: "explicit".to_string(),
-            enforces_failure_response: true,
-        });
-    }
-
-    for route in runtime_routes {
-        extend_route_authorization(route, &mut items, &mut seen);
-    }
-
-    for request in &controller.request_usage {
-        let Some(class_name) = &request.class_name else {
-            continue;
-        };
-        extend_form_request_authorization(class_name, source_index, &mut items, &mut seen);
-    }
-
-    items.sort_by(|a, b| {
-        (&a.kind, &a.source, &a.ability, &a.target, &a.parameter).cmp(&(
-            &b.kind,
-            &b.source,
-            &b.ability,
-            &b.target,
-            &b.parameter,
-        ))
-    });
-    items
+    build_static_authorization(controller, runtime_routes, source_index)
 }
 
-fn build_controller_resources(controller: &ControllerMethod) -> Vec<ContractControllerResource> {
-    let mut resources = controller
-        .resource_usage
+fn build_controller_resources(
+    controller: &ControllerMethod,
+    source_index: &SourceIndex,
+) -> Vec<ContractControllerResource> {
+    let mut resources = collect_controller_resource_usage(controller, source_index)
         .iter()
         .map(|resource| ContractControllerResource {
             class: class_basename(&resource.class_name),
@@ -1309,6 +1459,57 @@ fn build_controller_resources(controller: &ControllerMethod) -> Vec<ContractCont
     });
     resources
         .dedup_by(|a, b| a.fqcn == b.fqcn && a.class == b.class && a.collection == b.collection);
+    resources
+}
+
+fn collect_controller_resource_usage(
+    controller: &ControllerMethod,
+    source_index: &SourceIndex,
+) -> Vec<ResourceUsageFact> {
+    let mut resources = controller.resource_usage.clone();
+    let Some(class) = source_index.get(&controller.fqcn) else {
+        return resources;
+    };
+
+    let response_re = Regex::new(
+        r#"(?s)new\s+([A-Z][A-Za-z0-9_\\]*(?:Resource|Collection))\((?:.|\n)*?\)\s*->response\("#,
+    )
+    .expect("contract resource response regex");
+    let collection_re =
+        Regex::new(r#"([A-Z][A-Za-z0-9_\\]*(?:Resource|Collection))::collection\("#)
+            .expect("contract resource collection regex");
+    let make_re = Regex::new(r#"([A-Z][A-Za-z0-9_\\]*(?:Resource|Collection))::make\("#)
+        .expect("contract resource make regex");
+    let new_re = Regex::new(r#"new\s+([A-Z][A-Za-z0-9_\\]*(?:Resource|Collection))\("#)
+        .expect("contract new resource regex");
+    let mut seen = resources
+        .iter()
+        .map(|resource| (resource.class_name.clone(), resource.method.clone()))
+        .collect::<BTreeSet<_>>();
+
+    for (regex, method) in [
+        (&response_re, Some("response".to_string())),
+        (&collection_re, Some("collection".to_string())),
+        (&make_re, Some("make".to_string())),
+        (&new_re, Some("new".to_string())),
+    ] {
+        for captures in regex.captures_iter(&controller.body_text) {
+            let Some(class_name) = captures.get(1) else {
+                continue;
+            };
+            let class_name = class.resolve_name(class_name.as_str());
+            let method = if class_name.ends_with("Collection") && method.as_deref() == Some("new") {
+                Some("collection".to_string())
+            } else {
+                method.clone()
+            };
+            let key = (class_name.clone(), method.clone());
+            if seen.insert(key.clone()) {
+                resources.push(ResourceUsageFact { class_name, method });
+            }
+        }
+    }
+
     resources
 }
 
@@ -1412,6 +1613,14 @@ fn collect_models(result: &PipelineResult, source_index: &SourceIndex) -> Vec<Co
                     name: attribute.clone(),
                     via: "Attribute::make".to_string(),
                 }));
+            entry.attributes.extend(
+                collect_translatable_attributes(&model.fqcn, source_index)
+                    .into_iter()
+                    .map(|attribute| ContractAttribute {
+                        name: attribute,
+                        via: "spatie/laravel-translatable".to_string(),
+                    }),
+            );
             entry
                 .attributes
                 .extend(hint.fillable.iter().map(|attribute| ContractAttribute {
@@ -1433,6 +1642,43 @@ fn collect_models(result: &PipelineResult, source_index: &SourceIndex) -> Vec<Co
                     build_model_polymorphic_relation(relationship, &related_models_by_morph)
                 }));
         }
+    }
+
+    for class in source_index.classes.values() {
+        if models.contains_key(&class.fqcn) {
+            continue;
+        }
+        if class.source_text.contains("abstract class ") {
+            continue;
+        }
+        if !is_eloquent_model_class(&class.fqcn, source_index) {
+            continue;
+        }
+
+        let translatable = collect_translatable_attributes(&class.fqcn, source_index);
+        if translatable.is_empty() {
+            continue;
+        }
+
+        let mut entry = ContractModel {
+            fqcn: class.fqcn.clone(),
+            with_pivot: Vec::new(),
+            attributes: translatable
+                .into_iter()
+                .map(|attribute| ContractAttribute {
+                    name: attribute,
+                    via: "spatie/laravel-translatable".to_string(),
+                })
+                .collect(),
+            polymorphic: Vec::new(),
+        };
+        entry
+            .attributes
+            .sort_by(|a, b| (&a.name, &a.via).cmp(&(&b.name, &b.via)));
+        entry
+            .attributes
+            .dedup_by(|a, b| a.name == b.name && a.via == b.via);
+        models.insert(class.fqcn.clone(), entry);
     }
 
     let mut models = models
@@ -1684,9 +1930,25 @@ fn register_request_field(
         return;
     }
 
+    let shape_path = match location.as_str() {
+        "body" | "files" => {
+            let array_path = if field.is_array == Some(true) || field.collection == Some(true) {
+                if path.contains("[]") {
+                    path.clone()
+                } else {
+                    format!("{path}[]")
+                }
+            } else {
+                path.clone()
+            };
+            normalize_array_shape_path(&array_path)
+        }
+        _ => path.clone(),
+    };
+
     match location.as_str() {
         "body" => {
-            body.insert_path(&path);
+            body.insert_path(&shape_path);
             content_types.insert("application/json".to_string());
             content_types.insert("application/x-www-form-urlencoded".to_string());
         }
@@ -1694,7 +1956,7 @@ fn register_request_field(
             query.insert_path(&path);
         }
         "files" => {
-            files.insert_path(&path);
+            files.insert_path(&shape_path);
             content_types.insert("multipart/form-data".to_string());
         }
         _ => {}
@@ -1720,7 +1982,11 @@ fn register_request_field(
         via: None,
     });
 
-    merge_optional(&mut entry.kind, field.kind);
+    if entry.kind.as_deref() == Some("array") && field.kind.as_deref() == Some("collection") {
+        entry.kind = Some("collection".to_string());
+    } else {
+        merge_optional(&mut entry.kind, field.kind);
+    }
     merge_optional(&mut entry.type_name, field.type_name);
     merge_optional(&mut entry.scalar_type, field.scalar_type);
     merge_optional(&mut entry.format, field.format);
@@ -1734,6 +2000,10 @@ fn register_request_field(
     merge_optional(&mut entry.via, field.via);
     extend_unique(&mut entry.wrappers, field.wrappers);
     extend_unique(&mut entry.allowed_values, field.allowed_values);
+}
+
+fn normalize_array_shape_path(path: &str) -> String {
+    path.replace("[]", "._item")
 }
 
 fn merge_optional(target: &mut Option<String>, value: Option<String>) {
@@ -1802,6 +2072,498 @@ fn parse_form_request_fields(class_name: &str, source_index: &SourceIndex) -> Ve
     )
 }
 
+fn parse_spatie_data_request_fields(
+    controller: &ControllerMethod,
+    source_index: &SourceIndex,
+) -> Vec<ParsedRuleField> {
+    let Some(class) = source_index.get(&controller.fqcn) else {
+        return Vec::new();
+    };
+
+    let mut fields = Vec::new();
+    let mut data_classes = BTreeSet::new();
+
+    for parameter in
+        extract_method_signature_parameters(&controller.body_text, controller.method_name.as_str())
+            .into_iter()
+            .flat_map(|params| split_top_level(&params, ','))
+    {
+        let Some((raw_type, _name, _default, _attrs)) = parse_typed_parameter(&parameter) else {
+            continue;
+        };
+        let resolved = class.resolve_name(raw_type.trim_start_matches('?'));
+        if is_spatie_data_class(&resolved, source_index) {
+            data_classes.insert(resolved);
+        }
+    }
+
+    let mut visited = BTreeSet::new();
+    for data_class in data_classes {
+        fields.extend(parse_spatie_data_class_fields(
+            &data_class,
+            source_index,
+            "",
+            &mut visited,
+        ));
+    }
+
+    fields
+}
+
+fn parse_spatie_data_class_fields(
+    class_fqcn: &str,
+    source_index: &SourceIndex,
+    prefix: &str,
+    visited: &mut BTreeSet<String>,
+) -> Vec<ParsedRuleField> {
+    if !visited.insert(class_fqcn.to_string()) {
+        return Vec::new();
+    }
+
+    let Some(class) = source_index.get(class_fqcn) else {
+        visited.remove(class_fqcn);
+        return Vec::new();
+    };
+    if !is_spatie_data_class(class_fqcn, source_index) {
+        visited.remove(class_fqcn);
+        return Vec::new();
+    }
+
+    let mut fields = Vec::new();
+
+    if let Some(parent) = class.extends.as_deref() {
+        if parent != "Spatie\\LaravelData\\Data" && is_spatie_data_class(parent, source_index) {
+            fields.extend(parse_spatie_data_class_fields(
+                parent,
+                source_index,
+                prefix,
+                visited,
+            ));
+        }
+    }
+
+    fields.extend(expand_spatie_data_fields(
+        parse_spatie_data_constructor_fields(class, source_index, prefix),
+        source_index,
+        visited,
+    ));
+    fields.extend(expand_spatie_data_fields(
+        parse_spatie_data_property_fields(class, source_index, prefix),
+        source_index,
+        visited,
+    ));
+
+    visited.remove(class_fqcn);
+    fields
+}
+
+fn parse_spatie_data_constructor_fields(
+    class: &SourceClass,
+    source_index: &SourceIndex,
+    prefix: &str,
+) -> Vec<ParsedRuleField> {
+    let Some(parameters) = extract_method_signature_parameters(&class.source_text, "__construct")
+    else {
+        return Vec::new();
+    };
+
+    split_top_level(&parameters, ',')
+        .into_iter()
+        .filter_map(|parameter| {
+            let Some((raw_type, name, default, attrs)) = parse_typed_parameter(&parameter) else {
+                return None;
+            };
+            parse_spatie_data_member(
+                class,
+                source_index,
+                prefix,
+                &name,
+                &raw_type,
+                default.as_deref(),
+                &attrs,
+            )
+        })
+        .collect()
+}
+
+fn parse_spatie_data_property_fields(
+    class: &SourceClass,
+    source_index: &SourceIndex,
+    prefix: &str,
+) -> Vec<ParsedRuleField> {
+    let Some(body) = extract_class_body(&class.source_text) else {
+        return Vec::new();
+    };
+
+    let mut fields = Vec::new();
+    let mut pending_attrs = Vec::new();
+    let property_re = Regex::new(
+        r#"^(?:(?:public|protected|private)\s+)?(?:readonly\s+)?(?:[A-Za-z_\\][A-Za-z0-9_\\<>\|\?\s]*)\s+\$[A-Za-z_][A-Za-z0-9_]*\s*(?:=\s*.+)?;\s*$"#,
+    )
+    .expect("property regex");
+
+    for line in body.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            pending_attrs.clear();
+            continue;
+        }
+        if trimmed.starts_with("#[") {
+            pending_attrs.push(trimmed.to_string());
+            continue;
+        }
+
+        if property_re.is_match(trimmed) {
+            let candidate = if pending_attrs.is_empty() {
+                trimmed.to_string()
+            } else {
+                format!("{} {}", pending_attrs.join(" "), trimmed)
+            };
+            if let Some((raw_type, name, default, attrs)) = parse_typed_parameter(&candidate) {
+                if let Some(field) = parse_spatie_data_member(
+                    class,
+                    source_index,
+                    prefix,
+                    &name,
+                    &raw_type,
+                    default.as_deref(),
+                    &attrs,
+                ) {
+                    fields.push(field);
+                }
+            }
+        }
+
+        pending_attrs.clear();
+    }
+
+    fields
+}
+
+fn parse_spatie_data_member(
+    class: &SourceClass,
+    source_index: &SourceIndex,
+    prefix: &str,
+    name: &str,
+    raw_type: &str,
+    default_value: Option<&str>,
+    attrs: &str,
+) -> Option<ParsedRuleField> {
+    let meta = parse_spatie_data_member_meta(class, source_index, raw_type, default_value, attrs)?;
+    let path = join_shape_path(prefix, name);
+
+    let mut field = ParsedRuleField {
+        location: "body".to_string(),
+        path: path.clone(),
+        kind: meta.kind,
+        type_name: meta.type_name,
+        scalar_type: meta.scalar_type,
+        format: None,
+        item_type: meta.item_type,
+        wrappers: meta.wrappers,
+        allowed_values: Vec::new(),
+        required: meta.required,
+        optional: meta.optional,
+        nullable: meta.nullable,
+        is_array: meta.is_array,
+        collection: meta.collection,
+        source: Some("spatie/laravel-data".to_string()),
+        via: Some("data".to_string()),
+    };
+
+    if field.kind.as_deref() == Some("collection")
+        && field.item_type.is_some()
+        && field.is_array != Some(true)
+    {
+        field.is_array = Some(true);
+    }
+
+    Some(field)
+}
+
+fn expand_spatie_data_fields(
+    fields: Vec<ParsedRuleField>,
+    source_index: &SourceIndex,
+    visited: &mut BTreeSet<String>,
+) -> Vec<ParsedRuleField> {
+    let mut expanded = Vec::new();
+
+    for field in fields {
+        let recurse_prefix = field.path.clone();
+        let nested_class = match field.kind.as_deref() {
+            Some("collection") => field.item_type.clone(),
+            Some("object") => field.type_name.clone(),
+            _ => None,
+        };
+        let is_collection =
+            field.kind.as_deref() == Some("collection") || field.is_array == Some(true);
+
+        expanded.push(field);
+
+        let Some(nested_class) = nested_class else {
+            continue;
+        };
+
+        let prefix = if is_collection {
+            format!("{recurse_prefix}[]")
+        } else {
+            recurse_prefix
+        };
+
+        expanded.extend(parse_spatie_data_class_fields(
+            &nested_class,
+            source_index,
+            &prefix,
+            visited,
+        ));
+    }
+
+    expanded
+}
+
+fn parse_spatie_data_member_meta(
+    class: &SourceClass,
+    source_index: &SourceIndex,
+    raw_type: &str,
+    default_value: Option<&str>,
+    attrs: &str,
+) -> Option<SpatieDataFieldSpec> {
+    let mut wrappers = Vec::new();
+    let mut nullable = false;
+    let mut optional = false;
+    let mut base_type = None;
+
+    for token in raw_type.split('|') {
+        let token = token.trim();
+        if token.is_empty() {
+            continue;
+        }
+        if token == "Optional" || token == "Lazy" {
+            wrappers.push(token.to_string());
+            optional = true;
+            continue;
+        }
+        if token == "null" {
+            nullable = true;
+            optional = true;
+            continue;
+        }
+
+        let stripped = token.trim_start_matches('?');
+        if stripped != token {
+            nullable = true;
+            optional = true;
+        }
+        if base_type.is_none() {
+            base_type = Some(stripped.to_string());
+        }
+    }
+
+    let base_type = base_type?;
+    let default_is_null = default_value
+        .map(|value| value.trim() == "null")
+        .unwrap_or(false);
+    if default_is_null {
+        nullable = true;
+        optional = true;
+    }
+    let required = Some(!(optional || nullable));
+
+    let data_collection_target = extract_data_collection_target(attrs, class);
+    let resolved_base = class.resolve_name(&base_type);
+
+    match base_type.as_str() {
+        "string" => Some(SpatieDataFieldSpec {
+            kind: Some("scalar".to_string()),
+            type_name: Some("string".to_string()),
+            scalar_type: Some("string".to_string()),
+            wrappers,
+            required,
+            optional: Some(!required.unwrap_or(false)),
+            nullable: Some(nullable),
+            ..SpatieDataFieldSpec::default()
+        }),
+        "integer" | "int" => Some(SpatieDataFieldSpec {
+            kind: Some("scalar".to_string()),
+            type_name: Some("integer".to_string()),
+            scalar_type: Some("integer".to_string()),
+            wrappers,
+            required,
+            optional: Some(!required.unwrap_or(false)),
+            nullable: Some(nullable),
+            ..SpatieDataFieldSpec::default()
+        }),
+        "bool" | "boolean" => Some(SpatieDataFieldSpec {
+            kind: Some("scalar".to_string()),
+            type_name: Some("boolean".to_string()),
+            scalar_type: Some("boolean".to_string()),
+            wrappers,
+            required,
+            optional: Some(!required.unwrap_or(false)),
+            nullable: Some(nullable),
+            ..SpatieDataFieldSpec::default()
+        }),
+        "float" | "double" | "numeric" | "decimal" => Some(SpatieDataFieldSpec {
+            kind: Some("scalar".to_string()),
+            type_name: Some("number".to_string()),
+            scalar_type: Some("number".to_string()),
+            wrappers,
+            required,
+            optional: Some(!required.unwrap_or(false)),
+            nullable: Some(nullable),
+            ..SpatieDataFieldSpec::default()
+        }),
+        "array" => {
+            if let Some(target) = data_collection_target {
+                Some(SpatieDataFieldSpec {
+                    kind: Some("collection".to_string()),
+                    type_name: Some("array".to_string()),
+                    item_type: Some(target.clone()),
+                    wrappers,
+                    required,
+                    optional: Some(!required.unwrap_or(false)),
+                    nullable: Some(nullable),
+                    is_array: Some(true),
+                    collection: Some(true),
+                    ..SpatieDataFieldSpec::default()
+                })
+            } else {
+                Some(SpatieDataFieldSpec {
+                    kind: Some("array".to_string()),
+                    type_name: Some("array".to_string()),
+                    wrappers,
+                    required,
+                    optional: Some(!required.unwrap_or(false)),
+                    nullable: Some(nullable),
+                    is_array: Some(true),
+                    collection: Some(true),
+                    ..SpatieDataFieldSpec::default()
+                })
+            }
+        }
+        _ => {
+            if let Some(target) = data_collection_target {
+                return Some(SpatieDataFieldSpec {
+                    kind: Some("collection".to_string()),
+                    type_name: Some("array".to_string()),
+                    item_type: Some(target.clone()),
+                    wrappers,
+                    required,
+                    optional: Some(!required.unwrap_or(false)),
+                    nullable: Some(nullable),
+                    is_array: Some(true),
+                    collection: Some(true),
+                    ..SpatieDataFieldSpec::default()
+                });
+            }
+
+            if is_spatie_data_class(&resolved_base, source_index) {
+                Some(SpatieDataFieldSpec {
+                    kind: Some("object".to_string()),
+                    type_name: Some(resolved_base.clone()),
+                    wrappers,
+                    required,
+                    optional: Some(!required.unwrap_or(false)),
+                    nullable: Some(nullable),
+                    ..SpatieDataFieldSpec::default()
+                })
+            } else {
+                Some(SpatieDataFieldSpec {
+                    kind: Some("scalar".to_string()),
+                    type_name: Some("string".to_string()),
+                    scalar_type: Some("string".to_string()),
+                    wrappers,
+                    required,
+                    optional: Some(!required.unwrap_or(false)),
+                    nullable: Some(nullable),
+                    ..SpatieDataFieldSpec::default()
+                })
+            }
+        }
+    }
+}
+
+fn extract_method_signature_parameters(source: &str, method_name: &str) -> Option<String> {
+    let method_re = Regex::new(&format!(
+        r#"function\s+{}\s*\("#,
+        regex::escape(method_name)
+    ))
+    .expect("method signature regex");
+    let method_match = method_re.find(source)?;
+    let params_start = method_match.end().saturating_sub(1);
+    extract_balanced_region(&source[params_start..], '(', ')').map(|value| value.0)
+}
+
+fn parse_typed_parameter(parameter: &str) -> Option<(String, String, Option<String>, String)> {
+    let parameter = parameter.trim();
+    if parameter.is_empty() {
+        return None;
+    }
+
+    let param_re = Regex::new(
+        r#"(?s)^(?P<attrs>(?:\s*#\[[^\]]+\]\s*)*)(?:(?P<visibility>public|protected|private)\s+)?(?P<type>[^$=]+?)\s+\$(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?:=\s*(?P<default>.*?))?\s*[;,]?\s*$"#,
+    )
+    .expect("typed parameter regex");
+    let captures = param_re.captures(parameter)?;
+    let type_name = captures
+        .name("type")
+        .map(|item| item.as_str().trim().to_string())?;
+    let name = captures
+        .name("name")
+        .map(|item| item.as_str().trim().to_string())?;
+    let attrs = captures
+        .name("attrs")
+        .map(|item| item.as_str().trim().to_string())
+        .unwrap_or_default();
+    let default = captures
+        .name("default")
+        .map(|item| {
+            item.as_str()
+                .trim()
+                .trim_end_matches(',')
+                .trim()
+                .to_string()
+        })
+        .filter(|value| !value.is_empty());
+
+    Some((type_name, name, default, attrs))
+}
+
+fn extract_class_body(source: &str) -> Option<String> {
+    let class_re = Regex::new(r#"(?m)^\s*(?:final\s+|abstract\s+)?class\s+[A-Za-z_][A-Za-z0-9_]*"#)
+        .expect("class body regex");
+    let class_match = class_re.find(source)?;
+    let brace_offset = source[class_match.end()..].find('{')? + class_match.end();
+    extract_balanced_region(&source[brace_offset..], '{', '}').map(|value| value.0)
+}
+
+fn extract_data_collection_target(attrs: &str, class: &SourceClass) -> Option<String> {
+    let attr_re = Regex::new(r#"DataCollectionOf\(\s*([A-Za-z_\\][A-Za-z0-9_\\]*)::class\s*\)"#)
+        .expect("data collection attr regex");
+    let captures = attr_re.captures(attrs)?;
+    let raw = captures.get(1)?.as_str();
+    Some(class.resolve_name(raw))
+}
+
+fn is_spatie_data_class(class_fqcn: &str, source_index: &SourceIndex) -> bool {
+    let Some(class) = source_index.get(class_fqcn) else {
+        return false;
+    };
+    match class.extends.as_deref() {
+        Some("Spatie\\LaravelData\\Data") => true,
+        Some(parent) if parent != class_fqcn => is_spatie_data_class(parent, source_index),
+        _ => false,
+    }
+}
+
+fn join_shape_path(prefix: &str, name: &str) -> String {
+    if prefix.is_empty() {
+        name.to_string()
+    } else {
+        format!("{prefix}.{name}")
+    }
+}
+
 fn parse_rule_array(array_body: &str, source: &str, via: &str) -> Vec<ParsedRuleField> {
     let mut fields = Vec::new();
 
@@ -1840,6 +2602,155 @@ fn parse_rule_array(array_body: &str, source: &str, via: &str) -> Vec<ParsedRule
     }
 
     fields
+}
+
+fn parse_spatie_media_request_fields(method_text: &str) -> Vec<ParsedRuleField> {
+    let variable_assign_re =
+        Regex::new(r#"(?m)^\s*\$(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*\[(?P<body>.*?)\]\s*;"#)
+            .expect("media array assignment regex");
+    let media_single_re =
+        Regex::new(r#"addMediaFromRequest\(\s*(?P<arg>[^)]+?)\s*\)"#).expect("media single regex");
+    let media_multi_re = Regex::new(r#"addMultipleMediaFromRequest\(\s*(?P<arg>[^)]+?)\s*\)"#)
+        .expect("media multi regex");
+
+    let mut arrays = BTreeMap::<String, Vec<String>>::new();
+    for captures in variable_assign_re.captures_iter(method_text) {
+        let Some(name) = captures.name("name") else {
+            continue;
+        };
+        let Some(body) = captures.name("body") else {
+            continue;
+        };
+        arrays.insert(
+            name.as_str().to_string(),
+            split_top_level(body.as_str(), ',')
+                .into_iter()
+                .filter_map(|item| strip_php_string(&item))
+                .collect(),
+        );
+    }
+
+    let mut fields = Vec::new();
+    let mut seen = BTreeSet::new();
+
+    for captures in media_single_re.captures_iter(method_text) {
+        let Some(arg) = captures.name("arg") else {
+            continue;
+        };
+        for (path, is_collection) in resolve_spatie_media_request_paths(arg.as_str(), &arrays) {
+            if seen.insert(path.clone()) {
+                fields.push(spatie_media_request_field(
+                    path,
+                    "addMediaFromRequest",
+                    is_collection,
+                ));
+            }
+        }
+    }
+
+    for captures in media_multi_re.captures_iter(method_text) {
+        let Some(arg) = captures.name("arg") else {
+            continue;
+        };
+        for (path, is_collection) in resolve_spatie_media_request_paths(arg.as_str(), &arrays) {
+            if seen.insert(path.clone()) {
+                fields.push(spatie_media_request_field(
+                    path,
+                    "addMultipleMediaFromRequest",
+                    is_collection,
+                ));
+            }
+        }
+    }
+
+    fields
+}
+
+fn resolve_spatie_media_request_paths(
+    raw: &str,
+    arrays: &BTreeMap<String, Vec<String>>,
+) -> Vec<(String, bool)> {
+    let value = raw.trim();
+
+    if value.starts_with('[') {
+        return extract_balanced_region(value, '[', ']')
+            .map(|(body, _, _)| {
+                split_top_level(&body, ',')
+                    .into_iter()
+                    .filter_map(|item| strip_php_string(&item))
+                    .map(|item| {
+                        let is_collection = item.ends_with("[]");
+                        (item.trim_end_matches("[]").to_string(), is_collection)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+    }
+
+    if let Some(name) = value.strip_prefix('$') {
+        return arrays
+            .get(name)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|item| {
+                let is_collection = item.ends_with("[]");
+                (item.trim_end_matches("[]").to_string(), is_collection)
+            })
+            .collect();
+    }
+
+    strip_php_string(value)
+        .map(|item| {
+            let is_collection = item.ends_with("[]");
+            vec![(item.trim_end_matches("[]").to_string(), is_collection)]
+        })
+        .unwrap_or_default()
+}
+
+fn spatie_media_request_field(path: String, via: &str, is_collection: bool) -> ParsedRuleField {
+    let normalized_path = path.trim_end_matches("[]").to_string();
+    let is_collection = is_collection || normalized_path != path;
+
+    if is_collection {
+        ParsedRuleField {
+            location: "files".to_string(),
+            path: normalized_path,
+            kind: Some("collection".to_string()),
+            type_name: Some("array".to_string()),
+            scalar_type: None,
+            format: None,
+            item_type: Some("file".to_string()),
+            wrappers: Vec::new(),
+            allowed_values: Vec::new(),
+            required: None,
+            optional: None,
+            nullable: None,
+            is_array: Some(true),
+            collection: Some(true),
+            source: Some("spatie/laravel-medialibrary".to_string()),
+            via: Some(via.to_string()),
+        }
+    } else {
+        ParsedRuleField {
+            location: "files".to_string(),
+            path: normalized_path,
+            kind: Some("file".to_string()),
+            type_name: Some("string".to_string()),
+            scalar_type: Some("binary".to_string()),
+            format: None,
+            item_type: None,
+            wrappers: Vec::new(),
+            allowed_values: Vec::new(),
+            required: None,
+            optional: None,
+            nullable: None,
+            is_array: None,
+            collection: None,
+            source: Some("spatie/laravel-medialibrary".to_string()),
+            via: Some(via.to_string()),
+        }
+    }
 }
 
 fn parse_rule_tokens(raw_value: &str) -> Vec<String> {
@@ -2005,125 +2916,6 @@ fn apply_rule_token(field: &mut ParsedRuleField, rule: &str) {
     }
 }
 
-fn extend_route_authorization(
-    route: &RuntimeRoute,
-    items: &mut Vec<ContractAuthorization>,
-    seen: &mut BTreeSet<String>,
-) {
-    for middleware in &route.middleware {
-        if let Some(spec) = middleware.strip_prefix("can:") {
-            let mut parts = spec.split(',');
-            let ability = parts.next().map(str::trim).filter(|item| !item.is_empty());
-            let target = parts.next().map(str::trim).filter(|item| !item.is_empty());
-            let key = format!("middleware|{:?}|{:?}|{}", ability, target, middleware);
-            if !seen.insert(key) {
-                continue;
-            }
-            items.push(ContractAuthorization {
-                kind: "policy".to_string(),
-                ability: ability.map(str::to_string),
-                target_kind: target.map(|value| {
-                    if value.contains('\\') {
-                        "class".to_string()
-                    } else {
-                        "route_parameter".to_string()
-                    }
-                }),
-                target: target.map(str::to_string),
-                parameter: target
-                    .filter(|value| !value.contains('\\'))
-                    .map(str::to_string),
-                source: middleware.clone(),
-                resolution: "runtime".to_string(),
-                enforces_failure_response: true,
-            });
-            continue;
-        }
-
-        if middleware.starts_with("auth") || middleware == "verified" || middleware == "signed" {
-            let key = format!("middleware|{}|{}", route.route_id, middleware);
-            if !seen.insert(key) {
-                continue;
-            }
-            items.push(ContractAuthorization {
-                kind: "middleware".to_string(),
-                ability: None,
-                target_kind: None,
-                target: None,
-                parameter: None,
-                source: middleware.clone(),
-                resolution: "runtime".to_string(),
-                enforces_failure_response: true,
-            });
-        }
-    }
-}
-
-fn extend_form_request_authorization(
-    class_name: &str,
-    source_index: &SourceIndex,
-    items: &mut Vec<ContractAuthorization>,
-    seen: &mut BTreeSet<String>,
-) {
-    let Some(class) = source_index.get(class_name) else {
-        return;
-    };
-    let Some(body) = class.method_body("authorize") else {
-        return;
-    };
-
-    let compact = body.split_whitespace().collect::<String>();
-    if compact.contains("returntrue;") {
-        return;
-    }
-
-    let can_re = Regex::new(
-        r#"(?:->can|Gate::allows|Gate::authorize)\(\s*['"]([^'"]+)['"]\s*(?:,\s*([^\)]+))?"#,
-    )
-    .expect("form request authorize regex");
-    let mut matched = false;
-
-    for captures in can_re.captures_iter(&body) {
-        let ability = captures.get(1).map(|item| item.as_str().to_string());
-        let target = captures.get(2).map(|item| item.as_str().trim().to_string());
-        let key = format!("form_request|{}|{:?}|{:?}", class.fqcn, ability, target);
-        if !seen.insert(key) {
-            continue;
-        }
-        matched = true;
-        items.push(ContractAuthorization {
-            kind: "form_request".to_string(),
-            ability,
-            target_kind: target.as_ref().map(|_| "expression".to_string()),
-            target,
-            parameter: None,
-            source: format!("{}::authorize", class.fqcn),
-            resolution: "form_request".to_string(),
-            enforces_failure_response: true,
-        });
-    }
-
-    if matched {
-        return;
-    }
-
-    if compact.contains("returnfalse;") || compact.contains("abort(") || compact.contains("throw") {
-        let key = format!("form_request|{}|static", class.fqcn);
-        if seen.insert(key) {
-            items.push(ContractAuthorization {
-                kind: "form_request".to_string(),
-                ability: None,
-                target_kind: None,
-                target: None,
-                parameter: None,
-                source: format!("{}::authorize", class.fqcn),
-                resolution: "form_request".to_string(),
-                enforces_failure_response: true,
-            });
-        }
-    }
-}
-
 fn collect_route_methods(result: &PipelineResult) -> BTreeMap<String, Vec<String>> {
     let mut route_methods = BTreeMap::<String, BTreeSet<String>>::new();
 
@@ -2238,14 +3030,13 @@ fn build_discriminator_mapping_from_vec(values: &[String]) -> BTreeMap<String, S
 fn build_response_schema(
     fqcn: &str,
     collection: bool,
-    source_index: &SourceIndex,
-    model_index: &BTreeMap<String, ModelFacts>,
+    _source_index: &SourceIndex,
+    _model_index: &BTreeMap<String, ModelFacts>,
 ) -> Value {
-    let schema = build_resource_schema(fqcn, source_index, model_index, &mut BTreeSet::new());
     if collection && !fqcn.ends_with("Collection") {
-        schema_array(schema)
+        schema_resource_collection(schema_ref(fqcn))
     } else {
-        schema
+        schema_ref(fqcn)
     }
 }
 
@@ -2309,14 +3100,16 @@ fn parse_php_array_schema(
             let key = strip_php_string(&raw_key).unwrap_or(raw_key.trim().to_string());
             properties.insert(
                 key,
-                infer_value_schema(
-                    &raw_value,
-                    source_index,
-                    model_index,
-                    current_class,
-                    current_model_fqcn,
-                    visited,
-                ),
+                infer_resource_reference_schema(&raw_value, current_class).unwrap_or_else(|| {
+                    infer_value_schema(
+                        &raw_value,
+                        source_index,
+                        model_index,
+                        current_class,
+                        current_model_fqcn,
+                        visited,
+                    )
+                }),
             );
         } else {
             items.push(infer_value_schema(
@@ -2351,8 +3144,8 @@ fn infer_value_schema(
 ) -> Value {
     let value = raw_value.trim();
 
-    if let Some(_string_value) = strip_php_string(value) {
-        return schema_string(None);
+    if let Some(string_value) = strip_php_string(value) {
+        return schema_for_php_string_literal(&string_value);
     }
     if value == "true" || value == "false" {
         return schema_boolean();
@@ -2386,7 +3179,16 @@ fn infer_value_schema(
             let fqcn = current_class
                 .map(|class| class.resolve_name(resource_name.as_str()))
                 .unwrap_or_else(|| resource_name.as_str().to_string());
-            return build_resource_schema(&fqcn, source_index, model_index, visited);
+            let schema = if current_class.is_some_and(is_resource_class) {
+                schema_ref(&fqcn)
+            } else {
+                schema_openapi_ref(&fqcn)
+            };
+            return if value.contains("whenLoaded(") {
+                schema_nullable(schema)
+            } else {
+                schema
+            };
         }
     }
     if let Some(captures) =
@@ -2398,8 +3200,17 @@ fn infer_value_schema(
             let fqcn = current_class
                 .map(|class| class.resolve_name(resource_name.as_str()))
                 .unwrap_or_else(|| resource_name.as_str().to_string());
-            let item_schema = build_resource_schema(&fqcn, source_index, model_index, visited);
-            return schema_array(item_schema);
+            let item_schema = if current_class.is_some_and(is_resource_class) {
+                schema_ref(&fqcn)
+            } else {
+                schema_openapi_ref(&fqcn)
+            };
+            let schema = schema_array(item_schema);
+            return if value.contains("whenLoaded(") {
+                schema_nullable(schema)
+            } else {
+                schema
+            };
         }
     }
     if value.contains("fn () =>") {
@@ -2621,8 +3432,7 @@ fn infer_schema_from_expression(
         return None;
     }
     if let Some(string_value) = strip_php_string(expression) {
-        let _ = string_value;
-        return Some(schema_string(None));
+        return Some(schema_for_php_string_literal(&string_value));
     }
     if expression == "true" || expression == "false" {
         return Some(schema_boolean());
@@ -2663,12 +3473,7 @@ fn infer_schema_from_expression(
         let fqcn = class
             .map(|value| value.resolve_name(resource_name))
             .unwrap_or_else(|| resource_name.to_string());
-        return Some(schema_array(build_resource_schema(
-            &fqcn,
-            source_index,
-            model_index,
-            visited,
-        )));
+        return Some(schema_resource_collection(schema_ref(&fqcn)));
     }
 
     if let Some(captures) = Regex::new(r#"new\s+([A-Z][A-Za-z0-9_\\]*(?:Resource|Collection))\("#)
@@ -2679,12 +3484,8 @@ fn infer_schema_from_expression(
         let fqcn = class
             .map(|value| value.resolve_name(resource_name))
             .unwrap_or_else(|| resource_name.to_string());
-        return Some(build_resource_schema(
-            &fqcn,
-            source_index,
-            model_index,
-            visited,
-        ));
+        let _ = (source_index, model_index, visited);
+        return Some(schema_openapi_ref(&fqcn));
     }
 
     if let Some(variable_name) = expression.strip_prefix('$') {
@@ -2949,6 +3750,110 @@ fn parse_string_map_property(source: &str, property: &str) -> BTreeMap<String, S
     values
 }
 
+fn collect_translatable_attributes(
+    class_fqcn: &str,
+    source_index: &SourceIndex,
+) -> BTreeSet<String> {
+    let mut attributes = BTreeSet::new();
+    let mut visited = BTreeSet::new();
+    let mut current = Some(class_fqcn.to_string());
+
+    while let Some(fqcn) = current {
+        if !visited.insert(fqcn.clone()) {
+            break;
+        }
+
+        let Some(class) = source_index.get(&fqcn) else {
+            break;
+        };
+
+        attributes.extend(parse_translatable_array_property(&class.source_text));
+        current = class.extends.clone();
+    }
+
+    attributes
+}
+
+fn is_eloquent_model_class(class_fqcn: &str, source_index: &SourceIndex) -> bool {
+    let Some(class) = source_index.get(class_fqcn) else {
+        return false;
+    };
+
+    match class.extends.as_deref() {
+        Some("Illuminate\\Database\\Eloquent\\Model") => true,
+        Some(parent) if parent != class_fqcn => is_eloquent_model_class(parent, source_index),
+        _ => false,
+    }
+}
+
+fn parse_translatable_array_property(source: &str) -> BTreeSet<String> {
+    let Some(expression) = extract_property_assignment_expression(source, "translatable") else {
+        return BTreeSet::new();
+    };
+    parse_php_string_array_expression(source, &expression)
+}
+
+fn extract_property_assignment_expression(source: &str, property: &str) -> Option<String> {
+    let property_re = Regex::new(&format!(
+        r#"(?s)(?:public|protected|private)\s+array\s+\${}\s*=\s*(.+?);"#,
+        regex::escape(property)
+    ))
+    .expect("property assignment regex");
+    property_re
+        .captures(source)
+        .and_then(|captures| captures.get(1))
+        .map(|item| item.as_str().trim().to_string())
+}
+
+fn parse_php_string_array_expression(source: &str, expression: &str) -> BTreeSet<String> {
+    let value = expression.trim();
+
+    if value.starts_with('[') {
+        return extract_balanced_region(value, '[', ']')
+            .map(|(body, _, _)| {
+                split_top_level(&body, ',')
+                    .into_iter()
+                    .filter_map(|item| strip_php_string(&item))
+                    .collect()
+            })
+            .unwrap_or_default();
+    }
+
+    if let Some(const_name) = value
+        .strip_prefix("self::")
+        .or_else(|| value.strip_prefix("static::"))
+    {
+        return extract_const_array_property(source, const_name);
+    }
+
+    BTreeSet::new()
+}
+
+fn extract_const_array_property(source: &str, const_name: &str) -> BTreeSet<String> {
+    let const_re = Regex::new(&format!(
+        r#"(?s)(?:public|protected|private)?\s*const\s+{}\s*=\s*\["#,
+        regex::escape(const_name)
+    ))
+    .expect("const array regex");
+    let Some(const_match) = const_re.find(source) else {
+        return BTreeSet::new();
+    };
+    let Some(start) = source[const_match.start()..]
+        .find('[')
+        .map(|index| index + const_match.start())
+    else {
+        return BTreeSet::new();
+    };
+    let Some((body, _, _)) = extract_balanced_region(&source[start..], '[', ']') else {
+        return BTreeSet::new();
+    };
+
+    split_top_level(&body, ',')
+        .into_iter()
+        .filter_map(|item| strip_php_string(&item))
+        .collect()
+}
+
 fn extract_array_property(source: &str, property: &str) -> Option<String> {
     let property_re = Regex::new(&format!(
         r#"(?s)(?:public|protected|private)\s+\${}\s*=\s*\["#,
@@ -3030,6 +3935,16 @@ fn schema_array(items: Value) -> Value {
     json!({ "type": "array", "items": items })
 }
 
+fn schema_resource_collection(items: Value) -> Value {
+    json!({
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+            "data": schema_array(items)
+        }
+    })
+}
+
 fn schema_paginated(item_schema: Value) -> Value {
     json!({
         "type": "object",
@@ -3045,6 +3960,56 @@ fn schema_string(format: Option<&str>) -> Value {
     match format {
         Some(format) => json!({ "type": "string", "format": format }),
         None => json!({ "type": "string" }),
+    }
+}
+
+fn infer_resource_reference_schema(
+    raw_value: &str,
+    current_class: Option<&SourceClass>,
+) -> Option<Value> {
+    let value = raw_value.trim();
+
+    if let Some(captures) = Regex::new(r#"new\s+([A-Z][A-Za-z0-9_\\]*(?:Resource|Collection))\("#)
+        .expect("resource ref new regex")
+        .captures(value)
+    {
+        let resource_name = captures.get(1)?.as_str();
+        let fqcn = current_class
+            .map(|class| class.resolve_name(resource_name))
+            .unwrap_or_else(|| resource_name.to_string());
+        let schema = schema_ref(&fqcn);
+        return Some(if value.contains("whenLoaded(") {
+            schema_nullable(schema)
+        } else {
+            schema
+        });
+    }
+
+    if let Some(captures) =
+        Regex::new(r#"([A-Z][A-Za-z0-9_\\]*(?:Resource|Collection))::collection\("#)
+            .expect("resource ref collection regex")
+            .captures(value)
+    {
+        let resource_name = captures.get(1)?.as_str();
+        let fqcn = current_class
+            .map(|class| class.resolve_name(resource_name))
+            .unwrap_or_else(|| resource_name.to_string());
+        let schema = schema_array(schema_ref(&fqcn));
+        return Some(if value.contains("whenLoaded(") {
+            schema_nullable(schema)
+        } else {
+            schema
+        });
+    }
+
+    None
+}
+
+fn schema_for_php_string_literal(value: &str) -> Value {
+    if value.starts_with("http://") || value.starts_with("https://") {
+        schema_string(Some("uri"))
+    } else {
+        schema_string(None)
     }
 }
 
@@ -3068,6 +4033,14 @@ fn schema_nullable(schema: Value) -> Value {
     value
 }
 
+fn schema_ref(fqcn: &str) -> Value {
+    json!({ "ref": fqcn })
+}
+
+fn schema_openapi_ref(fqcn: &str) -> Value {
+    json!({ "$ref": fqcn })
+}
+
 fn relation_is_collection(relation_type: &str) -> bool {
     matches!(
         relation_type,
@@ -3079,18 +4052,19 @@ fn singularize(value: &str) -> String {
     value.strip_suffix('s').unwrap_or(value).to_string()
 }
 
-fn extract_inertia_component(text: &str) -> Option<String> {
-    let inertia_re = Regex::new(r#"Inertia::render\(\s*['"]([^'"]+)['"]"#).expect("inertia regex");
-    inertia_re
+fn extract_route_redirect_target(text: &str) -> Option<String> {
+    let redirect_re = Regex::new(r#"(?:redirect\(\)->route|to_route)\(\s*['"]([^'"]+)['"]"#)
+        .expect("redirect regex");
+    redirect_re
         .captures(text)
         .and_then(|captures| captures.get(1))
         .map(|item| item.as_str().to_string())
 }
 
-fn extract_route_redirect_target(text: &str) -> Option<String> {
-    let redirect_re = Regex::new(r#"(?:redirect\(\)->route|to_route)\(\s*['"]([^'"]+)['"]"#)
-        .expect("redirect regex");
-    redirect_re
+fn extract_inertia_location_target(text: &str) -> Option<String> {
+    let inertia_location_re =
+        Regex::new(r#"Inertia::location\(\s*['"]([^'"]+)['"]"#).expect("inertia location regex");
+    inertia_location_re
         .captures(text)
         .and_then(|captures| captures.get(1))
         .map(|item| item.as_str().to_string())

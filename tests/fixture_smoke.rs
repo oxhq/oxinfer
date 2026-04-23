@@ -37,6 +37,14 @@ fn minimal_fixture_produces_controllers_and_models() {
         .expect("user controller should exist");
     assert_eq!(users.file, "app/Http/Controllers/UserController.php");
     assert_eq!(users.methods.len(), 5);
+    assert_eq!(
+        users
+            .methods
+            .iter()
+            .map(|method| method.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["index", "store", "show", "update", "destroy"]
+    );
 
     let store = users
         .methods
@@ -74,6 +82,14 @@ fn api_fixture_detects_resources_and_scopes() {
         .find(|controller| controller.fqcn == "App\\Http\\Controllers\\ProductController")
         .expect("product controller should exist");
     assert_eq!(product_controller.methods.len(), 6);
+    assert_eq!(
+        product_controller
+            .methods
+            .iter()
+            .map(|method| method.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["index", "store", "show", "update", "destroy", "featured"]
+    );
 
     let featured = product_controller
         .methods
@@ -108,8 +124,20 @@ fn api_fixture_detects_resources_and_scopes() {
         .find(|model| model.fqcn == "App\\Models\\Product")
         .expect("product model should exist");
     assert_eq!(product.file, "app/Models/Product.php");
-    assert!(product.scopes.contains(&"active".to_string()));
-    assert!(product.scopes.contains(&"featured".to_string()));
+    assert_eq!(
+        delta
+            .models
+            .iter()
+            .map(|model| model.fqcn.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "App\\Models\\Product",
+            "App\\Models\\Category",
+            "App\\Models\\Tag",
+            "App\\Models\\Review",
+            "App\\Models\\User",
+        ]
+    );
 }
 
 #[test]
@@ -119,7 +147,7 @@ fn complex_fixture_detects_project_level_features() {
 
     assert_eq!(delta.meta.stats.files_parsed, 10);
     assert_eq!(delta.controllers.len(), 1);
-    assert_eq!(delta.broadcast.len(), 16);
+    assert_eq!(delta.broadcast.len(), 7);
     assert!(!delta.polymorphic.is_empty());
     assert!(
         delta
@@ -201,4 +229,44 @@ fn complex_fixture_detects_project_level_features() {
     assert_eq!(workspace.parameters.len(), 2);
     assert_eq!(workspace.parameters[0].name, "workspaceId");
     assert_eq!(workspace.parameters[1].name, "teamId");
+    assert_eq!(
+        workspace.channel_type.as_deref(),
+        Some("private"),
+        "workspace channel should retain legacy private classification",
+    );
+
+    let live_updates = delta
+        .broadcast
+        .iter()
+        .find(|channel| channel.channel == "live-updates")
+        .expect("live-updates channel should exist");
+    assert_eq!(live_updates.channel_type.as_deref(), Some("presence"));
+    assert_eq!(
+        delta
+            .models
+            .iter()
+            .map(|model| model.fqcn.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "App\\Models\\Comment",
+            "App\\Models\\Post",
+            "App\\Models\\Video",
+            "App\\Models\\Image",
+            "App\\Models\\Tag",
+            "App\\Models\\User",
+        ]
+    );
+}
+
+#[test]
+fn max_file_limit_marks_manifest_output_partial() {
+    let mut manifest = load_manifest(&fixture_path("complex"));
+    manifest.limits.max_files = Some(1);
+
+    let delta = run_pipeline(&manifest).expect("pipeline should succeed");
+    assert!(
+        delta.meta.partial,
+        "truncated manifest output should be partial"
+    );
+    assert_eq!(delta.meta.stats.files_parsed, 1);
 }

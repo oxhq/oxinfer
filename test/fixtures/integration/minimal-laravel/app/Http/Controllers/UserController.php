@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use App\Models\User;
 
-class UserController extends Controller
+final class UserController
 {
     /**
      * Display a listing of users.

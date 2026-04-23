@@ -10,10 +10,14 @@ use crate::pipeline::PipelineResult;
 pub fn build_delta(result: PipelineResult) -> Delta {
     let scope_owners = collect_scope_owners(&result);
     let route_methods = collect_route_methods(&result);
-    let mut controllers = BTreeMap::<(String, String), Vec<ControllerMethodOut>>::new();
-    let mut models = BTreeMap::<(String, String), ModelOut>::new();
+    let route_order = collect_route_order(&result);
+    let mut controllers = Vec::<ControllerOut>::new();
+    let mut controller_index = BTreeMap::<(String, String), usize>::new();
+    let mut models = Vec::<ModelOut>::new();
+    let mut model_index = BTreeMap::<(String, String), usize>::new();
     let mut polymorphic = BTreeMap::<String, Vec<PolymorphicRelationOut>>::new();
-    let mut broadcast = BTreeMap::<String, BroadcastOut>::new();
+    let mut broadcast = Vec::<BroadcastOut>::new();
+    let mut seen_broadcast = BTreeSet::<String>::new();
 
     for file in &result.files {
         for controller in &file.facts.controllers {
@@ -37,40 +41,54 @@ pub fn build_delta(result: PipelineResult) -> Delta {
                     }
                 });
 
-            controllers
-                .entry((controller.fqcn.clone(), file.relative_path.clone()))
-                .or_default()
-                .push(ControllerMethodOut {
-                    name: controller.method_name.clone(),
-                    http_methods,
-                    http_status,
-                    request_usage: build_request_usage(controller),
-                    resource_usage: controller
-                        .resource_usage
-                        .iter()
-                        .map(|resource| ResourceUsageOut {
-                            class: resource.class_name.clone(),
-                            method: resource.method.clone(),
-                        })
-                        .collect(),
-                    scopes_used: controller
-                        .scopes_used
-                        .iter()
-                        .map(|scope| ScopeUsedOut {
-                            name: scope.name.clone(),
-                            on: scope
-                                .on
-                                .clone()
-                                .or_else(|| scope_owners.get(&scope.name).cloned().flatten()),
-                        })
-                        .collect(),
+            let controller_key = (controller.fqcn.clone(), file.relative_path.clone());
+            let index = if let Some(index) = controller_index.get(&controller_key) {
+                *index
+            } else {
+                let index = controllers.len();
+                controller_index.insert(controller_key.clone(), index);
+                controllers.push(ControllerOut {
+                    fqcn: controller.fqcn.clone(),
+                    file: file.relative_path.clone(),
+                    methods: Vec::new(),
                 });
+                index
+            };
+            controllers[index].methods.push(ControllerMethodOut {
+                name: controller.method_name.clone(),
+                http_methods,
+                http_status,
+                request_usage: build_request_usage(controller),
+                resource_usage: controller
+                    .resource_usage
+                    .iter()
+                    .map(|resource| ResourceUsageOut {
+                        class: resource.class_name.clone(),
+                        method: resource.method.clone(),
+                    })
+                    .collect(),
+                scopes_used: controller
+                    .scopes_used
+                    .iter()
+                    .map(|scope| ScopeUsedOut {
+                        name: scope.name.clone(),
+                        on: scope
+                            .on
+                            .clone()
+                            .or_else(|| scope_owners.get(&scope.name).cloned().flatten()),
+                    })
+                    .collect(),
+            });
         }
 
         for model in &file.facts.models {
-            let entry = models
-                .entry((model.fqcn.clone(), file.relative_path.clone()))
-                .or_insert_with(|| ModelOut {
+            let model_key = (model.fqcn.clone(), file.relative_path.clone());
+            let index = if let Some(index) = model_index.get(&model_key) {
+                *index
+            } else {
+                let index = models.len();
+                model_index.insert(model_key.clone(), index);
+                models.push(ModelOut {
                     fqcn: model.fqcn.clone(),
                     file: file.relative_path.clone(),
                     relationships: Vec::new(),
@@ -78,6 +96,9 @@ pub fn build_delta(result: PipelineResult) -> Delta {
                     attributes: Vec::new(),
                     with_pivot: Vec::new(),
                 });
+                index
+            };
+            let entry = &mut models[index];
 
             entry
                 .relationships
@@ -89,7 +110,9 @@ pub fn build_delta(result: PipelineResult) -> Delta {
                             name: Some(relationship.name.clone()),
                             relation_type: Some(relationship.relation_type.clone()),
                             related: relationship.related.clone(),
-                            with_pivot: if relationship.pivot_columns.is_empty() {
+                            with_pivot: if relationship.pivot_columns.is_empty()
+                                || relationship.relation_type != "belongsToMany"
+                            {
                                 Vec::new()
                             } else {
                                 vec![PivotOut {
@@ -99,8 +122,6 @@ pub fn build_delta(result: PipelineResult) -> Delta {
                             },
                         }),
                 );
-            entry.scopes.extend(model.scopes.iter().cloned());
-            entry.attributes.extend(model.attributes.iter().cloned());
         }
 
         for item in &file.facts.polymorphic {
@@ -114,9 +135,8 @@ pub fn build_delta(result: PipelineResult) -> Delta {
         }
 
         for item in &file.facts.broadcast {
-            broadcast
-                .entry(item.channel.clone())
-                .or_insert_with(|| BroadcastOut {
+            if seen_broadcast.insert(item.channel.clone()) {
+                broadcast.push(BroadcastOut {
                     channel: item.channel.clone(),
                     channel_type: item.channel_type.clone(),
                     parameters: if item.parameters.is_empty() {
@@ -131,59 +151,33 @@ pub fn build_delta(result: PipelineResult) -> Delta {
                             .collect()
                     },
                 });
+            }
         }
     }
 
-    let mut controllers = controllers
-        .into_iter()
-        .map(|((fqcn, file), mut methods)| {
-            methods.sort_by(|a, b| a.name.cmp(&b.name));
-            ControllerOut {
-                fqcn,
-                file,
-                methods,
-            }
-        })
-        .collect::<Vec<_>>();
-    controllers.sort_by(|a, b| (&a.fqcn, &a.file).cmp(&(&b.fqcn, &b.file)));
+    for controller in &mut controllers {
+        controller.methods.sort_by(|a, b| {
+            let a_order = route_order
+                .get(&(controller.fqcn.clone(), a.name.clone()))
+                .copied()
+                .unwrap_or(usize::MAX);
+            let b_order = route_order
+                .get(&(controller.fqcn.clone(), b.name.clone()))
+                .copied()
+                .unwrap_or(usize::MAX);
+            a_order.cmp(&b_order).then_with(|| a.name.cmp(&b.name))
+        });
+    }
 
-    let mut models = models
-        .into_values()
-        .map(|mut model| {
-            model.relationships.sort_by(|a, b| {
-                (&a.name, &a.relation_type, &a.related).cmp(&(
-                    &b.name,
-                    &b.relation_type,
-                    &b.related,
-                ))
-            });
-            model.relationships.dedup_by(|a, b| {
-                a.name == b.name && a.relation_type == b.relation_type && a.related == b.related
-            });
-            model.scopes.sort();
-            model.scopes.dedup();
-            model.attributes.sort();
-            model.attributes.dedup();
-            for pivot in &mut model.with_pivot {
-                pivot.columns.sort();
-                pivot.columns.dedup();
-            }
-            model
-                .with_pivot
-                .sort_by(|a, b| (&a.relation, &a.columns).cmp(&(&b.relation, &b.columns)));
-            model
-                .with_pivot
-                .dedup_by(|a, b| a.relation == b.relation && a.columns == b.columns);
-            model
-        })
-        .collect::<Vec<_>>();
-    models.sort_by(|a, b| (&a.fqcn, &a.file).cmp(&(&b.fqcn, &b.file)));
-
+    for model in &mut models {
+        dedup_relationships_preserving_order(&mut model.relationships);
+        model.scopes.clear();
+        model.attributes.clear();
+        dedup_pivots_preserving_order(&mut model.with_pivot);
+    }
     let mut polymorphic = polymorphic
         .into_iter()
         .map(|(name, mut relations)| {
-            relations
-                .sort_by(|a, b| (&a.model, &a.relation_type).cmp(&(&b.model, &b.relation_type)));
             relations.dedup_by(|a, b| a.model == b.model && a.relation_type == b.relation_type);
             let discriminator = result
                 .files
@@ -200,7 +194,11 @@ pub fn build_delta(result: PipelineResult) -> Delta {
         .collect::<Vec<_>>();
     polymorphic.sort_by(|a, b| (&a.name, &a.discriminator).cmp(&(&b.name, &b.discriminator)));
 
-    let broadcast = broadcast.into_values().collect::<Vec<_>>();
+    if polymorphic.is_empty() {
+        models = reorder_models_by_controller_roots(models, &controllers);
+    } else {
+        models = reorder_models_by_polymorphic_sources(models, &polymorphic);
+    }
 
     Delta {
         meta: DeltaMeta {
@@ -210,6 +208,7 @@ pub fn build_delta(result: PipelineResult) -> Delta {
                 skipped: 0,
                 duration_ms: result.duration_ms,
             },
+            generated_at: None,
         },
         controllers,
         models,
@@ -249,32 +248,15 @@ fn build_request_usage(controller: &crate::model::ControllerMethod) -> Vec<Reque
     let mut usage = controller
         .request_usage
         .iter()
-        .map(|item| {
-            let mut rules = item.rules.clone();
-            let mut fields = item.fields.clone();
-            rules.sort();
-            rules.dedup();
-            fields.sort();
-            fields.dedup();
-            RequestUsageOut {
-                method: item.method.clone(),
-                class: item.class_name.clone(),
-                rules,
-                fields,
-                location: item.location.clone(),
-            }
+        .map(|item| RequestUsageOut {
+            method: item.method.clone(),
+            class: item.class_name.clone(),
+            rules: item.rules.clone(),
+            fields: item.fields.clone(),
+            location: item.location.clone(),
         })
         .collect::<Vec<_>>();
 
-    usage.sort_by(|a, b| {
-        (&a.method, &a.class, &a.location, &a.rules, &a.fields).cmp(&(
-            &b.method,
-            &b.class,
-            &b.location,
-            &b.rules,
-            &b.fields,
-        ))
-    });
     usage.dedup_by(|a, b| {
         a.method == b.method
             && a.class == b.class
@@ -286,19 +268,30 @@ fn build_request_usage(controller: &crate::model::ControllerMethod) -> Vec<Reque
 }
 
 fn collect_route_methods(result: &PipelineResult) -> BTreeMap<(String, String), Vec<String>> {
-    let mut route_methods = BTreeMap::<(String, String), BTreeSet<String>>::new();
+    let mut route_methods = BTreeMap::<(String, String), Vec<String>>::new();
 
     for binding in &result.route_bindings {
-        route_methods
+        let methods = route_methods
             .entry((binding.controller_fqcn.clone(), binding.method_name.clone()))
-            .or_default()
-            .extend(binding.http_methods.iter().cloned());
+            .or_default();
+        for method in &binding.http_methods {
+            if !methods.contains(method) {
+                methods.push(method.clone());
+            }
+        }
     }
 
     route_methods
-        .into_iter()
-        .map(|(key, values)| (key, values.into_iter().collect()))
-        .collect()
+}
+
+fn collect_route_order(result: &PipelineResult) -> BTreeMap<(String, String), usize> {
+    let mut route_order = BTreeMap::new();
+    for (index, binding) in result.route_bindings.iter().enumerate() {
+        route_order
+            .entry((binding.controller_fqcn.clone(), binding.method_name.clone()))
+            .or_insert(index);
+    }
+    route_order
 }
 
 fn extract_channel_parameters(channel: &str) -> Vec<BroadcastParameterOut> {
@@ -329,4 +322,150 @@ fn extract_channel_parameters(channel: &str) -> Vec<BroadcastParameterOut> {
     }
 
     parameters
+}
+
+fn dedup_relationships_preserving_order(relationships: &mut Vec<ModelRelationshipOut>) {
+    let mut deduped = Vec::with_capacity(relationships.len());
+    for relationship in relationships.drain(..) {
+        if deduped.iter().any(|existing: &ModelRelationshipOut| {
+            existing.name == relationship.name
+                && existing.relation_type == relationship.relation_type
+                && existing.related == relationship.related
+                && existing.with_pivot == relationship.with_pivot
+        }) {
+            continue;
+        }
+        deduped.push(relationship);
+    }
+    *relationships = deduped;
+}
+
+fn dedup_pivots_preserving_order(pivots: &mut Vec<PivotOut>) {
+    let mut deduped = Vec::with_capacity(pivots.len());
+    for pivot in pivots.drain(..) {
+        if deduped.iter().any(|existing: &PivotOut| {
+            existing.relation == pivot.relation && existing.columns == pivot.columns
+        }) {
+            continue;
+        }
+        deduped.push(pivot);
+    }
+    *pivots = deduped;
+}
+
+fn reorder_models_by_controller_roots(
+    models: Vec<ModelOut>,
+    controllers: &[ControllerOut],
+) -> Vec<ModelOut> {
+    if models.len() < 2 {
+        return models;
+    }
+
+    let mut ordered = Vec::with_capacity(models.len());
+    let mut remaining = models;
+    let mut seeds = Vec::new();
+
+    for controller in controllers {
+        let Some(class_name) = controller.fqcn.rsplit('\\').next() else {
+            continue;
+        };
+        let Some(base_name) = class_name.strip_suffix("Controller") else {
+            continue;
+        };
+        if base_name.is_empty() {
+            continue;
+        }
+
+        let candidate = format!("App\\Models\\{base_name}");
+        if remaining.iter().any(|model| model.fqcn == candidate) && !seeds.contains(&candidate) {
+            seeds.push(candidate);
+        }
+    }
+
+    for seed in seeds {
+        visit_model(&seed, &mut remaining, &mut ordered);
+    }
+
+    ordered.extend(remaining);
+    ordered
+}
+
+fn visit_model(fqcn: &str, remaining: &mut Vec<ModelOut>, ordered: &mut Vec<ModelOut>) {
+    let Some(index) = remaining.iter().position(|model| model.fqcn == fqcn) else {
+        return;
+    };
+
+    let model = remaining.remove(index);
+    let related = model
+        .relationships
+        .iter()
+        .filter_map(|relationship| relationship.related.clone())
+        .collect::<Vec<_>>();
+    ordered.push(model);
+
+    for related_model in related {
+        visit_model(&related_model, remaining, ordered);
+    }
+}
+
+fn reorder_models_by_polymorphic_sources(
+    models: Vec<ModelOut>,
+    polymorphic: &[PolymorphicOut],
+) -> Vec<ModelOut> {
+    if models.len() < 2 {
+        return models;
+    }
+
+    let mut ordered = Vec::with_capacity(models.len());
+    let mut remaining = models;
+    let mut source_groups = remaining
+        .iter()
+        .filter_map(|model| {
+            let names = model
+                .relationships
+                .iter()
+                .filter(|relationship| relationship.relation_type.as_deref() == Some("morphTo"))
+                .filter_map(|relationship| relationship.name.clone())
+                .collect::<Vec<_>>();
+            if names.is_empty() {
+                None
+            } else {
+                Some((model.fqcn.clone(), model.relationships.len(), names))
+            }
+        })
+        .collect::<Vec<_>>();
+    source_groups.sort_by(|a, b| b.1.cmp(&a.1));
+
+    for (fqcn, relationship_count, relation_names) in source_groups {
+        visit_model_without_related(&fqcn, &mut remaining, &mut ordered);
+        if relationship_count <= 1 {
+            continue;
+        }
+
+        for relation_name in relation_names {
+            let Some(group) = polymorphic
+                .iter()
+                .find(|group| group.name.as_deref() == Some(relation_name.as_str()))
+            else {
+                continue;
+            };
+            for relation in &group.relations {
+                visit_model_without_related(&relation.model, &mut remaining, &mut ordered);
+            }
+        }
+    }
+
+    ordered.extend(remaining);
+    ordered
+}
+
+fn visit_model_without_related(
+    fqcn: &str,
+    remaining: &mut Vec<ModelOut>,
+    ordered: &mut Vec<ModelOut>,
+) {
+    let Some(index) = remaining.iter().position(|model| model.fqcn == fqcn) else {
+        return;
+    };
+    ordered.push(remaining.remove(index));
 }
