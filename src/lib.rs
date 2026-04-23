@@ -14,4 +14,4 @@ pub mod pipeline;
 pub mod routes;
 pub mod source_index;
 
-pub const OXINFER_VERSION: &str = "0.1.3";
+pub const OXINFER_VERSION: &str = "0.1.4";

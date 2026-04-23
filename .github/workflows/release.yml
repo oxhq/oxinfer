@@ -17,12 +17,12 @@ jobs:
             asset_os: linux
             asset_arch: amd64
             ext: ""
-          - os: macos-13
+          - os: macos-15-intel
             target: x86_64-apple-darwin
             asset_os: darwin
             asset_arch: amd64
             ext: ""
-          - os: macos-latest
+          - os: macos-15
             target: aarch64-apple-darwin
             asset_os: darwin
             asset_arch: arm64
@@ -73,60 +73,60 @@ jobs:
           mkdir -p "${smoke_dir}" "${cache_dir}"
 
           python - <<'PY' "${manifest_path}"
-import json
-import pathlib
-import sys
+          import json
+          import pathlib
+          import sys
 
-manifest_path = pathlib.Path(sys.argv[1])
-repo_root = pathlib.Path.cwd()
-source_manifest = repo_root / "fixtures" / "minimal.manifest.json"
-manifest = json.loads(source_manifest.read_text())
-manifest["project"]["root"] = str((repo_root / "test" / "fixtures" / "integration" / "minimal-laravel").resolve())
-manifest["cache"] = {
-    "enabled": True,
-    "kind": "sha256+mtime",
-}
-manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
-PY
+          manifest_path = pathlib.Path(sys.argv[1])
+          repo_root = pathlib.Path.cwd()
+          source_manifest = repo_root / "fixtures" / "minimal.manifest.json"
+          manifest = json.loads(source_manifest.read_text())
+          manifest["project"]["root"] = str((repo_root / "test" / "fixtures" / "integration" / "minimal-laravel").resolve())
+          manifest["cache"] = {
+              "enabled": True,
+              "kind": "sha256+mtime",
+          }
+          manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+          PY
 
           "dist/${asset}" --manifest "${manifest_path}" --cache-dir "${cache_dir}" --out "${cold_output}" --log-level info 2> "${cold_stderr}"
           "dist/${asset}" --manifest "${manifest_path}" --cache-dir "${cache_dir}" --out "${warm_output}" --log-level info 2> "${warm_stderr}"
 
           python - <<'PY' "${cold_output}" "${warm_output}" "${cold_stderr}" "${warm_stderr}"
-import json
-import pathlib
-import re
-import sys
+          import json
+          import pathlib
+          import re
+          import sys
 
-cold_output = pathlib.Path(sys.argv[1])
-warm_output = pathlib.Path(sys.argv[2])
-cold_stderr = pathlib.Path(sys.argv[3]).read_text()
-warm_stderr = pathlib.Path(sys.argv[4]).read_text()
+          cold_output = pathlib.Path(sys.argv[1])
+          warm_output = pathlib.Path(sys.argv[2])
+          cold_stderr = pathlib.Path(sys.argv[3]).read_text()
+          warm_stderr = pathlib.Path(sys.argv[4]).read_text()
 
-def normalized_payload(path: pathlib.Path) -> dict:
-    payload = json.loads(path.read_text())
-    payload.get("meta", {}).get("stats", {}).pop("durationMs", None)
-    return payload
+          def normalized_payload(path: pathlib.Path) -> dict:
+              payload = json.loads(path.read_text())
+              payload.get("meta", {}).get("stats", {}).pop("durationMs", None)
+              return payload
 
-if normalized_payload(cold_output) != normalized_payload(warm_output):
-    raise SystemExit("warm cache output differed from cold cache output")
+          if normalized_payload(cold_output) != normalized_payload(warm_output):
+              raise SystemExit("warm cache output differed from cold cache output")
 
-pattern = re.compile(r"cache=(\d+) hit\(s\), (\d+) miss\(es\)")
-cold_match = pattern.search(cold_stderr)
-warm_match = pattern.search(warm_stderr)
+          pattern = re.compile(r"cache=(\d+) hit\(s\), (\d+) miss\(es\)")
+          cold_match = pattern.search(cold_stderr)
+          warm_match = pattern.search(warm_stderr)
 
-if cold_match is None or warm_match is None:
-    raise SystemExit("cache smoke logs did not include cache hit/miss stats")
+          if cold_match is None or warm_match is None:
+              raise SystemExit("cache smoke logs did not include cache hit/miss stats")
 
-cold_hits, cold_misses = map(int, cold_match.groups())
-warm_hits, warm_misses = map(int, warm_match.groups())
+          cold_hits, cold_misses = map(int, cold_match.groups())
+          warm_hits, warm_misses = map(int, warm_match.groups())
 
-if cold_hits != 0 or cold_misses == 0:
-    raise SystemExit(f"unexpected cold cache stats: hits={cold_hits} misses={cold_misses}")
+          if cold_hits != 0 or cold_misses == 0:
+              raise SystemExit(f"unexpected cold cache stats: hits={cold_hits} misses={cold_misses}")
 
-if warm_hits == 0 or warm_misses != 0:
-    raise SystemExit(f"unexpected warm cache stats: hits={warm_hits} misses={warm_misses}")
-PY
+          if warm_hits == 0 or warm_misses != 0:
+              raise SystemExit(f"unexpected warm cache stats: hits={warm_hits} misses={warm_misses}")
+          PY
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

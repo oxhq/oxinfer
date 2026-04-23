@@ -2,7 +2,7 @@
 
 `oxinfer` is a Rust CLI for static Laravel analysis. It parses PHP with tree-sitter, resolves routes and controllers in the same pipeline, and emits deterministic JSON either as a project delta or as the `oxcribe.oxinfer.v2` machine contract used by `oxcribe`.
 
-`v0.1.3` is the current public preview release.
+`v0.1.4` is the current public preview release.
 
 ## Build
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.4 - 2026-04-23
+
+Corrective preview release for end-user binary distribution.
+
+- fix the GitHub release workflow YAML so tagged releases can build and publish release binaries plus `checksums.txt`
+- keep the repo-local request-mode fixture bundle and CI-hardening from `v0.1.3`
+- preserve the published `oxcribe.oxinfer.v2` contract
+
 ## v0.1.3 - 2026-04-23
 
 Corrective preview release for the `v0.1.2` request-mode test harness.
