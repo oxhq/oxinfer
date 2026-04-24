@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.5 - 2026-04-24
+
+Corrective preview release for the GitHub Actions runtime transition.
+
+- move the release workflow off the Node 20 action lines by upgrading to `actions/upload-artifact@v7`, `actions/download-artifact@v8`, and `softprops/action-gh-release@v3`
+- add a release-workflow runtime regression check and run it in normal CI so future release cuts do not silently drift back onto deprecated action runtimes
+- preserve the published `oxcribe.oxinfer.v2` contract and release asset naming
+
 ## v0.1.4 - 2026-04-23
 
 Corrective preview release for end-user binary distribution.

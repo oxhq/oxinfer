@@ -29,6 +29,9 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all --check
 
+      - name: Check release workflow runtime versions
+        run: python scripts/check_release_workflow_runtime.py
+
       - name: Run test suite
         run: cargo test --locked
 
